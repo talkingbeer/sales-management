@@ -32,6 +32,11 @@ body {
   -moz-osx-font-smoothing: grayscale;
   font-variant-numeric: tabular-nums;
   min-height: 100vh;
+  /* 한국어 줄바꿈. 기본값은 "메이플에듀"를 "메이플에 / 듀" 로 쪼갠다 —
+     라틴 기준 규칙이 그대로 적용된 결과이고, 한국어 화면에서 가장 먼저
+     눈에 걸리는 어색함이다. keep-all 이면 어절 단위로만 끊긴다. */
+  word-break: keep-all;
+  overflow-wrap: break-word;
 }
 
 h1, h2, h3, h4, h5, h6 {
@@ -42,7 +47,7 @@ h1, h2, h3, h4, h5, h6 {
   color: var(--color-ink);
   letter-spacing: var(--track-tight);
   line-height: var(--leading-snug);
-  overflow-wrap: anywhere;
+  overflow-wrap: break-word;
   min-width: 0;
 }
 

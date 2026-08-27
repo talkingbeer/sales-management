@@ -20,10 +20,12 @@
   --color-paper-print: oklch(100% 0 0);
 
   /* ── Ink ──────────────────────────────────────────────────────────── */
+  /* ink-3/ink-4 를 각각 4·6%p 낮췄다. 이전 값은 메타 정보와 플레이스홀더에서
+     본문 대비 4.5:1 에 못 미쳤다 — 글자를 키우는 것과 같은 목적의 수정이다. */
   --color-ink:    oklch(24% 0.020 258);
   --color-ink-2:  oklch(34% 0.018 257);
-  --color-ink-3:  oklch(52% 0.015 256);
-  --color-ink-4:  oklch(66% 0.012 256);
+  --color-ink-3:  oklch(48% 0.016 256);
+  --color-ink-4:  oklch(60% 0.014 256);
 
   /* ── Rules (hairlines do the structural work) ─────────────────────── */
   --color-rule:   oklch(90.5% 0.006 252);
@@ -78,18 +80,21 @@
   --font-body:    "IBM Plex Sans KR", "Inter", "Malgun Gothic", system-ui, sans-serif;
   --font-mono:    "JetBrains Mono", "IBM Plex Sans KR", ui-monospace, "Consolas", monospace;
 
-  --text-2xs:  0.6875rem;
-  --text-xs:   0.75rem;
-  --text-sm:   0.8125rem;
-  --text-base: 0.875rem;
-  --text-md:   1rem;
-  --text-lg:   1.125rem;
-  --text-xl:   1.375rem;
-  --text-2xl:  1.75rem;
-  --text-3xl:  2.25rem;
-  --text-4xl:  3rem;
-  --text-display-s: clamp(2rem, 3.4vw + 0.6rem, 3.25rem);
-  --text-display:   clamp(2.5rem, 5vw + 0.4rem, 4.5rem);
+  /* 한 단씩 올린 스케일. 이전 값은 조밀했지만 11px 모노 라벨과 13px 표는
+     실제로 읽기 어려웠다. 모든 단을 1~2px 올리고, 컨트롤 높이와 셀 여백을
+     같이 올려 밀도가 아니라 여백이 늘어나게 했다. */
+  --text-2xs:  0.75rem;     /* 12 — 모노 라벨의 하한. 더 내리지 말 것 */
+  --text-xs:   0.8125rem;   /* 13 */
+  --text-sm:   0.875rem;    /* 14 — 표 본문 */
+  --text-base: 0.9375rem;   /* 15 — 앱 본문 */
+  --text-md:   1.0625rem;   /* 17 */
+  --text-lg:   1.1875rem;   /* 19 */
+  --text-xl:   1.4375rem;   /* 23 */
+  --text-2xl:  1.8125rem;   /* 29 */
+  --text-3xl:  2.375rem;    /* 38 */
+  --text-4xl:  3.125rem;    /* 50 */
+  --text-display-s: clamp(2.125rem, 3.4vw + 0.6rem, 3.5rem);
+  --text-display:   clamp(2.625rem, 5vw + 0.4rem, 4.75rem);
 
   --leading-tight: 1.08;
   --leading-snug:  1.28;
@@ -99,7 +104,9 @@
   --track-display: -0.028em;
   --track-tight:   -0.012em;
   --track-normal:  0;
-  --track-mono:    0.06em;
+  /* 0.06em 은 라틴 대문자에는 맞지만 한글에서는 낱자가 흩어져 보인다.
+     같은 라벨에 한글과 영문이 섞이는 화면이라 절반으로 줄였다. */
+  --track-mono:    0.03em;
 
   /* ── Space — 4 pt scale ───────────────────────────────────────────── */
   --space-3xs: 0.125rem;
@@ -113,12 +120,24 @@
   --space-3xl: 4.5rem;
   --space-4xl: 7rem;
 
-  /* ── Radii — drawn with a ruler, never pills ──────────────────────── */
-  --radius-xs: 4px;
-  --radius-sm: 6px;
-  --radius-md: 10px;
-  --radius-lg: 14px;
-  --radius-round: 999px;
+  /* ── Radii — square. Every surface is cut, not moulded ──────────────
+     카드·박스·표·입력·버튼·차트 전부 직각이다. 라운드가 남는 곳은 딱 두
+     가지, 사람(아바타)과 상태 점뿐이다. 그 두 개만 둥글기 때문에 화면에서
+     "둥근 것 = 사람이거나 상태"라는 규칙이 성립한다. */
+  --radius-xs: 0;
+  --radius-sm: 0;
+  --radius-md: 0;
+  --radius-lg: 0;
+  --radius-round: 999px;   /* .avatar 와 .dot 전용. 다른 곳에 쓰지 말 것 */
+
+  /* ── Controls — 타이포를 키운 만큼 컨트롤도 같이 커진다 ───────────── */
+  --ctl-h:    34px;
+  --ctl-h-sm: 30px;
+  --ctl-h-lg: 44px;
+
+  /* ── 표 셀 여백 — 행이 숨 쉴 공간 ─────────────────────────────────── */
+  --cell-pad-block:  var(--space-sm);   /* 12px */
+  --cell-pad-inline: var(--space-md);   /* 16px */
 
   /* ── Rules ────────────────────────────────────────────────────────── */
   --rule-hair: 1px;
@@ -147,9 +166,9 @@
   --z-toast: 60;
 
   /* ── App shell metrics ────────────────────────────────────────────── */
-  --rail-w: 232px;
+  --rail-w: 252px;
   --rail-w-collapsed: 56px;
-  --topbar-h: 52px;
-  --subbar-h: 44px;
+  --topbar-h: 58px;
+  --subbar-h: 48px;
   --page-max: 1560px;
 }

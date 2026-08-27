@@ -16,13 +16,13 @@
   /* 이 화면에만 필요한 세 가지. 값은 전부 토큰입니다. */
   .filterbar .field { gap: var(--space-3xs); }
   .filterbar .field__label { white-space: nowrap; }
-  .filterbar .input, .filterbar .select { min-width: 0; }
 
   /* ?focus= 로 들어왔거나 방금 만든 담당자를 표시하는 행 */
+  /* 왼쪽 색 띠 대신 행 전체를 테두리로 감싼다 — 띠는 이 시스템에서 쓰지 않는다. */
   #listSection .table tbody tr.is-flagged,
   #listSection .table tbody tr.is-flagged:hover {
     background: var(--color-accent-soft);
-    box-shadow: inset 3px 0 0 0 var(--color-accent);
+    box-shadow: inset 0 0 0 var(--rule-thick) var(--color-accent);
   }
 
   /* 드로어 안의 구획 */
@@ -385,8 +385,8 @@
         '<span class="dot ' + (d > STALE_DAYS ? 'dot--neg' : d > 45 ? 'dot--warn' : 'dot--accent') + '"></span>' +
         '<span class="grow" style="min-width:0">' +
         '<span style="display:block">' + U.esc(c.name) + ' <span class="t-muted">· ' + U.esc(c.title) + '</span></span>' +
-        '<span class="t-mono" style="font-size:10px">' + U.esc(accName(c.accountId)) + ' · ' + U.esc(c.decisionRole) + '</span></span>' +
-        '<span class="t-mono ' + (d > STALE_DAYS ? 't-neg' : '') + '" style="font-size:10px">' + U.esc(U.ago(c.lastActivityDate)) + '</span>' +
+        '<span class="t-mono" style="font-size:var(--text-2xs)">' + U.esc(accName(c.accountId)) + ' · ' + U.esc(c.decisionRole) + '</span></span>' +
+        '<span class="t-mono ' + (d > STALE_DAYS ? 't-neg' : '') + '" style="font-size:var(--text-2xs)">' + U.esc(U.ago(c.lastActivityDate)) + '</span>' +
         '</button>';
     }).join('') : ui.empty('표시할 담당자가 없습니다', '필터를 넓히면 접촉이 오래된 담당자가 여기에 모입니다.');
   }
@@ -433,7 +433,7 @@
           return '<a class="menu__item" style="border-radius:0;padding:var(--space-xs) 0" href="opportunity.html?id=' + encodeURIComponent(o.id) + '">' +
             '<span class="grow" style="min-width:0">' +
             '<span style="display:block">' + U.esc(o.name) + '</span>' +
-            '<span class="t-mono" style="font-size:10px">' + U.won(o.amount) + ' · 마감 ' + U.fmtDate(o.closeDate) + '</span></span>' +
+            '<span class="t-mono" style="font-size:var(--text-2xs)">' + U.won(o.amount) + ' · 마감 ' + U.fmtDate(o.closeDate) + '</span></span>' +
             ui.chip(o.stage, D.isWon(o) ? 'pos' : D.isLost(o) ? 'neg' : D.stage(o.stage).cast === 'Commit' ? 'accent' : 'idle') +
             '</a>';
         }).join('') + '</div>'

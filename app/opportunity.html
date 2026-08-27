@@ -562,7 +562,7 @@
       return '<div class="peep">' +
         '<span class="dot ' + (late ? 'dot--neg' : a.priority === '높음' ? 'dot--warn' : 'dot--accent') + '"></span>' +
         '<span class="grow"><span style="display:block">' + esc(a.subject) + '</span>' +
-        '<span class="t-mono" style="font-size:10px">' + esc(ACT_TYPE[a.type] || a.type) + ' · ' +
+        '<span class="t-mono" style="font-size:var(--text-2xs)">' + esc(ACT_TYPE[a.type] || a.type) + ' · ' +
         (late ? '지연 ' + U.days(a.dueDate, C.today) + '일' : U.fmtDate(a.dueDate)) + ' · ' + esc(db.userName(a.ownerId)) + '</span></span>' +
         (canU ? '<button class="btn btn--sm" type="button" data-act="doneact" data-id="' + esc(a.id) + '">완료</button>' : '') +
         '</div>';
@@ -594,7 +594,7 @@
     var owner = db.ownerOf(opp);
     var teamHTML = '<div class="peep">' + ui.avatar(owner) +
       '<span class="grow"><span style="display:block">' + esc(owner ? owner.name : '미지정') + '</span>' +
-      '<span class="t-mono" style="font-size:10px">딜 오너 · ' + esc(owner ? (owner.title || owner.role) : '—') + '</span></span>' +
+      '<span class="t-mono" style="font-size:var(--text-2xs)">딜 오너 · ' + esc(owner ? (owner.title || owner.role) : '—') + '</span></span>' +
       ui.chip('오너', 'accent') + '</div>';
 
     teamHTML += ids.map(function (uid) {
@@ -602,7 +602,7 @@
       if (!u) return '';
       return '<div class="peep">' + ui.avatar(u) +
         '<span class="grow"><span style="display:block">' + esc(u.name) + '</span>' +
-        '<span class="t-mono" style="font-size:10px">' + esc(u.title || u.role) + ' · ' + esc(u.role) + '</span></span>' +
+        '<span class="t-mono" style="font-size:var(--text-2xs)">' + esc(u.title || u.role) + ' · ' + esc(u.role) + '</span></span>' +
         (canU ? '<button class="btn btn--ghost btn--sm" type="button" data-act="delteam" data-id="' + esc(u.id) + '">제외</button>' : '') +
         '</div>';
     }).join('');

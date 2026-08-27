@@ -559,7 +559,10 @@ function makeTicket(opp, forceStatus) {
   if (status === '완료') {
     doneD = dayOf(-ri(2, 70));
     dueD = addDays(doneD, chance(0.26) ? -ri(1, 6) : ri(0, 4));   // 26%는 납기를 넘겨 납품됐다
-    created = addDays(dueD, -slaDays);
+    /* 접수는 납기에서 거꾸로 잡되, 납품보다 늦어지면 안 된다.
+       납기가 납품보다 뒤인 경우 그대로 빼면 접수일이 납품일을 앞질러
+       리드타임이 음수가 된다 — 실제로 그런 티켓이 7건 나왔다. */
+    created = addDays(Math.min(dueD.getTime(), doneD.getTime()), -slaDays);
   } else if (status === '취소') {
     created = dayOf(-ri(10, 60));
     dueD = addDays(created, slaDays);

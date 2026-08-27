@@ -136,8 +136,38 @@ async function checkPage(rel) {
     if (hn.querySelector('em:not([style*="normal"])')) warns.push('제목 안의 <em>: ' + hn.textContent.slice(0, 24));
   });
 
+  /* ── 디자인 규칙: 직각 · 색 띠 금지 · 타이포 스케일 준수 ────────────
+     이 세 가지는 사람이 눈으로 지키기 어렵다. 한 번 정한 뒤에는 검사가
+     지켜야 한다 — 그러지 않으면 다음 화면에서 조용히 되돌아간다. */
+  const src = fs.readFileSync(file, 'utf8');
+
+  // 값을 조각내 판정한다. 정규식 하나로 부정 조건을 쓰면 백트래킹으로 오탐이 난다.
+  const SQUARE_OK = /^(0(px)?|var\(--radius-(xs|sm|md|lg|round)\))$/;
+  (src.match(/border-radius:[^;"'}]+/g) || []).forEach(decl => {
+    const value = decl.slice(decl.indexOf(':') + 1).trim();
+    // JS 문자열 연결로 조립되는 선언은 따옴표에서 잘려 괄호가 안 맞는다 — 정적 판정 불가
+    const open = (value.match(/\(/g) || []).length, close = (value.match(/\)/g) || []).length;
+    if (open !== close || /\+|\$\{/.test(decl)) return;
+    const parts = value.split(/\s+(?![^(]*\))/).filter(Boolean);
+    if (!parts.every(p => SQUARE_OK.test(p))) errors.push('직각 규칙 위반: ' + decl.trim());
+  });
+
+  const stripes = src.match(/border-(left|right|top|bottom):\s*[2-9]px[^;"'}]*(accent|pos|neg|warn|series)[^;"'}]*/g) || [];
+  stripes.forEach(m => errors.push('색 띠: ' + m.trim()));
+  // inset box-shadow 로 그린 띠. 첫 오프셋이 0 이 아니면 한쪽에만 그어진 막대다.
+  (src.match(/box-shadow:\s*inset\s+[^;"'}]+/g) || []).forEach(m => {
+    const nums = (m.match(/-?\d+(\.\d+)?px/g) || []).slice(0, 2);
+    if (nums.length >= 2 && nums.slice(0, 2).some(n => parseFloat(n) !== 0)) {
+      errors.push('색 띠(inset): ' + m.trim());
+    }
+  });
+  if (/insight__spine/.test(src)) errors.push('색 띠: .insight__spine 이 남아 있음');
+
+  const rawFont = src.match(/font-size:\s*\d+(\.\d+)?px/g) || [];
+  rawFont.forEach(m => errors.push('타이포 스케일 우회: ' + m.trim() + ' (var(--text-*) 를 쓸 것)'));
+
   /* inline colour values bypassing the token block */
-  const html = fs.readFileSync(file, 'utf8');
+  const html = src;
   const inlineColor = html.match(/(?:^|[^-\w])(#[0-9a-fA-F]{3,8}\b|rgba?\([^)]*\)|oklch\([^)]*\))/g) || [];
   const offenders = inlineColor.filter(m => !/var\(/.test(m));
   if (offenders.length) warns.push('토큰 밖 색상 값 ' + offenders.length + '개: ' + offenders.slice(0, 3).join(', '));

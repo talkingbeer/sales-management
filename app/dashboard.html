@@ -149,12 +149,21 @@
   var urgent = all.filter(function (x) { return x.kind === 'risk' || x.kind === 'warn'; });
   $('#briefDate').textContent = U.fmtDate(C.today);
   $('#briefCount').textContent = urgent.length ? '주의 ' + urgent.length + '건' : '이상 없음';
-  $('#briefBody').innerHTML = all.slice(0, 3).map(function (x) {
-    return '<p style="margin-bottom:var(--space-sm);line-height:1.6">' +
-      '<span class="t-mono" style="color:var(--color-graphite-ink-3);margin-right:var(--space-xs)">' + U.esc(x.label) + '</span>' +
-      '<span style="color:var(--color-graphite-ink)">' + x.say + '</span>' +
-      '<br><span style="color:var(--color-graphite-ink-3);font-size:var(--text-xs)">' + x.why + '</span></p>';
-  }).join('') || '<p style="color:var(--color-graphite-ink-3)">지금 조치가 필요한 항목이 없습니다.</p>';
+  /* 아래 "분석 의견" 패널이 같은 항목들을 카드로 다시 보여준다. 여기서
+     같은 세 건을 반복하면 화면의 절반이 중복이 된다 — 브리핑은 가장
+     급한 한 건만 펼치고, 나머지는 개수로만 알린다. */
+  var bySev = { risk: 0, warn: 0, act: 0, good: 0 };
+  all.forEach(function (x) { bySev[x.kind] = (bySev[x.kind] || 0) + 1; });
+  var top = all[0];
+  $('#briefBody').innerHTML = top
+    ? '<p class="t-mono" style="color:var(--color-graphite-ink-3)">' +
+        U.esc(ui.SEVERITY[top.kind] || '') + ' · ' + U.esc(top.label) + '</p>' +
+      '<p style="font-size:var(--text-md);line-height:1.5;color:var(--color-graphite-ink);margin-top:var(--space-2xs)">' + top.say + '</p>' +
+      '<p style="font-size:var(--text-sm);line-height:1.55;color:var(--color-graphite-ink-2);margin-top:var(--space-xs)">' + top.why + '</p>' +
+      '<p class="t-mono" style="color:var(--color-graphite-ink-3);margin-top:var(--space-md);padding-top:var(--space-sm);border-top:1px solid var(--color-graphite-rule)">' +
+        ['위험 ' + bySev.risk, '주의 ' + bySev.warn, '조치 ' + bySev.act, '양호 ' + bySev.good].join(' · ') +
+        ' — 나머지는 아래 분석 의견에 있습니다</p>'
+    : '<p style="color:var(--color-graphite-ink-2)">지금 조치가 필요한 항목이 없습니다.</p>';
 
   /* ── 역할에 따라 홈이 달라진다 ────────────────────────────────────
      제작 인력에게 파이프라인 커버리지를 보여주는 홈은 홈이 아니다.
@@ -290,7 +299,7 @@
     return '<a class="menu__item" style="align-items:flex-start;border-radius:0;padding:var(--space-xs) var(--space-md);border-bottom:1px solid var(--color-rule)" href="' + it.href + '">' +
       '<span class="dot dot--' + it.tone + '" style="margin-top:6px"></span>' +
       '<span class="grow" style="min-width:0"><span style="display:block" class="t-clamp-2">' + U.esc(it.title) + '</span>' +
-      '<span class="t-mono" style="font-size:10px">' + U.esc(it.meta) + '</span></span></a>';
+      '<span class="t-mono" style="font-size:var(--text-2xs)">' + U.esc(it.meta) + '</span></span></a>';
   }).join('') : ui.empty('밀린 일이 없습니다', '기한 초과 활동, 방치된 리드, 조용해진 딜이 생기면 여기로 밀어 드립니다.');
 
   /* ── 달성 링 ─────────────────────────────────────────────────── */
@@ -441,7 +450,7 @@
     return '<a class="menu__item" style="border-radius:0;padding:var(--space-xs) var(--space-md);border-bottom:1px solid var(--color-rule)" href="ticket.html?id=' + encodeURIComponent(t.id) + '">' +
       '<span class="tkt-key">' + U.esc(t.key) + '</span>' +
       '<span class="grow" style="min-width:0"><span style="display:block" class="t-clamp-2">' + U.esc(t.title) + '</span>' +
-      '<span class="t-mono" style="font-size:10px">' + U.esc(t.type) + ' · ' + U.esc(t.status) + ' · 마감 ' + U.fmtDate(t.dueDate, 'md') + '</span></span>' +
+      '<span class="t-mono" style="font-size:var(--text-2xs)">' + U.esc(t.type) + ' · ' + U.esc(t.status) + ' · 마감 ' + U.fmtDate(t.dueDate, 'md') + '</span></span>' +
       '<span class="chip ' + (sla === 'breach' ? 'chip--neg' : sla === 'risk' ? 'chip--warn' : 'chip--idle') + '">' +
       (sla === 'breach' ? 'SLA 초과' : sla === 'risk' ? '임박' : '정상') + '</span></a>';
   }).join('') : ui.empty('의뢰한 제작 건이 없습니다', '영상·디자인·랜딩페이지 제작을 티켓으로 의뢰할 수 있습니다.',

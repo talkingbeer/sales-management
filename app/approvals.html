@@ -33,7 +33,6 @@
     border-top: var(--rule-hair) solid var(--color-rule);
   }
   .filterbar { border-radius: 0; }
-  .filterbar .input, .filterbar .select { min-height: 28px; height: 28px; font-size: var(--text-xs); }
   .filterbar .select { max-width: 160px; }
   .filterbar__q { width: min(210px, 46vw); }
 
@@ -589,7 +588,7 @@
     var out = r.t.href
       ? '<a class="link--quiet t-nowrap" href="' + r.t.href + '" title="' + esc(r.t.hint) + '">' + label + '</a>'
       : '<span class="t-nowrap">' + label + '</span>';
-    return out + '<span class="t-mono" style="display:block;font-size:10px" class="t-faint">' + esc(r.t.hint.slice(0, 34)) + '</span>';
+    return out + '<span class="t-mono" style="display:block;font-size:var(--text-2xs)" class="t-faint">' + esc(r.t.hint.slice(0, 34)) + '</span>';
   }
   function statusChip(ap) {
     var kind = ap.status === '승인' ? 'pos' : ap.status === '반려' ? 'neg' : ap.status === '회수' ? 'idle' : 'warn';
@@ -614,7 +613,7 @@
           var badge = (tab === 'pending' && dg && r.ap.approverId === me.id)
             ? ' <span class="chip chip--warn" title="' + esc(db.userName(dg.toId)) + '님에게 위임된 기간입니다">위임됨</span>' : '';
           return '<span class="t-nowrap">' + kindChip(r.ap) + badge + '</span>' +
-            '<span class="t-mono" style="display:block;font-size:10px">' + esc(r.ap.step) + '</span>';
+            '<span class="t-mono" style="display:block;font-size:var(--text-2xs)">' + esc(r.ap.step) + '</span>';
         } },
       { key: 'target', label: '대상', cell: targetCell },
       { key: 'detail', label: '상세', sortable: false, width: '24%', cell: function (r) {

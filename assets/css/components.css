@@ -7,11 +7,11 @@
 
 /* ══ Buttons ═══════════════════════════════════════════════════════════ */
 .btn {
-  --btn-h: 32px;
+  --btn-h: var(--ctl-h);
   display: inline-flex; align-items: center; justify-content: center;
   gap: var(--space-2xs);
   height: var(--btn-h);
-  padding-inline: var(--space-sm);
+  padding-inline: var(--space-md);
   border: var(--rule-hair) solid var(--color-rule-2);
   border-radius: var(--radius-sm);
   background: var(--color-surface);
@@ -43,8 +43,8 @@
 .btn--danger { color: var(--color-neg); border-color: var(--color-rule-2); }
 .btn--danger:hover, .btn--danger.is-hover { background: var(--color-neg-soft); border-color: var(--color-neg); }
 
-.btn--sm { --btn-h: 26px; font-size: var(--text-xs); padding-inline: var(--space-xs); }
-.btn--lg { --btn-h: 40px; font-size: var(--text-base); padding-inline: var(--space-lg); }
+.btn--sm { --btn-h: var(--ctl-h-sm); font-size: var(--text-xs); padding-inline: var(--space-sm); }
+.btn--lg { --btn-h: var(--ctl-h-lg); font-size: var(--text-md); padding-inline: var(--space-lg); }
 .btn--icon { width: var(--btn-h); padding-inline: 0; }
 .btn--block { width: 100%; }
 
@@ -85,14 +85,17 @@
 
 .input, .select, .textarea {
   width: 100%;
-  min-height: 32px;
-  padding: var(--space-2xs) var(--space-xs);
+  min-height: var(--ctl-h);
+  padding: var(--space-xs) var(--space-sm);
   background: var(--color-surface);
   border: var(--rule-hair) solid var(--color-rule-2);
   border-radius: var(--radius-sm);
   color: var(--color-ink);
   font-size: var(--text-sm);
   font-family: var(--font-body);
+  /* 한글 받침이 잘리지 않도록 줄높이를 컨트롤 안에서 따로 잡는다.
+     본문 줄높이(1.6)를 그대로 쓰면 높이를 고정한 컨트롤에서 글자 아랫부분이 잘린다. */
+  line-height: 1.35;
   transition: border-color var(--dur-short) var(--ease-out), background-color var(--dur-short) var(--ease-out);
 }
 .textarea { min-height: 84px; padding: var(--space-xs); line-height: var(--leading-body); resize: vertical; }
@@ -127,36 +130,42 @@
 
 /* Checkbox / radio / switch */
 .check { display: inline-flex; align-items: center; gap: var(--space-xs); cursor: pointer; font-size: var(--text-sm); }
-.check input { appearance: none; width: 15px; height: 15px; flex: 0 0 auto;
-  border: var(--rule-hair) solid var(--color-rule-3); border-radius: var(--radius-xs);
+/* 체크박스와 라디오 모두 사각이다. 둥근 모양으로 구분하던 것을 표식으로
+   구분한다 — 체크박스는 체크 표시, 라디오는 가운데를 꽉 채운 사각. */
+.check input { appearance: none; width: 16px; height: 16px; flex: 0 0 auto;
+  border: var(--rule-hair) solid var(--color-rule-3); border-radius: 0;
   background: var(--color-surface); cursor: pointer; position: relative;
   transition: background-color var(--dur-short) var(--ease-out), border-color var(--dur-short) var(--ease-out); }
-.check input[type="radio"] { border-radius: var(--radius-round); }
 .check input:hover { border-color: var(--color-accent); }
 .check input:checked { background: var(--color-accent); border-color: var(--color-accent); }
 .check input:checked::after {
-  content: ""; position: absolute; left: 4px; top: 1px;
-  width: 4px; height: 8px; border: solid var(--color-accent-ink);
+  content: ""; position: absolute; left: 5px; top: 1px;
+  width: 4px; height: 9px; border: solid var(--color-accent-ink);
   border-width: 0 2px 2px 0; transform: rotate(43deg);
 }
-.check input[type="radio"]:checked::after { left: 4px; top: 4px; width: 5px; height: 5px; border: none; border-radius: var(--radius-round); background: var(--color-accent-ink); transform: none; }
+/* 라디오 = 단일 선택. 안쪽을 꽉 채운 사각으로 체크와 구별한다. */
+.check input[type="radio"]:checked::after {
+  left: 4px; top: 4px; width: 6px; height: 6px;
+  border: none; border-radius: 0; background: var(--color-accent-ink); transform: none;
+}
 .check input[disabled] { opacity: 0.4; cursor: not-allowed; }
 
 .switch { display: inline-flex; align-items: center; gap: var(--space-xs); cursor: pointer; font-size: var(--text-sm); }
-.switch input { appearance: none; width: 32px; height: 18px; flex: 0 0 auto; border-radius: var(--radius-round);
+/* 스위치도 각지게. 알약 모양은 이 시스템에서 유일하게 튀는 형태였다. */
+.switch input { appearance: none; width: 38px; height: 20px; flex: 0 0 auto; border-radius: 0;
   background: var(--color-rule-3); position: relative; cursor: pointer;
   transition: background-color var(--dur-short) var(--ease-out); }
-.switch input::after { content: ""; position: absolute; top: 2px; left: 2px; width: 14px; height: 14px;
-  border-radius: var(--radius-round); background: var(--color-surface);
+.switch input::after { content: ""; position: absolute; top: 2px; left: 2px; width: 16px; height: 16px;
+  border-radius: 0; background: var(--color-surface);
   transition: transform var(--dur-short) var(--ease-out); }
 .switch input:checked { background: var(--color-accent); }
-.switch input:checked::after { transform: translateX(14px); }
+.switch input:checked::after { transform: translateX(18px); }
 .switch input[disabled] { opacity: 0.4; cursor: not-allowed; }
 
 /* ══ Chips, badges, dots ═══════════════════════════════════════════════ */
 .chip {
   display: inline-flex; align-items: center; gap: var(--space-2xs);
-  height: 20px; padding-inline: var(--space-xs);
+  height: 24px; padding-inline: var(--space-xs);
   border: var(--rule-hair) solid var(--color-rule-2);
   border-radius: var(--radius-xs);
   background: var(--color-paper-2);
@@ -172,7 +181,7 @@
 .chip--neg    { background: var(--color-neg-soft);  border-color: transparent; color: var(--color-neg); }
 .chip--idle   { background: var(--color-idle-soft); border-color: transparent; color: var(--color-ink-3); }
 .chip--solid  { background: var(--color-accent); border-color: var(--color-accent); color: var(--color-accent-ink); }
-.chip--lg { height: 24px; font-size: var(--text-xs); }
+.chip--lg { height: 28px; font-size: var(--text-xs); }
 
 .dot { width: 7px; height: 7px; border-radius: var(--radius-round); background: var(--color-idle); flex: 0 0 auto; }
 .dot--accent{ background: var(--color-accent); }
@@ -182,7 +191,7 @@
 
 .kbd {
   display: inline-flex; align-items: center; justify-content: center;
-  min-width: 18px; height: 18px; padding-inline: var(--space-2xs);
+  min-width: 20px; height: 20px; padding-inline: var(--space-2xs);
   border: var(--rule-hair) solid var(--color-rule-2); border-radius: var(--radius-xs);
   background: var(--color-paper-2); color: var(--color-ink-3);
   font-family: var(--font-mono); font-size: var(--text-2xs); line-height: 1;
@@ -190,7 +199,7 @@
 
 /* ══ Avatar ════════════════════════════════════════════════════════════ */
 .avatar {
-  --av: 26px;
+  --av: 28px;
   width: var(--av); height: var(--av); flex: 0 0 auto;
   border-radius: var(--radius-round);
   display: inline-flex; align-items: center; justify-content: center;
@@ -199,10 +208,13 @@
   letter-spacing: 0; text-transform: uppercase;
   border: var(--rule-hair) solid var(--color-surface);
 }
-.avatar--sm { --av: 20px; font-size: 9px; }
-.avatar--lg { --av: 40px; font-size: var(--text-sm); }
-.avatar--xl { --av: 56px; font-size: var(--text-md); }
+.avatar--sm { --av: 24px; font-size: 11px; }   /* 이니셜은 읽는 글이 아니라 표식이다 */
+.avatar--lg { --av: 44px; font-size: var(--text-sm); }
+.avatar--xl { --av: 60px; font-size: var(--text-md); }
 .avatar-stack { display: inline-flex; }
+/* 이름은 글자 단위로 쪼개지지 않는다. 좁은 열에서 "박건우"가 세 줄로
+   무너지던 문제를 막는다 — 넘치면 표가 가로로 스크롤되면 된다. */
+.person { display: inline-flex; align-items: center; gap: var(--space-xs); white-space: nowrap; }
 .avatar-stack .avatar + .avatar { margin-left: -7px; }
 
 /* ══ Surfaces ══════════════════════════════════════════════════════════ */
@@ -215,7 +227,7 @@
   display: flex; align-items: center; justify-content: space-between; gap: var(--space-sm);
   padding: var(--space-sm) var(--space-md);
   border-bottom: var(--rule-hair) solid var(--color-rule);
-  min-height: 44px;
+  min-height: 52px;
 }
 .panel__title { font-family: var(--font-display); font-size: var(--text-base); font-weight: 600; color: var(--color-ink); letter-spacing: var(--track-tight); }
 .panel__body { padding: var(--space-md); }
@@ -236,7 +248,7 @@
 .table th {
   position: sticky; top: 0; z-index: var(--z-sticky);
   background: var(--color-paper-2);
-  padding: var(--space-xs) var(--space-sm);
+  padding: var(--cell-pad-block) var(--cell-pad-inline);
   border-bottom: var(--rule-hair) solid var(--color-rule-2);
   font-family: var(--font-mono); font-size: var(--text-2xs);
   letter-spacing: var(--track-mono); text-transform: uppercase;
@@ -247,7 +259,7 @@
 .table th[aria-sort="ascending"]::after  { content: " ↑"; color: var(--color-accent); }
 .table th[aria-sort="descending"]::after { content: " ↓"; color: var(--color-accent); }
 .table td {
-  padding: var(--space-xs) var(--space-sm);
+  padding: var(--cell-pad-block) var(--cell-pad-inline);
   border-bottom: var(--rule-hair) solid var(--color-rule);
   color: var(--color-ink-2); vertical-align: middle;
 }
@@ -257,9 +269,9 @@
 .table tbody tr.is-row-link { cursor: pointer; }
 .table .cell-num { font-family: var(--font-mono); font-variant-numeric: tabular-nums; text-align: right; white-space: nowrap; }
 .table .cell-tight { width: 1%; white-space: nowrap; }
-.table--compact td { padding: var(--space-3xs) var(--space-sm); }
+.table--compact td { padding: var(--space-xs) var(--space-sm); }
 .table--rule-less td { border-bottom: none; }
-.table caption { text-align: left; padding: var(--space-xs) var(--space-sm); font-size: var(--text-xs); color: var(--color-ink-3); }
+.table caption { text-align: left; padding: var(--space-sm) var(--cell-pad-inline); font-size: var(--text-xs); color: var(--color-ink-3); }
 
 /* inline-edit cell */
 .cell-edit { position: relative; }
@@ -287,7 +299,7 @@
 /* Segmented control */
 .seg { display: inline-flex; border: var(--rule-hair) solid var(--color-rule-2); border-radius: var(--radius-sm); overflow: hidden; background: var(--color-surface); }
 .seg__item {
-  padding: 0 var(--space-sm); height: 28px; display: inline-flex; align-items: center;
+  padding: 0 var(--space-md); height: var(--ctl-h-sm); display: inline-flex; align-items: center;
   font-size: var(--text-xs); font-weight: 500; color: var(--color-ink-3); white-space: nowrap;
   border-right: var(--rule-hair) solid var(--color-rule);
   transition: background-color var(--dur-short) var(--ease-out), color var(--dur-short) var(--ease-out);
@@ -299,7 +311,7 @@
 /* ══ Path — the stage rail (Salesforce Path, redrawn as a ruler) ═══════ */
 .path { display: flex; width: 100%; overflow-x: auto; border: var(--rule-hair) solid var(--color-rule); border-radius: var(--radius-sm); background: var(--color-surface); }
 .path__step {
-  position: relative; flex: 1 1 0; min-width: 108px;
+  position: relative; flex: 1 1 0; min-width: 128px;
   padding: var(--space-xs) var(--space-sm) var(--space-xs) var(--space-md);
   font-size: var(--text-xs); color: var(--color-ink-3);
   border-right: var(--rule-hair) solid var(--color-rule);
@@ -311,11 +323,11 @@
 .path__step.is-done { background: var(--color-accent-soft); color: var(--color-accent-press); }
 .path__step.is-current { background: var(--color-accent); color: var(--color-accent-ink); font-weight: 600; }
 .path__step.is-lost { background: var(--color-neg-soft); color: var(--color-neg); }
-.path__step .path__pct { display: block; font-family: var(--font-mono); font-size: 10px; letter-spacing: var(--track-mono); opacity: 0.75; }
+.path__step .path__pct { display: block; font-family: var(--font-mono); font-size: var(--text-2xs); letter-spacing: var(--track-mono); opacity: 0.75; }
 
 /* ══ Kanban ════════════════════════════════════════════════════════════ */
 .kanban { display: flex; gap: var(--space-sm); align-items: flex-start; overflow-x: auto; padding-bottom: var(--space-sm); }
-.kanban__col { flex: 0 0 268px; background: var(--color-paper-2); border: var(--rule-hair) solid var(--color-rule); border-radius: var(--radius-md); display: flex; flex-direction: column; max-height: 100%; }
+.kanban__col { flex: 0 0 288px; background: var(--color-paper-2); border: var(--rule-hair) solid var(--color-rule); border-radius: var(--radius-md); display: flex; flex-direction: column; max-height: 100%; }
 .kanban__col.is-drop { border-color: var(--color-accent); background: var(--color-accent-soft); }
 .kanban__head { padding: var(--space-xs) var(--space-sm); border-bottom: var(--rule-hair) solid var(--color-rule); }
 .kanban__title { display: flex; align-items: center; justify-content: space-between; gap: var(--space-xs); font-family: var(--font-mono); font-size: var(--text-2xs); letter-spacing: var(--track-mono); text-transform: uppercase; color: var(--color-ink-2); font-weight: 600; }
@@ -422,12 +434,12 @@
 .menu__label { padding: var(--space-2xs) var(--space-xs); font-family: var(--font-mono); font-size: var(--text-2xs); letter-spacing: var(--track-mono); text-transform: uppercase; color: var(--color-ink-4); }
 
 /* ══ Progress / meter ══════════════════════════════════════════════════ */
-.meter { height: 6px; border-radius: var(--radius-round); background: var(--color-paper-3); overflow: hidden; }
-.meter__fill { height: 100%; background: var(--color-accent); border-radius: var(--radius-round); transition: width var(--dur-mid) var(--ease-out); }
+.meter { height: 8px; border-radius: 0; background: var(--color-paper-3); overflow: hidden; }
+.meter__fill { height: 100%; background: var(--color-accent); border-radius: 0; transition: width var(--dur-mid) var(--ease-out); }
 .meter--pos .meter__fill { background: var(--color-pos); }
 .meter--warn .meter__fill { background: var(--color-warn); }
 .meter--neg .meter__fill { background: var(--color-neg); }
-.meter--thick { height: 10px; }
+.meter--thick { height: 12px; }
 .meter__marker { position: relative; }
 .meter__marker::after { content: ""; position: absolute; top: -3px; bottom: -3px; width: 2px; background: var(--color-ink); left: var(--marker, 100%); }
 
@@ -464,14 +476,18 @@
 .band-dark .hairline, .band-dark .hairline-b { border-color: var(--color-graphite-rule); }
 
 /* Code card — dark graphite, hairline-framed, mono. A real <pre>, never fake window chrome. */
+/* 서체를 카드 전체에 걸지 않는다. 모노는 상단 바와 코드 블록에만 —
+   한국어 산문을 모노 스택에 넣으면 한글은 대체 서체로, 숫자와 영문만
+   모노로 렌더돼 한 문장 안에서 서체가 갈린다. */
 .code-card {
   background: var(--color-graphite);
   border: var(--rule-hair) solid var(--color-graphite-rule);
   border-radius: var(--radius-md);
   box-shadow: var(--lift-1);
-  font-family: var(--font-mono);
+  font-family: var(--font-body);
   overflow: hidden;
 }
+.code-card__bar, .code-card pre, .code-card code { font-family: var(--font-mono); }
 .code-card__bar {
   display: flex; align-items: center; justify-content: space-between; gap: var(--space-sm);
   padding: var(--space-xs) var(--space-sm);
@@ -487,7 +503,7 @@
 
 /* ══ Pagination / breadcrumb ══════════════════════════════════════════ */
 .pager { display: flex; align-items: center; gap: var(--space-2xs); }
-.pager__btn { min-width: 26px; height: 26px; padding-inline: var(--space-2xs); border-radius: var(--radius-xs);
+.pager__btn { min-width: 30px; height: 30px; padding-inline: var(--space-xs); border-radius: var(--radius-xs);
   font-family: var(--font-mono); font-size: var(--text-2xs); color: var(--color-ink-3);
   display: inline-flex; align-items: center; justify-content: center; }
 .pager__btn:hover { background: var(--color-paper-3); color: var(--color-ink); }
@@ -499,7 +515,7 @@
 
 /* ══ Heatmap + gantt (capacity) ═══════════════════════════════════════ */
 .heat { display: grid; gap: 2px; }
-.heat__cell { height: 22px; border-radius: 2px; background: var(--color-paper-3); position: relative; }
+.heat__cell { height: 24px; border-radius: 0; background: var(--color-paper-3); position: relative; }
 .heat__cell[data-load="1"] { background: var(--color-accent-soft); }
 .heat__cell[data-load="2"] { background: var(--color-accent-soft-2); }
 .heat__cell[data-load="3"] { background: var(--color-accent); }
@@ -508,10 +524,25 @@
 
 .gantt__row { display: grid; grid-template-columns: 148px 1fr; gap: var(--space-sm); align-items: center; padding: var(--space-2xs) 0; border-bottom: var(--rule-hair) solid var(--color-rule); }
 .gantt__track { position: relative; height: 20px; background: var(--color-paper-2); border-radius: var(--radius-xs); }
-.gantt__bar { position: absolute; top: 3px; bottom: 3px; border-radius: 3px; background: var(--color-accent); display: flex; align-items: center; padding-inline: var(--space-2xs);
+.gantt__bar { position: absolute; top: 3px; bottom: 3px; border-radius: 0; background: var(--color-accent); display: flex; align-items: center; padding-inline: var(--space-2xs);
   font-family: var(--font-mono); font-size: 9px; color: var(--color-accent-ink); overflow: hidden; white-space: nowrap; }
 .gantt__bar--warn { background: var(--color-warn); }
 .gantt__bar--idle { background: var(--color-rule-3); color: var(--color-ink-2); }
+
+/* ══ 터치 기기 — 손가락은 커서보다 굵다 ══════════════════════════════
+   포인터가 거친 기기에서만 컨트롤을 44px 로 올린다. 데스크톱 밀도는
+   그대로 두고, 터치에서만 최소 타깃 크기를 만족시킨다. */
+@media (pointer: coarse) {
+  .btn { --btn-h: 44px; }
+  .btn--sm { --btn-h: 38px; }
+  .input, .select { min-height: 44px; }
+  .check input, .check input[type="radio"] { width: 20px; height: 20px; }
+  .check input:checked::after { left: 7px; top: 3px; }
+  .check input[type="radio"]:checked::after { left: 6px; top: 6px; width: 8px; height: 8px; }
+  .table td, .table th { padding: var(--space-md) var(--cell-pad-inline); }
+  .tab { padding-block: var(--space-sm) var(--space-md); }
+  .menu__item { padding: var(--space-sm) var(--space-xs); }
+}
 
 /* ══ Responsive floor ═════════════════════════════════════════════════ */
 @media (max-width: 768px) {

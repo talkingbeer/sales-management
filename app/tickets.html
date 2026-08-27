@@ -759,7 +759,7 @@
         input,
         el('span', { class: 'grow', html:
           '<span style="display:block">' + esc(c.user.name) + ' <span class="t-muted">' + esc(c.user.craft || c.user.role) + '</span></span>' +
-          '<span class="t-mono" style="font-size:10px">' + c.parts.map(function (p) {
+          '<span class="t-mono" style="font-size:var(--text-2xs)">' + c.parts.map(function (p) {
             return esc(p.label) + ' ' + p.got + '/' + p.max;
           }).join(' · ') + ' · 진행 ' + c.jobs + '건</span>' }),
         el('span', { class: 'cand__num', text: c.score + '점' }),

@@ -10,6 +10,7 @@
     "roles": "node tools/role-check.js app/dashboard.html"
   },
   "devDependencies": {
-    "jsdom": "^29.1.1"
+    "jsdom": "^29.1.1",
+    "playwright-core": "^1.62.1"
   }
 }

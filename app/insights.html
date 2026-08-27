@@ -500,7 +500,7 @@
     box.appendChild(ui.table([
       { key: 'label', label: '규칙', cell: function (r) {
           return '<span class="t-small t-ink">' + esc(r.label) + '</span>' +
-            '<br><span class="t-mono t-mono--plain" style="font-size:10px">' + esc(r.id) + '</span>';
+            '<br><span class="t-mono t-mono--plain" style="font-size:var(--text-2xs)">' + esc(r.id) + '</span>';
         } },
       { key: 'kind', label: '심각도', cell: function (r) { return ui.chip(KIND_LABEL[r.kind] || r.kind, KIND_CHIP[r.kind]); } },
       { key: 'fired', label: '판정', align: 'right', cell: function (r) {

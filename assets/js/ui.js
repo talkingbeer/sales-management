@@ -266,7 +266,7 @@
   };
   ui.personCell = function (user) {
     if (!user) return '<span class="t-faint">미지정</span>';
-    return '<span class="row gap-xs">' + ui.avatar(user, 'sm') + '<span>' + esc(user.name) + '</span></span>';
+    return '<span class="person">' + ui.avatar(user, 'sm') + '<span>' + esc(user.name) + '</span></span>';
   };
   ui.meter = function (value, max, kind) {
     var p = max > 0 ? U.clamp((value / max) * 100, 0, 100) : 0;
@@ -283,14 +283,19 @@
       '<p class="empty__body">' + esc(body) + '</p>' +
       (actionHTML ? '<div class="empty__act">' + actionHTML + '</div>' : '') + '</div>';
   };
+  /** 심각도를 색 띠가 아니라 낱말로 전달한다. 색은 그 낱말에만 입힌다. */
+  ui.SEVERITY = { risk: '위험', warn: '주의', act: '조치', good: '양호' };
   ui.insight = function (o) {
-    return '<article class="insight insight--' + esc(o.kind || 'act') + '">' +
-      '<div class="insight__spine" aria-hidden="true"></div><div>' +
-      '<p class="insight__kind">' + esc(o.label || '관찰') + '</p>' +
+    var kind = o.kind || 'act';
+    return '<article class="insight insight--' + esc(kind) + '">' +
+      '<p class="insight__kind">' +
+        '<span class="insight__sev">' + esc(ui.SEVERITY[kind] || '관찰') + '</span>' +
+        '<span>' + esc(o.label || '') + '</span>' +
+      '</p>' +
       '<p class="insight__say">' + o.say + '</p>' +
       (o.why ? '<p class="insight__why">' + o.why + '</p>' : '') +
       (o.actions ? '<div class="insight__do">' + o.actions + '</div>' : '') +
-      '</div></article>';
+      '</article>';
   };
 
   /* ── CSV 내보내기 ─────────────────────────────────────────────────────

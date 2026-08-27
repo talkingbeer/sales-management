@@ -59,7 +59,7 @@
   .fc-owner:hover { background: var(--color-paper-3); border-color: var(--color-rule-2); color: var(--color-accent-press); }
   .fc-owner:active { border-color: var(--color-accent); }
   .fc-owner[disabled] { opacity: 0.5; cursor: not-allowed; }
-  .fc-owner__role { font-family: var(--font-mono); font-size: 10px; color: var(--color-ink-4); }
+  .fc-owner__role { font-family: var(--font-mono); font-size:var(--text-2xs); color: var(--color-ink-4); }
 
   /* 워터폴 아래 목표 대비 막대 */
   .fc-goal { display: grid; grid-template-columns: auto minmax(72px, 1fr) auto; gap: var(--space-2xs) var(--space-sm); align-items: center; }
@@ -635,7 +635,7 @@
       { key: 'amount', label: '금액', align: 'right', sortable: false, cell: function (o) { return '<span class="t-num">' + U.won(o.amount) + '</span>'; } },
       { key: 'closeDate', label: '마감일', align: 'right', sortable: false, cell: function (o) {
           return '<span class="t-num t-neg">' + U.fmtDate(o.closeDate) + '</span><br>' +
-            '<span class="t-mono" style="font-size:10px">' + U.num(U.days(o.closeDate, C.today)) + '일 경과</span>';
+            '<span class="t-mono" style="font-size:var(--text-2xs)">' + U.num(U.days(o.closeDate, C.today)) + '일 경과</span>';
         } }
     ];
     if (canU) {
@@ -695,7 +695,7 @@
       { key: 'cast', label: '카테고리', sortable: false, cell: function (o) {
           var st = D.stage(o.stage);
           return ui.chip(CAST_KO[st.cast], st.won ? 'pos' : st.lost ? 'neg' : st.cast === 'Commit' ? 'accent' : 'idle') +
-            '<br><span class="t-mono" style="font-size:10px">' + esc(o.stage) + '</span>';
+            '<br><span class="t-mono" style="font-size:var(--text-2xs)">' + esc(o.stage) + '</span>';
         } },
       { key: 'amount', label: '금액', align: 'right', sortable: false, cell: function (o) { return '<span class="t-num">' + U.won(o.amount) + '</span>'; } },
       { key: 'closeDate', label: '마감일', align: 'right', sortable: false, cell: function (o) {

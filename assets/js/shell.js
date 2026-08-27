@@ -83,7 +83,7 @@
         el('span', { class: 'avatar avatar--sm', text: U.initials(u && u.name) }),
         el('span', { class: 'grow', style: 'min-width:0;text-align:left' }, [
           el('span', { style: 'display:block;line-height:1.2', text: (u && u.name) || '—' }),
-          el('span', { class: 't-mono', style: 'display:block;font-size:10px', text: (u && u.role) || '' })
+          el('span', { class: 't-mono', style: 'display:block;font-size:var(--text-2xs)', text: (u && u.role) || '' })
         ]),
         el('span', { class: 'app-rail__icon', text: '⇅' })
       ])
@@ -97,7 +97,7 @@
     return el('header', { class: 'app-topbar' }, [
       el('button', { class: 'btn btn--ghost btn--icon btn--sm rail-toggle', type: 'button', id: 'railToggle', 'aria-label': '메뉴 열기', text: '☰' }),
       el('button', { class: 'omni', type: 'button', id: 'omni', 'aria-label': '검색 및 명령 팔레트 열기' }, [
-        el('span', { class: 't-mono', style: 'font-size:11px', text: '⌕' }),
+        el('span', { class: 't-mono', style: 'font-size:var(--text-xs)', text: '⌕' }),
         el('span', { class: 'grow', style: 'text-align:left', text: '광고주 · 영업기회 · 티켓 검색, 또는 명령 실행' }),
         el('span', { class: 'omni__hint' }, [el('span', { class: 'kbd', text: '⌘' }), el('span', { class: 'kbd', text: 'K' })])
       ]),
@@ -221,7 +221,7 @@
         el('span', { class: 'dot ' + (n.read ? '' : 'dot--accent'), style: 'margin-top:6px' }),
         el('span', { class: 'grow' }, [
           el('span', { style: 'display:block;font-size:var(--text-sm)', text: n.text }),
-          el('span', { class: 't-mono', style: 'font-size:10px', text: U.ago(n.at) })
+          el('span', { class: 't-mono', style: 'font-size:var(--text-2xs)', text: U.ago(n.at) })
         ])
       ]);
       body.appendChild(a);
@@ -252,7 +252,7 @@
         body.appendChild(el('div', { class: 'row gap-sm', style: 'padding:var(--space-xs) 0;border-bottom:1px solid var(--color-rule)' }, [
           el('span', { class: 'chip', text: t.entity }),
           el('span', { class: 'grow', style: 'min-width:0', text: t.label || t.record.id }),
-          el('span', { class: 't-mono', style: 'font-size:10px', text: U.ago(t.at) }),
+          el('span', { class: 't-mono', style: 'font-size:var(--text-2xs)', text: U.ago(t.at) }),
           el('button', { class: 'btn btn--sm', type: 'button', text: '복원', onclick: function () {
             db.untrash(t.id); ui.toast('복원했습니다. 화면을 새로 고치면 반영됩니다.'); paint();
           } })

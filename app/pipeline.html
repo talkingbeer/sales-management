@@ -251,7 +251,7 @@
 
   /* ── 카드 ────────────────────────────────────────────────────────── */
   function dueMark(o, closed) {
-    if (closed) return '<span class="t-mono t-faint" style="font-size:10px">' + esc(U.fmtDate(o.closeDate, 'md')) + '</span>';
+    if (closed) return '<span class="t-mono t-faint" style="font-size:var(--text-2xs)">' + esc(U.fmtDate(o.closeDate, 'md')) + '</span>';
     var d = U.days(C.today, o.closeDate);
     if (isNaN(d)) return '<span class="chip chip--idle">마감일 없음</span>';
     if (d < 0) return '<span class="chip chip--neg">D+' + Math.abs(d) + '</span>';

@@ -35,7 +35,7 @@
   .sw__body { min-width: 0; }
   .sw__name { font-family: var(--font-mono); font-size: var(--text-2xs); color: var(--color-ink); letter-spacing: 0.02em; overflow-wrap: anywhere; }
   .sw__use { font-size: var(--text-xs); color: var(--color-ink-3); line-height: 1.45; margin-top: 1px; }
-  .sw__val { font-family: var(--font-mono); font-size: 10px; color: var(--color-ink-4); margin-top: 2px; overflow-wrap: anywhere; }
+  .sw__val { font-family: var(--font-mono); font-size:var(--text-2xs); color: var(--color-ink-4); margin-top: 2px; overflow-wrap: anywhere; }
 
   /* ── 타이포 스케일 ───────────────────────────────────────────── */
   .spec { display: grid; grid-template-columns: 168px minmax(0, 1fr); gap: var(--space-sm) var(--space-md); align-items: baseline;
@@ -52,7 +52,7 @@
 
   /* ── 간격 · 반경 · 모션 ──────────────────────────────────────── */
   .sp-row { display: grid; grid-template-columns: 128px minmax(0, 1fr) 96px; gap: var(--space-sm); align-items: center; padding: var(--space-2xs) 0; }
-  .sp-bar { height: 12px; border-radius: 2px; background: var(--color-accent-soft-2); }
+  .sp-bar { height: 12px; border-radius:0; background: var(--color-accent-soft-2); }
   .rad-row { display: flex; flex-wrap: wrap; gap: var(--space-md); }
   .rad { width: 84px; }
   .rad__box { height: 46px; background: var(--color-accent-soft); border: var(--rule-hair) solid var(--color-accent-soft-2); }
@@ -72,7 +72,7 @@
   .cat__wide { grid-column: 1 / -1; }
   .demo-row { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-xs); }
   .demo-note { font-size: var(--text-xs); color: var(--color-ink-3); margin-top: var(--space-sm); line-height: 1.55; }
-  .demo-use { font-family: var(--font-mono); font-size: 10px; color: var(--color-ink-4); letter-spacing: 0.02em; margin-top: var(--space-2xs); overflow-wrap: anywhere; }
+  .demo-use { font-family: var(--font-mono); font-size:var(--text-2xs); color: var(--color-ink-4); letter-spacing: 0.02em; margin-top: var(--space-2xs); overflow-wrap: anywhere; }
   .lift { padding: var(--space-sm); border: var(--rule-hair) solid var(--color-rule); border-radius: var(--radius-sm); background: var(--color-surface); }
   .lift--1 { box-shadow: var(--lift-1); } .lift--2 { box-shadow: var(--lift-2); } .lift--3 { box-shadow: var(--lift-3); }
 
@@ -80,12 +80,11 @@
   .path__step.is-sel { box-shadow: inset 0 0 0 var(--rule-thick) var(--color-accent); }
   .st td, .st th { vertical-align: middle; }
   .st .input { width: 132px; }
-  .st__how { font-family: var(--font-mono); font-size: 10px; color: var(--color-ink-4); letter-spacing: 0.02em; white-space: nowrap; }
+  .st__how { font-family: var(--font-mono); font-size:var(--text-2xs); color: var(--color-ink-4); letter-spacing: 0.02em; white-space: nowrap; }
 
   .pagerbar { display: flex; align-items: center; justify-content: space-between; gap: var(--space-sm); flex-wrap: wrap;
               padding: var(--space-xs) var(--space-md); border-top: var(--rule-hair) solid var(--color-rule); }
   .list-card { border: var(--rule-hair) solid var(--color-rule); border-top: none; border-radius: 0 0 var(--radius-md) var(--radius-md); background: var(--color-surface); }
-  .filterbar .input, .filterbar .select { min-height: 28px; height: 28px; font-size: var(--text-xs); }
   .filterbar__q { width: min(220px, 46vw); }
   @media (max-width: 640px) { .filterbar { padding-inline: var(--space-sm); } .pagerbar { padding-inline: var(--space-sm); } }
 </style>
@@ -375,14 +374,16 @@
     ['--space-3xl', '마케팅 면 구획'],
     ['--space-4xl', '마케팅 면 최대 구획']
   ];
+  /* 반경 토큰은 전부 0 이다. 이름을 남겨 둔 이유는 나중에 누군가 라운드를
+     되살리고 싶을 때 고칠 지점이 한 곳이어야 하기 때문이다. */
   var RADII = [
-    ['--radius-xs', '칩 · 체크박스 · 작은 표식'],
-    ['--radius-sm', '버튼 · 입력 · 칸반 카드'],
-    ['--radius-md', '패널 · 모달 · 스탯 타일'],
-    ['--radius-lg', '가장 큰 면'],
-    ['--radius-round', '아바타 · 도트 · 미터']
+    ['--radius-xs', '칩 · 체크박스 · 작은 표식 — 직각'],
+    ['--radius-sm', '버튼 · 입력 · 칸반 카드 — 직각'],
+    ['--radius-md', '패널 · 모달 · 스탯 타일 — 직각'],
+    ['--radius-lg', '가장 큰 면 — 직각'],
+    ['--radius-round', '아바타 · 상태 도트 · 로딩 스피너 (이 셋만 예외)']
   ];
-  var RULES_W = [['--rule-hair', '모든 경계선의 기본 두께'], ['--rule-thick', '활성 탭 밑줄 · 레일 마커']];
+  var RULES_W = [['--rule-hair', '모든 경계선의 기본 두께'], ['--rule-thick', '활성 탭 밑줄']];
   var EASES = [
     { token: '--ease-out', ease: 'out', use: '들어오는 것 — 패널 등장, 토스트, 모달' },
     { token: '--ease-in', ease: 'in', use: '나가는 것 — 토스트 소멸' },
@@ -645,7 +646,10 @@
     return '<div class="kv__row"><span class="kv__k">' + esc(t[0]) + '</span>' +
       '<span class="kv__v">' + esc(t[1]) + (v ? ' <span class="t-faint t-num">' + esc(v) + '</span>' : '') + '</span></div>';
   }).join('') + '</div>' +
-  '<p class="demo-note">알약 모양(<span class="t-num">--radius-round</span>)은 아바타 · 도트 · 미터에만 씁니다. 버튼을 알약으로 만들지 않습니다.</p>';
+  '<p class="demo-note">네 개의 상자가 모두 각져 있는 것이 정상입니다. 이 시스템에 라운드는 없습니다 — ' +
+  '카드 · 박스 · 표 · 입력 · 체크 · 라디오 · 스위치 · 차트 막대까지 전부 직각입니다. ' +
+  '둥근 것은 <span class="t-num">--radius-round</span>를 쓰는 아바타 · 상태 도트 · 로딩 스피너 셋뿐이고, ' +
+  '그래서 화면에서 둥근 모양은 언제나 “사람이거나 상태”를 뜻합니다.</p>';
 
   var reduced = false;
   try { reduced = !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches); } catch (e) { reduced = false; }
@@ -1380,7 +1384,11 @@
     ['되돌릴 수 있는 동작에 확인 모달', '확인 모달은 판단을 사용자에게 떠넘기고, 반복되면 아무도 읽지 않습니다.', '먼저 실행하고 되돌리기 토스트를 8초 띄웁니다.'],
     ['축하 토스트', '저장은 원래 되는 일입니다. 매번 축하하면 진짜 경고가 묻힙니다.', '조용한 성공. 화면이 바뀐 것 자체가 확인입니다.'],
     ['튀는 이징 · 오버슛', '계기판은 흔들리지 않습니다. 관성은 신뢰를 깎습니다.', '<span class="t-num">--ease-out</span> 세 종류 안에서만 고릅니다.'],
-    ['라벨 대신 placeholder', '값을 넣는 순간 라벨이 사라져, 다시 볼 때 무슨 칸인지 알 수 없습니다.', '<span class="t-num">.field__label</span> 을 항상 둡니다.']
+    ['라벨 대신 placeholder', '값을 넣는 순간 라벨이 사라져, 다시 볼 때 무슨 칸인지 알 수 없습니다.', '<span class="t-num">.field__label</span> 을 항상 둡니다.'],
+    ['카드 옆의 색 띠', '색만으로 심각도를 전하면 무엇이 위험한지는 말해 주지 못하고, 색각 이상 사용자에게는 아무것도 남지 않습니다.', '첫 줄에 <span class="t-num">위험 · 주의 · 조치 · 양호</span> 라고 쓰고 그 낱말에만 색을 입힙니다.'],
+    ['둥근 모서리', '이 시스템은 각졌습니다. 라운드가 한 곳만 섞이면 그 요소가 다른 시스템에서 온 것처럼 보입니다.', '반경 토큰은 전부 0 입니다. 둥근 것은 아바타 · 상태 도트 · 스피너뿐입니다.'],
+    ['컨트롤 높이 고정', '높이를 <span class="t-num">height</span> 로 못 박으면 한글 받침이 잘립니다. 실제로 셀렉트에서 “등급”이 “드그”로 보였습니다.', '<span class="t-num">min-height</span> 와 줄높이 1.35 를 씁니다.'],
+    ['한글에 라틴 줄바꿈', '기본값은 “메이플에듀”를 음절 단위로 쪼갭니다. 한국어 화면에서 가장 먼저 어색해 보이는 지점입니다.', 'body 에 <span class="t-num">word-break: keep-all</span>. 어절 단위로만 끊습니다.']
   ];
   $('#dontCount').textContent = DONTS.length + '가지';
   $('#dontHost').innerHTML = '<div class="table-wrap"><table class="table">' +

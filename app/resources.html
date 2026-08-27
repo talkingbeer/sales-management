@@ -32,12 +32,12 @@
   .heat__head--now { color: var(--color-accent-press); font-weight: 600; }
   .heat__rowhead { padding: var(--space-2xs) var(--space-xs) var(--space-2xs) 0; min-width: 0; border-right: var(--rule-hair) solid var(--color-rule); }
   .heat__name { font-size: var(--text-sm); color: var(--color-ink); font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .heat__meta { font-family: var(--font-mono); font-size: 10px; color: var(--color-ink-4); letter-spacing: var(--track-mono); }
+  .heat__meta { font-family: var(--font-mono); font-size:var(--text-2xs); color: var(--color-ink-4); letter-spacing: var(--track-mono); }
   .heat__skills { display: flex; gap: var(--space-3xs); flex-wrap: wrap; margin-top: var(--space-3xs); }
   .heat__util { display: flex; align-items: center; gap: var(--space-2xs); margin-top: 2px; }
   .heat__util .meter { flex: 1 1 auto; min-width: 40px; }
   .heat__cell { height: 100%; min-height: 26px; display: flex; align-items: center; justify-content: center;
-    font-family: var(--font-mono); font-size: 10px; letter-spacing: var(--track-mono);
+    font-family: var(--font-mono); font-size:var(--text-2xs); letter-spacing: var(--track-mono);
     color: var(--color-ink-3); width: 100%; cursor: pointer;
     transition: outline-color var(--dur-short) var(--ease-out), opacity var(--dur-short) var(--ease-out);
     outline: var(--rule-hair) solid transparent; outline-offset: -1px; }
@@ -49,7 +49,7 @@
   .heatkey { display: flex; align-items: center; gap: var(--space-sm); flex-wrap: wrap;
     font-family: var(--font-mono); font-size: var(--text-2xs); letter-spacing: var(--track-mono); color: var(--color-ink-3); }
   .heatkey span { display: inline-flex; align-items: center; gap: var(--space-2xs); }
-  .heatkey i { width: 12px; height: 10px; border-radius: 2px; display: inline-block; background: var(--color-paper-3); }
+  .heatkey i { width: 12px; height: 10px; border-radius:0; display: inline-block; background: var(--color-paper-3); }
   .heatkey i[data-load="1"] { background: var(--color-accent-soft); }
   .heatkey i[data-load="2"] { background: var(--color-accent-soft-2); }
   .heatkey i[data-load="3"] { background: var(--color-accent); }
@@ -65,7 +65,6 @@
     border-radius: 0 0 var(--radius-md) var(--radius-md); background: var(--color-surface); }
   .pagerbar { display: flex; align-items: center; justify-content: space-between; gap: var(--space-sm);
     flex-wrap: wrap; padding: var(--space-xs) var(--space-md); border-top: var(--rule-hair) solid var(--color-rule); }
-  .filterbar .input, .filterbar .select { min-height: 28px; height: 28px; font-size: var(--text-xs); }
   .filterbar .select { max-width: 150px; }
   .filterbar__q { width: min(210px, 46vw); }
   #views { max-width: 100%; overflow-x: auto; }
@@ -79,9 +78,9 @@
   .why[open] > summary { color: var(--color-ink-2); }
   .why__grid { margin-top: var(--space-2xs); display: grid; gap: var(--space-2xs); min-width: 190px; }
   .why__row { display: grid; grid-template-columns: 62px 1fr 44px; gap: var(--space-2xs); align-items: center; }
-  .why__k { font-family: var(--font-mono); font-size: 10px; color: var(--color-ink-4); letter-spacing: var(--track-mono); }
-  .why__v { font-family: var(--font-mono); font-size: 10px; color: var(--color-ink-2); text-align: right; }
-  .why__note { grid-column: 1 / -1; font-size: 10px; color: var(--color-ink-4); }
+  .why__k { font-family: var(--font-mono); font-size:var(--text-2xs); color: var(--color-ink-4); letter-spacing: var(--track-mono); }
+  .why__v { font-family: var(--font-mono); font-size:var(--text-2xs); color: var(--color-ink-2); text-align: right; }
+  .why__note { grid-column: 1 / -1; font-size:var(--text-2xs); color: var(--color-ink-4); }
 
   .mrate { display: flex; align-items: center; gap: var(--space-xs); min-width: 108px; }
   .mrate__n { font-family: var(--font-mono); font-variant-numeric: tabular-nums; font-size: var(--text-xs);
@@ -590,7 +589,7 @@
             return '<a class="link--quiet" href="ticket.html?id=' + encodeURIComponent(t.id) + '"><span class="tkt-key">' + esc(t.key) + '</span> ' + esc(t.title) + '</a>';
           } },
         { key: 'hours', label: '이 주 배분', align: 'right', sortable: false, cell: function (a) {
-            return U.num(Math.round(share(a.hours, a.startDate, a.endDate, w.from, w.to))) + 'h<br><span class="t-faint t-mono" style="font-size:10px">전체 ' + a.hours + 'h</span>';
+            return U.num(Math.round(share(a.hours, a.startDate, a.endDate, w.from, w.to))) + 'h<br><span class="t-faint t-mono" style="font-size:var(--text-2xs)">전체 ' + a.hours + 'h</span>';
           } },
         { key: 'period', label: '배정 기간', align: 'right', sortable: false, cell: function (a) {
             return U.fmtDate(a.startDate, 'md') + '~' + U.fmtDate(a.endDate, 'md');
@@ -758,12 +757,12 @@
       { key: 'hours', label: '요청 공수', align: 'right', cell: function (r) { return U.num(r.req.hours) + '<span class="t-faint">h</span>'; } },
       { key: 'period', label: '기간', align: 'right', cell: function (r) {
           return '<span class="t-nowrap">' + U.fmtDate(r.req.startDate, 'md') + '~' + U.fmtDate(r.req.endDate, 'md') + '</span>' +
-            '<br><span class="t-faint t-mono" style="font-size:10px">' + span(r.req.startDate, r.req.endDate) + '일</span>';
+            '<br><span class="t-faint t-mono" style="font-size:var(--text-2xs)">' + span(r.req.startDate, r.req.endDate) + '일</span>';
         } },
       { key: 'who', label: '신청자', cell: function (r) { return ui.personCell(db.get('users', r.req.requesterId)); } },
       { key: 'status', label: '상태', cell: function (r) {
           return statusChip(r.req.status) + (r.req.status === '반려' && r.req.note
-            ? '<br><span class="t-faint" style="font-size:10px" title="' + esc(r.req.note) + '">사유 있음</span>' : '');
+            ? '<br><span class="t-faint" style="font-size:var(--text-2xs)" title="' + esc(r.req.note) + '">사유 있음</span>' : '');
         } },
       { key: 'age', label: '경과', align: 'right', cell: function (r) {
           var late = r.req.status === '대기' && r.age > 3;
@@ -803,13 +802,13 @@
           var st = D.slaState(r.ticket), rem = D.slaRemaining(r.ticket);
           var cls = st === 'breach' ? 't-neg' : st === 'risk' ? 't-warn' : '';
           return '<span class="' + cls + '">' + U.fmtDate(r.ticket.dueDate, 'md') + '</span>' +
-            '<br><span class="t-faint t-mono" style="font-size:10px">' +
+            '<br><span class="t-faint t-mono" style="font-size:var(--text-2xs)">' +
             (rem === null ? '판정 종료' : rem < 0 ? Math.abs(rem) + '시간 초과' : '잔여 ' + rem + '시간') + '</span>';
         } },
       { key: 'status', label: '상태', cell: function (r) {
           return ui.chip(r.ticket.status, r.ticket.status === '보류' ? 'idle' : 'accent') +
-            (r.ticket.assigneeId ? '<br><span class="t-faint" style="font-size:10px">' + esc(db.userName(r.ticket.assigneeId)) + '</span>'
-              : '<br><span class="t-warn" style="font-size:10px">담당자 미지정</span>');
+            (r.ticket.assigneeId ? '<br><span class="t-faint" style="font-size:var(--text-2xs)">' + esc(db.userName(r.ticket.assigneeId)) + '</span>'
+              : '<br><span class="t-warn" style="font-size:var(--text-2xs)">담당자 미지정</span>');
         } }
     ];
     if (canCreate) {
@@ -989,7 +988,7 @@
             return '<span class="t-mono' + (c.rank === 1 ? ' t-accent' : '') + '">' + c.rank + '</span>';
           } },
         { key: 'name', label: '이름', sortable: false, cell: function (c) {
-            return ui.personCell(c.user) + '<br><span class="t-faint t-mono" style="font-size:10px">' +
+            return ui.personCell(c.user) + '<br><span class="t-faint t-mono" style="font-size:var(--text-2xs)">' +
               esc(c.user.craft || '직무 미지정') + ' · 주 ' + D.capacityOf(c.user) + 'h</span>';
           } },
         { key: 'score', label: '매치율', sortable: false, cell: function (c) {
@@ -999,7 +998,7 @@
         { key: 'util', label: '가용률', align: 'right', sortable: false, cell: function (c) {
             var free = Math.max(0, 100 - c.ms.utilization);
             return '<span class="' + (free < 15 ? 't-warn' : '') + '">' + free + '%</span>' +
-              '<br><span class="t-faint t-mono" style="font-size:10px">가동 ' + c.ms.utilization + '%</span>';
+              '<br><span class="t-faint t-mono" style="font-size:var(--text-2xs)">가동 ' + c.ms.utilization + '%</span>';
           } },
         { key: 'skill', label: '스킬 매칭', sortable: false, cell: function (c) {
             if (!c.need.length) return '<span class="t-faint">요구 스킬 미지정</span>';
@@ -1025,7 +1024,7 @@
               '</span></div></div></details>';
           } },
         { key: 'act', label: '', sortable: false, tight: true, cell: function (c) {
-            if (!canAssign) return '<span class="t-faint t-mono" style="font-size:10px">배정 권한 없음</span>';
+            if (!canAssign) return '<span class="t-faint t-mono" style="font-size:var(--text-2xs)">배정 권한 없음</span>';
             return '<button class="btn btn--sm btn--primary t-nowrap" type="button" data-assign="' + esc(c.id) + '">배정 확정</button>';
           } }
       ], list, { compact: true }));

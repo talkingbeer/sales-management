@@ -506,7 +506,7 @@
     $('#campTable').appendChild(ui.table([
       { key: 'name', label: '캠페인', cell: function (c) {
           var mc = db.get('mediaChannels', c.channelId);
-          return '<span class="t-ink">' + esc(c.name) + '</span><br><span class="t-mono" style="font-size:10px">' +
+          return '<span class="t-ink">' + esc(c.name) + '</span><br><span class="t-mono" style="font-size:var(--text-2xs)">' +
             esc(mc ? mc.name : '매체 미지정') + ' · ' + esc(c.objective || '—') + '</span>';
         } },
       { key: 'status', label: '상태', cell: function (c) {
@@ -520,7 +520,7 @@
           var p = M.campaignPerf(c);
           var kind = p.pace === null ? null : p.pace > 100 ? 'neg' : p.pace > 85 ? 'warn' : null;
           return U.won(c.spend) + '<div style="min-width:74px;margin-top:4px">' + ui.meter(c.spend, c.budget, kind) + '</div>' +
-            '<span class="t-mono" style="font-size:10px">' + (p.pace === null ? '—' : U.pct(p.pace)) + '</span>';
+            '<span class="t-mono" style="font-size:var(--text-2xs)">' + (p.pace === null ? '—' : U.pct(p.pace)) + '</span>';
         } },
       { key: 'impressions', label: '노출', align: 'right', cell: function (c) { return U.num(c.impressions); } },
       { key: 'clicks', label: '클릭', align: 'right', cell: function (c) { return U.num(c.clicks); } },
@@ -558,14 +558,14 @@
             (c.isPrimary ? ui.chip('대표', 'accent') : '') + '</span>';
         } },
       { key: 'title', label: '직함 · 부서', cell: function (c) {
-          return esc(c.title || '—') + '<br><span class="t-mono" style="font-size:10px">' + esc(c.dept || '—') + '</span>';
+          return esc(c.title || '—') + '<br><span class="t-mono" style="font-size:var(--text-2xs)">' + esc(c.dept || '—') + '</span>';
         } },
       { key: 'decisionRole', label: '역할', cell: function (c) { return ui.chip(c.decisionRole || '미분류'); } },
       { key: 'phone', label: '연락처', cell: function (c) {
-          return '<span class="t-num">' + esc(c.phone || '—') + '</span><br><span class="t-mono" style="font-size:10px;text-transform:none">' + esc(c.email || '—') + '</span>';
+          return '<span class="t-num">' + esc(c.phone || '—') + '</span><br><span class="t-mono" style="font-size:var(--text-2xs);text-transform:none">' + esc(c.email || '—') + '</span>';
         } },
       { key: 'lastActivityDate', label: '최근 활동', align: 'right', cell: function (c) {
-          return U.fmtDate(c.lastActivityDate) + '<br><span class="t-mono" style="font-size:10px">' + esc(U.ago(c.lastActivityDate)) + '</span>';
+          return U.fmtDate(c.lastActivityDate) + '<br><span class="t-mono" style="font-size:var(--text-2xs)">' + esc(U.ago(c.lastActivityDate)) + '</span>';
         } }
     ], list, {
       empty: { title: '등록된 담당자가 없습니다', body: '의사결정자와 실무 담당을 함께 등록해 두면 딜이 멈추지 않습니다.' }
@@ -658,7 +658,7 @@
           } },
         { key: 'startDate', label: '기간', cell: function (c) {
             return '<span class="t-small t-nowrap">' + U.fmtDate(c.startDate) + ' – ' + U.fmtDate(c.endDate) + '</span>' +
-              '<br><span class="t-mono" style="font-size:10px">' + U.num(c.termMonths) + '개월 · ' + esc(c.billingCycle || '—') + '</span>';
+              '<br><span class="t-mono" style="font-size:var(--text-2xs)">' + U.num(c.termMonths) + '개월 · ' + esc(c.billingCycle || '—') + '</span>';
           } },
         { key: 'amount', label: '금액', align: 'right', cell: function (c) { return U.won(c.amount); } },
         { key: 'autoRenew', label: '자동갱신', cell: function (c) {
@@ -690,7 +690,7 @@
         { key: 'total', label: '금액', align: 'right', cell: function (q) { return U.won(q.total); } },
         { key: 'maxDiscountPct', label: '최대 할인', align: 'right', cell: function (q) {
             var rule = D.approvalFor(q.maxDiscountPct || 0);
-            return U.pct(q.maxDiscountPct || 0) + '<br><span class="t-mono" style="font-size:10px">' + esc(rule.label) + '</span>';
+            return U.pct(q.maxDiscountPct || 0) + '<br><span class="t-mono" style="font-size:var(--text-2xs)">' + esc(rule.label) + '</span>';
           } },
         { key: 'status', label: '상태', cell: function (q) {
             return ui.chip(q.status, q.status === '수주' ? 'pos' : q.status === '만료' ? 'idle' : q.status === '발송' ? 'accent' : null);
@@ -876,7 +876,7 @@
           return '<a class="menu__item" style="align-items:flex-start;padding-inline:0" href="ticket.html?id=' + encodeURIComponent(t.id) + '">' +
             '<span class="tkt-key">' + esc(t.key) + '</span>' +
             '<span class="grow" style="min-width:0"><span class="t-clamp-2" style="display:block;font-size:var(--text-sm)">' + esc(t.title) + '</span>' +
-            '<span class="t-mono" style="font-size:10px">' + esc(t.type) + ' · ' + esc(t.status) + ' · 마감 ' + U.fmtDate(t.dueDate, 'md') + '</span></span>' +
+            '<span class="t-mono" style="font-size:var(--text-2xs)">' + esc(t.type) + ' · ' + esc(t.status) + ' · 마감 ' + U.fmtDate(t.dueDate, 'md') + '</span></span>' +
             '<span class="chip ' + (sla === 'breach' ? 'chip--neg' : sla === 'risk' ? 'chip--warn' : sla === 'done' ? 'chip--idle' : 'chip--pos') + '">' +
             (sla === 'breach' ? '초과' : sla === 'risk' ? '임박' : sla === 'done' ? '종료' : '정상') + '</span></a>';
         }).join('')

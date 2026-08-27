@@ -19,3 +19,7 @@ _*.html
 _*.js
 
 # 브라우저 상태는 저장소에 들어가지 않는다 (localStorage 에만 존재)
+
+# 스크린샷 산출물
+.shots/
+.probe.js

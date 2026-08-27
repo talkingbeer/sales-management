@@ -7,9 +7,12 @@
   var C = w.CLOSER, U = C.util, esc = U.esc;
   var ch = {};
 
+  /* preserveAspectRatio="none" 을 걷어냈다. 그 값은 패널 폭에 따라 SVG를
+     가로로만 늘리거나 눌러서, 축 라벨과 값이 실제로 찌그러져 보이게 했다.
+     이제 균일 배율로 그리고 높이는 폭을 따라간다. */
   function svg(vbW, vbH, inner, extra) {
     return '<svg class="chart" viewBox="0 0 ' + vbW + ' ' + vbH + '" role="img" ' +
-      'preserveAspectRatio="none" style="height:' + (extra && extra.h ? extra.h : vbH) + 'px" ' +
+      'style="width:100%;height:auto" ' +
       'aria-label="' + esc((extra && extra.label) || '차트') + '">' + inner + '</svg>';
   }
   function nice(max) {
@@ -26,7 +29,7 @@
    */
   ch.bars = function (data, opt) {
     opt = opt || {};
-    var W = 640, H = opt.h || 200, padL = 44, padB = 26, padT = 12, padR = 8;
+    var W = 640, H = opt.h || 200, padL = 58, padB = 34, padT = 14, padR = 10;
     var max = nice(Math.max.apply(null, data.map(function (d) { return d.value; }).concat([1])));
     if (opt.target) max = nice(Math.max(max, opt.target));
     var pw = W - padL - padR, phh = H - padT - padB;
@@ -42,7 +45,7 @@
       var x = padL + i * bw + bw * 0.2;
       var y = padT + phh - hgt;
       out += '<rect class="bar' + (d.kind ? ' bar--' + d.kind : '') + '" x="' + x.toFixed(1) + '" y="' + y.toFixed(1) +
-        '" width="' + (bw * 0.6).toFixed(1) + '" height="' + hgt.toFixed(1) + '" rx="2"><title>' +
+        '" width="' + (bw * 0.6).toFixed(1) + '" height="' + hgt.toFixed(1) + '" rx="0"><title>' +
         esc(d.label + ' · ' + (opt.fmt ? opt.fmt(d.value) : U.num(d.value))) + '</title></rect>';
       out += '<text x="' + (padL + i * bw + bw / 2).toFixed(1) + '" y="' + (H - 8) + '" text-anchor="middle">' + esc(d.label) + '</text>';
     });
@@ -57,7 +60,7 @@
   /** 누적 막대 — data:[{label, parts:[{value, series}]}] series is 1..8 */
   ch.stacked = function (data, opt) {
     opt = opt || {};
-    var W = 640, H = opt.h || 200, padL = 44, padB = 26, padT = 12, padR = 8;
+    var W = 640, H = opt.h || 200, padL = 58, padB = 34, padT = 14, padR = 10;
     var totals = data.map(function (d) { return U.sum(d.parts, 'value'); });
     var max = nice(Math.max.apply(null, totals.concat([1])));
     var pw = W - padL - padR, phh = H - padT - padB, bw = pw / data.length;
@@ -86,7 +89,7 @@
   /** 선/영역 — series: [{name, points:[{label,value}], ghost}] */
   ch.line = function (series, opt) {
     opt = opt || {};
-    var W = 640, H = opt.h || 210, padL = 46, padB = 26, padT = 12, padR = 10;
+    var W = 640, H = opt.h || 210, padL = 58, padB = 34, padT = 14, padR = 12;
     var allV = [];
     series.forEach(function (s) { s.points.forEach(function (p) { allV.push(p.value); }); });
     var max = nice(Math.max.apply(null, allV.concat([1])));
@@ -126,16 +129,16 @@
   /** 퍼널 — stages:[{label, value}] 위에서 아래로 좁아지는 사다리꼴 */
   ch.funnel = function (stages, opt) {
     opt = opt || {};
-    var W = 640, rowH = 34, H = stages.length * rowH + 8;
+    var W = 640, rowH = 38, H = stages.length * rowH + 10;
     var max = Math.max.apply(null, stages.map(function (s) { return s.value; }).concat([1]));
-    var labelW = 150, barMax = W - labelW - 96;
+    var labelW = 168, barMax = W - labelW - 108;
     var out = '';
     stages.forEach(function (s, i) {
       var y = i * rowH + 6;
       var wdt = Math.max(2, (s.value / max) * barMax);
       var conv = i > 0 && stages[i - 1].value > 0 ? (s.value / stages[i - 1].value) * 100 : null;
       out += '<text x="0" y="' + (y + 14) + '">' + esc(s.label) + '</text>';
-      out += '<rect class="funnel-seg" x="' + labelW + '" y="' + y + '" width="' + wdt.toFixed(1) + '" height="20" rx="2" ' +
+      out += '<rect class="funnel-seg" x="' + labelW + '" y="' + y + '" width="' + wdt.toFixed(1) + '" height="20" rx="0" ' +
         'opacity="' + (0.35 + 0.65 * (1 - i / Math.max(1, stages.length))).toFixed(2) + '"><title>' +
         esc(s.label + ' · ' + U.num(s.value)) + '</title></rect>';
       out += '<text x="' + (labelW + wdt + 6).toFixed(1) + '" y="' + (y + 14) + '">' + esc(opt.fmt ? opt.fmt(s.value) : U.num(s.value)) +
@@ -154,9 +157,9 @@
     var out =
       '<circle cx="' + cx + '" cy="' + cy + '" r="' + r + '" fill="none" stroke="var(--color-paper-3)" stroke-width="9"/>' +
       '<circle cx="' + cx + '" cy="' + cy + '" r="' + r + '" fill="none" stroke="' + stroke + '" stroke-width="9" ' +
-      'stroke-linecap="round" stroke-dasharray="' + (circ * Math.min(p, 1)).toFixed(1) + ' ' + circ.toFixed(1) + '" ' +
+      'stroke-linecap="butt" stroke-dasharray="' + (circ * Math.min(p, 1)).toFixed(1) + ' ' + circ.toFixed(1) + '" ' +
       'transform="rotate(-90 ' + cx + ' ' + cy + ')"/>' +
-      '<text x="' + cx + '" y="' + (cy + 2) + '" text-anchor="middle" style="font-size:19px;fill:var(--color-ink);font-weight:600">' +
+      '<text x="' + cx + '" y="' + (cy + 2) + '" text-anchor="middle" style="font-size:21px;fill:var(--color-ink);font-weight:600">' +
       esc(Math.round(p * 100) + '%') + '</text>' +
       '<text x="' + cx + '" y="' + (cy + 17) + '" text-anchor="middle">' + esc(opt.caption || '달성률') + '</text>';
     return '<svg class="chart" viewBox="0 0 ' + S + ' ' + S + '" role="img" aria-label="' + esc(opt.label || '달성률') +
@@ -177,13 +180,13 @@
     }).join(' ');
     var up = values[values.length - 1] >= values[0];
     return '<svg class="chart" viewBox="0 0 ' + W + ' ' + H + '" style="width:' + W + 'px;height:' + H + 'px" aria-hidden="true">' +
-      '<path d="' + d + '" fill="none" stroke="' + (up ? 'var(--color-pos)' : 'var(--color-neg)') + '" stroke-width="1.5" stroke-linejoin="round"/></svg>';
+      '<path d="' + d + '" fill="none" stroke="' + (up ? 'var(--color-pos)' : 'var(--color-neg)') + '" stroke-width="1.75" stroke-linejoin="miter"/></svg>';
   };
 
   /** 워터폴 — 파이프라인 변동(시작 → 유입/증액/감액/성사/실주 → 종료) */
   ch.waterfall = function (steps, opt) {
     opt = opt || {};
-    var W = 640, H = opt.h || 220, padL = 52, padB = 34, padT = 12, padR = 8;
+    var W = 640, H = opt.h || 220, padL = 62, padB = 42, padT = 14, padR = 10;
     var run = 0, mins = [0], maxs = [0];
     steps.forEach(function (s) {
       if (s.total) { mins.push(Math.min(0, s.value)); maxs.push(Math.max(0, s.value)); run = s.value; }
@@ -205,7 +208,7 @@
       var y1 = yOf(Math.max(start, end)), y2 = yOf(Math.min(start, end));
       var cls = s.total ? 'bar' : s.value >= 0 ? 'bar--pos' : 'bar--neg';
       out += '<rect class="' + cls + '" x="' + (padL + i * bw + bw * 0.2).toFixed(1) + '" y="' + y1.toFixed(1) +
-        '" width="' + (bw * 0.6).toFixed(1) + '" height="' + Math.max(1.5, y2 - y1).toFixed(1) + '" rx="2"><title>' +
+        '" width="' + (bw * 0.6).toFixed(1) + '" height="' + Math.max(1.5, y2 - y1).toFixed(1) + '" rx="0"><title>' +
         esc(s.label + ' ' + (opt.fmt ? opt.fmt(s.value) : U.num(s.value))) + '</title></rect>';
       out += '<text x="' + (padL + i * bw + bw / 2).toFixed(1) + '" y="' + (H - 16) + '" text-anchor="middle">' + esc(s.label) + '</text>';
       out += '<text x="' + (padL + i * bw + bw / 2).toFixed(1) + '" y="' + (H - 4) + '" text-anchor="middle">' +

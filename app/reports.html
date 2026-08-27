@@ -1114,7 +1114,7 @@
     host.innerHTML = saved.map(function (r) {
       return '<div class="saved__row">' +
         '<span class="grow" style="min-width:0"><span style="display:block">' + esc(r.name) + '</span>' +
-        '<span class="t-mono" style="font-size:10px">' + esc(r.summary) + '</span></span>' +
+        '<span class="t-mono" style="font-size:var(--text-2xs)">' + esc(r.summary) + '</span></span>' +
         '<button class="btn btn--sm" type="button" data-open="' + esc(r.id) + '">열기</button>' +
         '<button class="btn btn--sm btn--ghost" type="button" data-drop="' + esc(r.id) + '">삭제</button>' +
         '</div>';
