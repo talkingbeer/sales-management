@@ -1,0 +1,1406 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>디자인 시스템 · CLOSER</title>
+<meta name="description" content="CLOSER의 살아 있는 스타일 가이드. 색·타이포·간격·모션 토큰과 실제로 동작하는 컴포넌트, 8상태 갤러리, 차트 카탈로그, 그리고 하지 말 것을 한 화면에 모았습니다." />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=IBM+Plex+Sans+KR:wght@400;500;600&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="../tokens.css" />
+<link rel="stylesheet" href="../assets/css/base.css" />
+<link rel="stylesheet" href="../assets/css/components.css" />
+<link rel="stylesheet" href="../assets/css/app.css" />
+<style>
+  /* 이 화면에만 필요한 조각. 색·간격·반경·이징은 모두 토큰만 사용합니다. */
+
+  /* ── 토큰 스와치 ─────────────────────────────────────────────── */
+  .sw-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(232px, 100%), 1fr)); gap: var(--space-sm); }
+  .sw {
+    display: flex; align-items: flex-start; gap: var(--space-sm);
+    width: 100%; text-align: left;
+    padding: var(--space-2xs);
+    border: var(--rule-hair) solid var(--color-rule);
+    border-radius: var(--radius-sm);
+    background: var(--color-surface);
+    transition: border-color var(--dur-short) var(--ease-out);
+  }
+  .sw:hover { border-color: var(--color-accent); }
+  .sw__chip {
+    width: 42px; height: 42px; flex: 0 0 auto;
+    border-radius: var(--radius-xs);
+    border: var(--rule-hair) solid var(--color-rule-2);
+  }
+  .sw__body { min-width: 0; }
+  .sw__name { font-family: var(--font-mono); font-size: var(--text-2xs); color: var(--color-ink); letter-spacing: 0.02em; overflow-wrap: anywhere; }
+  .sw__use { font-size: var(--text-xs); color: var(--color-ink-3); line-height: 1.45; margin-top: 1px; }
+  .sw__val { font-family: var(--font-mono); font-size: 10px; color: var(--color-ink-4); margin-top: 2px; overflow-wrap: anywhere; }
+
+  /* ── 타이포 스케일 ───────────────────────────────────────────── */
+  .spec { display: grid; grid-template-columns: 168px minmax(0, 1fr); gap: var(--space-sm) var(--space-md); align-items: baseline;
+          padding: var(--space-sm) 0; border-bottom: var(--rule-hair) solid var(--color-rule); }
+  .spec:last-child { border-bottom: none; }
+  .spec__sample { color: var(--color-ink); font-family: var(--font-display); font-weight: 600;
+                  letter-spacing: var(--track-tight); line-height: 1.18; overflow-wrap: anywhere; }
+  .face { padding: var(--space-md) 0; border-bottom: var(--rule-hair) solid var(--color-rule); }
+  .face:last-child { border-bottom: none; }
+  .face__ko { font-size: var(--text-xl); color: var(--color-ink); line-height: 1.35; }
+  .face__en { font-size: var(--text-md); color: var(--color-ink-2); margin-top: var(--space-2xs); }
+  .face__num { font-size: var(--text-lg); color: var(--color-ink-2); font-variant-numeric: tabular-nums; margin-top: var(--space-2xs); }
+  @media (max-width: 640px) { .spec { grid-template-columns: minmax(0, 1fr); gap: var(--space-2xs); } }
+
+  /* ── 간격 · 반경 · 모션 ──────────────────────────────────────── */
+  .sp-row { display: grid; grid-template-columns: 128px minmax(0, 1fr) 96px; gap: var(--space-sm); align-items: center; padding: var(--space-2xs) 0; }
+  .sp-bar { height: 12px; border-radius: 2px; background: var(--color-accent-soft-2); }
+  .rad-row { display: flex; flex-wrap: wrap; gap: var(--space-md); }
+  .rad { width: 84px; }
+  .rad__box { height: 46px; background: var(--color-accent-soft); border: var(--rule-hair) solid var(--color-accent-soft-2); }
+  .mo-row { display: grid; grid-template-columns: 148px minmax(0, 1fr) auto; gap: var(--space-sm); align-items: center;
+            padding: var(--space-xs) 0; border-bottom: var(--rule-hair) solid var(--color-rule); }
+  .mo-row:last-child { border-bottom: none; }
+  .mo-track { position: relative; height: 22px; border-radius: var(--radius-xs); background: var(--color-paper-2); }
+  .mo-dot { position: absolute; top: 4px; left: 4px; width: 14px; height: 14px; border-radius: var(--radius-xs);
+            background: var(--color-accent); transform: translateX(0);
+            transition: transform var(--dur-long) var(--ease-out); }
+  .mo-dot[data-ease="in"] { transition-timing-function: var(--ease-in); }
+  .mo-dot[data-ease="in-out"] { transition-timing-function: var(--ease-in-out); }
+  @media (max-width: 640px) { .sp-row, .mo-row { grid-template-columns: 96px minmax(0, 1fr); } .sp-row > :last-child { grid-column: 1 / -1; } }
+
+  /* ── 카탈로그 배치 ───────────────────────────────────────────── */
+  .cat { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(430px, 100%), 1fr)); gap: var(--space-lg); align-items: start; }
+  .cat__wide { grid-column: 1 / -1; }
+  .demo-row { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-xs); }
+  .demo-note { font-size: var(--text-xs); color: var(--color-ink-3); margin-top: var(--space-sm); line-height: 1.55; }
+  .demo-use { font-family: var(--font-mono); font-size: 10px; color: var(--color-ink-4); letter-spacing: 0.02em; margin-top: var(--space-2xs); overflow-wrap: anywhere; }
+  .lift { padding: var(--space-sm); border: var(--rule-hair) solid var(--color-rule); border-radius: var(--radius-sm); background: var(--color-surface); }
+  .lift--1 { box-shadow: var(--lift-1); } .lift--2 { box-shadow: var(--lift-2); } .lift--3 { box-shadow: var(--lift-3); }
+
+  /* ── 8상태 갤러리 ────────────────────────────────────────────── */
+  .path__step.is-sel { box-shadow: inset 0 0 0 var(--rule-thick) var(--color-accent); }
+  .st td, .st th { vertical-align: middle; }
+  .st .input { width: 132px; }
+  .st__how { font-family: var(--font-mono); font-size: 10px; color: var(--color-ink-4); letter-spacing: 0.02em; white-space: nowrap; }
+
+  .pagerbar { display: flex; align-items: center; justify-content: space-between; gap: var(--space-sm); flex-wrap: wrap;
+              padding: var(--space-xs) var(--space-md); border-top: var(--rule-hair) solid var(--color-rule); }
+  .list-card { border: var(--rule-hair) solid var(--color-rule); border-top: none; border-radius: 0 0 var(--radius-md) var(--radius-md); background: var(--color-surface); }
+  .filterbar .input, .filterbar .select { min-height: 28px; height: 28px; font-size: var(--text-xs); }
+  .filterbar__q { width: min(220px, 46vw); }
+  @media (max-width: 640px) { .filterbar { padding-inline: var(--space-sm); } .pagerbar { padding-inline: var(--space-sm); } }
+</style>
+</head>
+<body class="app">
+<a class="skip-link" href="#main">본문으로 건너뛰기</a>
+
+<div class="app-main">
+  <main class="app-page" id="main">
+
+    <div class="page-head">
+      <div>
+        <h1 class="page-head__title">디자인 시스템</h1>
+        <p class="page-head__sub" id="subline"></p>
+      </div>
+      <div class="page-head__acts">
+        <button class="btn btn--sm" type="button" id="demoModal">모달</button>
+        <button class="btn btn--sm" type="button" id="demoToast">토스트</button>
+        <button class="btn btn--sm" type="button" id="demoDrawer">드로어</button>
+        <button class="btn btn--sm" type="button" id="demoKeys">단축키 도움말</button>
+      </div>
+    </div>
+
+    <div class="tabs" id="tabs" role="tablist" aria-label="디자인 시스템 구획"></div>
+
+    <section class="mt-lg stack gap-lg" data-pane="tokens" role="tabpanel" aria-label="색 토큰" tabindex="0">
+      <div class="panel reveal">
+        <div class="panel__head">
+          <h2 class="panel__title">색 토큰</h2>
+          <span class="t-mono" id="tokenColorCount"></span>
+        </div>
+        <div class="panel__body">
+          <p class="t-small">색은 <span class="t-num">tokens.css</span> 한 곳에서만 정의됩니다. 화면 코드에 hex·rgb·oklch를 직접 쓰면 defect입니다. 스와치를 누르면 토큰명이 클립보드로 복사됩니다.</p>
+        </div>
+      </div>
+      <div class="stack gap-lg" id="tokenGroups" data-verify></div>
+
+      <section aria-label="전체 토큰 색인">
+        <div class="filterbar">
+          <span class="t-mono">토큰 색인</span>
+          <label class="field" style="flex:0 0 auto">
+            <span class="sr-only">토큰 검색</span>
+            <input class="input filterbar__q" type="search" id="tokQ" placeholder="토큰명 · 용도 검색" autocomplete="off" />
+          </label>
+          <label class="field" style="flex:0 0 auto">
+            <span class="sr-only">토큰 그룹</span>
+            <select class="select" id="tokGroup"></select>
+          </label>
+          <button class="btn btn--sm btn--ghost" type="button" id="tokReset">필터 초기화</button>
+          <span class="grow"></span>
+          <span class="filterbar__count" id="tokCount"></span>
+        </div>
+        <div class="list-card">
+          <div id="tokTableHost" data-verify></div>
+          <div class="pagerbar" id="tokPager"></div>
+        </div>
+      </section>
+    </section>
+
+    <section class="mt-lg stack gap-lg" data-pane="type" role="tabpanel" aria-label="타이포그래피" tabindex="0" hidden>
+      <div class="panel reveal">
+        <div class="panel__head">
+          <h2 class="panel__title">서체 3종</h2>
+          <span class="t-mono">디스플레이 · 본문 · 모노</span>
+        </div>
+        <div class="panel__body" id="faces"></div>
+      </div>
+      <div class="panel reveal">
+        <div class="panel__head">
+          <h2 class="panel__title">타이포 스케일</h2>
+          <span class="t-mono" id="typeCount"></span>
+        </div>
+        <div class="panel__body" id="typeScale"></div>
+      </div>
+      <div class="panel reveal">
+        <div class="panel__head">
+          <h2 class="panel__title">행간과 자간</h2>
+          <span class="t-mono">leading · tracking</span>
+        </div>
+        <div class="panel__body" id="typeMetrics"></div>
+      </div>
+    </section>
+
+    <section class="mt-lg stack gap-lg" data-pane="space" role="tabpanel" aria-label="간격 반경 모션" tabindex="0" hidden>
+      <div class="panel reveal">
+        <div class="panel__head">
+          <h2 class="panel__title">스페이싱 — 4pt 스케일</h2>
+          <span class="t-mono" id="spaceCount"></span>
+        </div>
+        <div class="panel__body" id="spaceScale"></div>
+      </div>
+      <div class="panel reveal">
+        <div class="panel__head">
+          <h2 class="panel__title">모서리 반경과 두께</h2>
+          <span class="t-mono">radius · rule</span>
+        </div>
+        <div class="panel__body" id="radiusRow"></div>
+      </div>
+      <div class="panel reveal">
+        <div class="panel__head">
+          <h2 class="panel__title">모션</h2>
+          <span class="t-mono" id="motionNote"></span>
+        </div>
+        <div class="panel__body" id="motionRows"></div>
+      </div>
+      <div class="panel reveal">
+        <div class="panel__head">
+          <h2 class="panel__title">그림자와 층위</h2>
+          <span class="t-mono">lift · z</span>
+        </div>
+        <div class="panel__body" id="liftRow"></div>
+      </div>
+    </section>
+
+    <section class="mt-lg" data-pane="components" role="tabpanel" aria-label="컴포넌트 카탈로그" tabindex="0" hidden>
+      <div class="cat" id="catalog" data-verify></div>
+    </section>
+
+    <section class="mt-lg stack gap-lg" data-pane="states" role="tabpanel" aria-label="8상태 갤러리" tabindex="0" hidden>
+      <div class="panel reveal">
+        <div class="panel__head">
+          <h2 class="panel__title">8-state 갤러리</h2>
+          <span class="t-mono">default · hover · focus · active · disabled · loading · error · success</span>
+        </div>
+        <div class="panel__body">
+          <p class="t-small">모든 조작 요소는 여덟 가지 상태를 전부 갖춥니다. 아래는 실제 컴포넌트에 <span class="t-num">.is-hover</span> <span class="t-num">.is-focus</span> <span class="t-num">.is-active</span> <span class="t-num">data-state</span> 를 걸어 한 화면에 세운 것입니다.</p>
+        </div>
+        <div id="stateHost" data-verify></div>
+      </div>
+    </section>
+
+    <section class="mt-lg" data-pane="charts" role="tabpanel" aria-label="차트 카탈로그" tabindex="0" hidden>
+      <div class="cat" id="chartHost" data-verify></div>
+    </section>
+
+    <section class="mt-lg stack gap-lg" data-pane="rules" role="tabpanel" aria-label="하지 말 것" tabindex="0" hidden>
+      <div class="panel reveal">
+        <div class="panel__head">
+          <h2 class="panel__title">하지 말 것</h2>
+          <span class="t-mono" id="dontCount"></span>
+        </div>
+        <div class="panel__body">
+          <p class="t-small">금지 사례는 이 화면에 <strong>그리지 않습니다</strong>. 카탈로그에 한 번 그려 두면 그것이 곧 승인이 되기 때문입니다. 대신 무엇을 대신 쓰는지 적어 둡니다.</p>
+        </div>
+        <div id="dontHost" data-verify></div>
+      </div>
+    </section>
+
+    <footer class="hairline mt-2xl" style="padding-block:var(--space-md)">
+      <p class="t-mono t-faint">CLOSER · 데모 데이터 · 모든 회사·인물·연락처는 가상입니다</p>
+    </footer>
+  </main>
+</div>
+
+<script src="../assets/js/seed.js"></script>
+<script src="../assets/js/util.js"></script>
+<script src="../assets/js/store.js"></script>
+<script src="../assets/js/domain.js"></script>
+<script src="../assets/js/metrics.js"></script>
+<script src="../assets/js/insights.js"></script>
+<script src="../assets/js/ui.js"></script>
+<script src="../assets/js/charts.js"></script>
+<script src="../assets/js/shell.js"></script>
+<script>
+(function () {
+  'use strict';
+  var C = window.CLOSER, U = C.util, db = C.db, D = C.domain, M = C.metrics, ui = C.ui, ch = C.charts;
+  C.shell.mount('design');
+
+  var $ = U.qs, esc = U.esc, el = U.el;
+  var me = db.me();
+  var s = M.scope();
+  var PAGE_SIZE = 20;
+
+  /* 토큰의 실제 값은 파일에 옮겨 적지 않고 브라우저가 계산한 것을 읽습니다.
+     여기에 값을 복사해 두면 tokens.css와 어긋나는 순간 이 화면이 거짓말을 합니다. */
+  var rootStyle = null;
+  try { rootStyle = window.getComputedStyle(document.documentElement); } catch (e) { rootStyle = null; }
+  function tokenValue(name) {
+    if (!rootStyle) return '';
+    try { return (rootStyle.getPropertyValue(name) || '').trim(); } catch (e) { return ''; }
+  }
+
+  /* ══ 토큰 정의 ═══════════════════════════════════════════════════════ */
+  var COLOR_GROUPS = [
+    { key: '페이퍼', label: '페이퍼 · 표면', why: '바탕과 카드 면. 순백도 순흑도 쓰지 않습니다.', tokens: [
+      ['--color-paper', '앱 바탕'],
+      ['--color-paper-2', '레일 · 표 머리 · 필터바'],
+      ['--color-paper-3', '호버 면 · 미터 트랙'],
+      ['--color-surface', '패널 · 카드 · 입력 면'],
+      ['--color-surface-sunk', '한 단 내려앉은 면'],
+      ['--color-paper-blur', '상단바 반투명 면'],
+      ['--color-veil', '모달 뒤 가림막'],
+      ['--color-paper-print', '인쇄 전용 흰 면']
+    ] },
+    { key: '잉크', label: '잉크', why: '글자 네 단계. 본문은 ink-2, 숫자와 제목은 ink.', tokens: [
+      ['--color-ink', '제목 · 숫자 · 강조 문장'],
+      ['--color-ink-2', '본문'],
+      ['--color-ink-3', '보조 설명 · 표 헤더'],
+      ['--color-ink-4', '가장 옅은 라벨 · 비활성 텍스트']
+    ] },
+    { key: '룰', label: '룰(헤어라인)', why: '구조는 그림자가 아니라 선이 만듭니다.', tokens: [
+      ['--color-rule', '기본 경계선'],
+      ['--color-rule-2', '입력 · 버튼 테두리'],
+      ['--color-rule-3', '강조 경계 · 고스트 선']
+    ] },
+    { key: '액센트', label: '액센트(코발트)', why: '화면 전체에서 신호는 하나뿐입니다. 여러 색이 경쟁하면 무엇도 신호가 아닙니다.', tokens: [
+      ['--color-accent', '주 버튼 · 활성 표시 · 데이터 1시리즈'],
+      ['--color-accent-press', '눌린 상태 · 액센트 위 글자'],
+      ['--color-accent-soft', '선택된 행 · 칩 배경'],
+      ['--color-accent-soft-2', '칩 테두리 · 밝은 막대'],
+      ['--color-accent-ink', '액센트 면 위의 글자'],
+      ['--color-focus', '포커스 링']
+    ] },
+    { key: '그래파이트', label: '그래파이트 밴드', why: '한 화면에 어두운 구획은 한 번. 브리핑 · 코드카드 · 토스트 · 툴팁이 씁니다.', tokens: [
+      ['--color-graphite', '밴드 바탕'],
+      ['--color-graphite-2', '밴드 안 패널'],
+      ['--color-graphite-3', '밴드 안 한 단 밝은 면'],
+      ['--color-graphite-rule', '밴드 안 경계선'],
+      ['--color-graphite-ink', '밴드 안 제목'],
+      ['--color-graphite-ink-2', '밴드 안 본문'],
+      ['--color-graphite-ink-3', '밴드 안 라벨']
+    ] },
+    { key: '상태', label: '상태 표시', why: '승인 · 지연 · 반려를 한눈에 가르는 자리에만. 면을 통째로 칠하는 데는 쓰지 않습니다.', tokens: [
+      ['--color-pos', '달성 · 승인 · 정상'],
+      ['--color-pos-soft', '긍정 칩 배경'],
+      ['--color-warn', '임박 · 정체 · WIP 초과'],
+      ['--color-warn-soft', '주의 칩 배경'],
+      ['--color-neg', '초과 · 반려 · 실주'],
+      ['--color-neg-soft', '부정 칩 배경'],
+      ['--color-idle', '대기 · 무상태'],
+      ['--color-idle-soft', '대기 칩 배경']
+    ] },
+    { key: '데이터', label: '데이터 시리즈', why: '차트 전용 순서 있는 램프. 표나 면에 쓰지 않습니다.', tokens: [
+      ['--color-series-1', '첫 번째 계열(코발트)'],
+      ['--color-series-2', '두 번째 계열'],
+      ['--color-series-3', '세 번째 계열'],
+      ['--color-series-4', '네 번째 계열'],
+      ['--color-series-5', '다섯 번째 계열'],
+      ['--color-series-6', '여섯 번째 계열'],
+      ['--color-series-7', '일곱 번째 계열'],
+      ['--color-series-8', '나머지 · 청구 불가 등 중립 계열']
+    ] }
+  ];
+
+  var TYPE_SCALE = [
+    ['--text-2xs', '칩 · 모노 라벨 · 표 머리'],
+    ['--text-xs', '보조 설명 · 미세 안내'],
+    ['--text-sm', '표 셀 · 버튼 · 입력'],
+    ['--text-base', '본문 기본'],
+    ['--text-md', '리드 문장 · 빈 상태 제목'],
+    ['--text-lg', '모달 제목'],
+    ['--text-xl', '레코드 이름'],
+    ['--text-2xl', '페이지 제목 · 스탯 숫자'],
+    ['--text-3xl', '큰 수치'],
+    ['--text-4xl', '드물게 쓰는 최상위 수치'],
+    ['--text-display-s', '마케팅 면의 중간 디스플레이'],
+    ['--text-display', '마케팅 면의 최상위 디스플레이']
+  ];
+  var TYPE_METRICS = [
+    ['--leading-tight', '디스플레이 행간'],
+    ['--leading-snug', '제목 행간'],
+    ['--leading-body', '본문 행간'],
+    ['--leading-loose', '긴 설명 행간'],
+    ['--track-display', '디스플레이 자간(음수)'],
+    ['--track-tight', '제목 자간'],
+    ['--track-normal', '본문 자간'],
+    ['--track-mono', '모노 라벨 자간(양수)']
+  ];
+  var FACES = [
+    { token: '--font-display', name: 'Space Grotesk', use: '제목 · 스탯 숫자 · 브랜드. 라틴 전용이라 한글은 IBM Plex Sans KR로 자동 대체됩니다.',
+      ko: '광고 세일즈 오퍼레이션', en: 'Pipeline Coverage & Forecast' },
+    { token: '--font-body', name: 'IBM Plex Sans KR', use: '본문 · 표 · 버튼. 한글과 라틴을 같은 리듬으로 씁니다.',
+      ko: '이번 분기 파이프라인은 목표를 덮고 있습니다', en: 'Every figure is computed, never invented.' },
+    { token: '--font-mono', name: 'JetBrains Mono', use: '라벨 · 레코드 ID · 티켓 번호 · 모든 수치. 자릿수가 흔들리지 않습니다.',
+      ko: '제작 의뢰 · 납기 · 공수', en: 'PRD-101 · SLA 96H · Q3' }
+  ];
+  var SPACE_SCALE = [
+    ['--space-3xs', '아이콘과 글자 사이'],
+    ['--space-2xs', '칩 안쪽 · 라벨과 값 사이'],
+    ['--space-xs', '버튼 사이 · 표 셀 세로'],
+    ['--space-sm', '패널 머리 안쪽'],
+    ['--space-md', '패널 본문 안쪽 · 카드 사이'],
+    ['--space-lg', '섹션 사이 · 페이지 여백'],
+    ['--space-xl', '큰 구획 사이'],
+    ['--space-2xl', '빈 상태 위아래'],
+    ['--space-3xl', '마케팅 면 구획'],
+    ['--space-4xl', '마케팅 면 최대 구획']
+  ];
+  var RADII = [
+    ['--radius-xs', '칩 · 체크박스 · 작은 표식'],
+    ['--radius-sm', '버튼 · 입력 · 칸반 카드'],
+    ['--radius-md', '패널 · 모달 · 스탯 타일'],
+    ['--radius-lg', '가장 큰 면'],
+    ['--radius-round', '아바타 · 도트 · 미터']
+  ];
+  var RULES_W = [['--rule-hair', '모든 경계선의 기본 두께'], ['--rule-thick', '활성 탭 밑줄 · 레일 마커']];
+  var EASES = [
+    { token: '--ease-out', ease: 'out', use: '들어오는 것 — 패널 등장, 토스트, 모달' },
+    { token: '--ease-in', ease: 'in', use: '나가는 것 — 토스트 소멸' },
+    { token: '--ease-in-out', ease: 'in-out', use: '자리를 옮기는 것 — 레일 열림, 스켈레톤' }
+  ];
+  var DURS = [['--dur-short', '색 · 테두리 변화(즉각적으로 느껴져야 하는 것)'], ['--dur-mid', '모달 · 드로어 · 미터 채움'], ['--dur-long', '스크롤 진입 애니메이션']];
+  var LIFTS = [['--lift-1', '코드카드처럼 살짝 뜬 면'], ['--lift-2', '메뉴 · 팝오버'], ['--lift-3', '모달 · 드로어 · 토스트']];
+  var ZS = [
+    ['--z-base', '기본 흐름'], ['--z-sticky', '고정된 표 머리'], ['--z-rail', '좌측 레일'],
+    ['--z-drawer', '드로어'], ['--z-nav', '상단바 · 메뉴'], ['--z-modal', '모달 · 가림막'], ['--z-toast', '토스트 · 건너뛰기 링크']
+  ];
+  var SHELL = [
+    ['--rail-w', '레일 너비'], ['--rail-w-collapsed', '접힌 레일 너비'],
+    ['--topbar-h', '상단바 높이'], ['--subbar-h', '서브바 높이'], ['--page-max', '본문 최대 폭']
+  ];
+
+  /* 색인 표는 위 정의를 그대로 펼친 것입니다. 두 곳을 따로 관리하지 않습니다. */
+  var INDEX = [];
+  COLOR_GROUPS.forEach(function (g) {
+    g.tokens.forEach(function (t) { INDEX.push({ name: t[0], group: '색 · ' + g.key, use: t[1] }); });
+  });
+  FACES.forEach(function (f) { INDEX.push({ name: f.token, group: '타이포', use: f.name + ' — ' + f.use }); });
+  TYPE_SCALE.forEach(function (t) { INDEX.push({ name: t[0], group: '타이포', use: t[1] }); });
+  TYPE_METRICS.forEach(function (t) { INDEX.push({ name: t[0], group: '타이포', use: t[1] }); });
+  SPACE_SCALE.forEach(function (t) { INDEX.push({ name: t[0], group: '간격', use: t[1] }); });
+  RADII.forEach(function (t) { INDEX.push({ name: t[0], group: '반경 · 선', use: t[1] }); });
+  RULES_W.forEach(function (t) { INDEX.push({ name: t[0], group: '반경 · 선', use: t[1] }); });
+  EASES.forEach(function (e) { INDEX.push({ name: e.token, group: '모션', use: e.use }); });
+  DURS.forEach(function (t) { INDEX.push({ name: t[0], group: '모션', use: t[1] }); });
+  LIFTS.forEach(function (t) { INDEX.push({ name: t[0], group: '그림자', use: t[1] }); });
+  ZS.forEach(function (t) { INDEX.push({ name: t[0], group: '층위', use: t[1] }); });
+  SHELL.forEach(function (t) { INDEX.push({ name: t[0], group: '셸 치수', use: t[1] }); });
+
+  var COLOR_COUNT = COLOR_GROUPS.reduce(function (a, g) { return a + g.tokens.length; }, 0);
+
+  /* ══ 클립보드 — 실패하면 조용히 넘어갑니다 ═════════════════════════ */
+  function copyFallback(text, done) {
+    try {
+      var ta = el('textarea', { 'aria-hidden': 'true', style: 'position:fixed;left:-9999px;top:0;opacity:0' });
+      ta.value = text;
+      document.body.appendChild(ta);
+      ta.select();
+      var ok = document.execCommand && document.execCommand('copy');
+      document.body.removeChild(ta);
+      if (ok) done();
+    } catch (e) { /* 클립보드를 쓸 수 없는 환경 — 알리지 않고 넘어갑니다. */ }
+  }
+  function copyToken(name) {
+    var done = function () { ui.toast(name + ' 을(를) 복사했습니다.'); };
+    try {
+      if (window.navigator && navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(name).then(done, function () { copyFallback(name, done); });
+        return;
+      }
+    } catch (e) { /* 무시하고 폴백으로 */ }
+    copyFallback(name, done);
+  }
+
+  /* ══ 머리말 ════════════════════════════════════════════════════════ */
+  $('#subline').innerHTML =
+    '토큰 <strong>' + INDEX.length + '개</strong>(색 ' + COLOR_COUNT + '개) · ' +
+    '컴포넌트 <strong id="catCount">—</strong> · 차트 <strong id="chartCount">—</strong> · ' +
+    '상태 <strong>8가지</strong>. 이 화면의 모든 예시는 지금 이 브라우저에서 실제로 렌더된 것이며, ' +
+    '숫자는 ' + esc(me.name) + '님(' + esc(me.role) + ')이 볼 수 있는 데이터로 계산했습니다.';
+
+  /* ══ 탭 ════════════════════════════════════════════════════════════ */
+  var TABS = [
+    { key: 'tokens', label: '토큰' },
+    { key: 'type', label: '타이포' },
+    { key: 'space', label: '간격 · 모션' },
+    { key: 'components', label: '컴포넌트' },
+    { key: 'states', label: '8-state' },
+    { key: 'charts', label: '차트' },
+    { key: 'rules', label: '하지 말 것' }
+  ];
+  var initTab = U.param('tab', '');
+  if (!TABS.some(function (t) { return t.key === initTab; })) initTab = TABS[0].key;
+
+  $('#tabs').innerHTML = TABS.map(function (t) {
+    return '<button class="tab" type="button" role="tab" data-tab="' + t.key + '" aria-selected="' +
+      (t.key === initTab) + '">' + esc(t.label) + '</button>';
+  }).join('');
+  U.qsa('[data-pane]').forEach(function (p) { p.hidden = p.dataset.pane !== initTab; });
+  ui.tabs($('#tabs'), function (key) {
+    /* 접혀 있던 구획은 등장 애니메이션의 관찰 대상이 아니었으므로 여기서 켭니다. */
+    var pane = U.qs('[data-pane="' + key + '"]');
+    if (pane) U.qsa('.reveal', pane).forEach(function (n) { n.classList.add('is-in'); });
+  });
+
+  /* ══ 1. 색 토큰 ════════════════════════════════════════════════════ */
+  $('#tokenColorCount').textContent = COLOR_COUNT + '개 · 7개 그룹';
+  $('#tokenGroups').innerHTML = COLOR_GROUPS.map(function (g) {
+    return '<div class="panel reveal">' +
+      '<div class="panel__head"><h2 class="panel__title">' + esc(g.label) + '</h2>' +
+      '<span class="t-mono">' + g.tokens.length + '개</span></div>' +
+      '<div class="panel__body">' +
+      '<p class="t-small mb-sm">' + esc(g.why) + '</p>' +
+      '<div class="sw-grid">' + g.tokens.map(function (t) {
+        var v = tokenValue(t[0]);
+        return '<button class="sw" type="button" data-token="' + esc(t[0]) + '">' +
+          '<span class="sw__chip" style="background:var(' + esc(t[0]) + ')" aria-hidden="true"></span>' +
+          '<span class="sw__body">' +
+            '<span class="sw__name">' + esc(t[0]) + '</span>' +
+            '<span class="sw__use">' + esc(t[1]) + '</span>' +
+            (v ? '<span class="sw__val">' + esc(v) + '</span>' : '') +
+          '</span></button>';
+      }).join('') + '</div></div></div>';
+  }).join('');
+
+  U.live($('#tokenGroups'), 'click', '[data-token]', function (e, t) { copyToken(t.dataset.token); });
+
+  /* ── 토큰 색인(검색 · 필터 · 페이지) ─────────────────────────────── */
+  var tokState = { q: U.param('q', '') || '', group: '', page: 1 };
+  var GROUPS = U.uniq(INDEX.map(function (r) { return r.group; }));
+  $('#tokGroup').innerHTML = '<option value="">그룹 전체</option>' + GROUPS.map(function (g) {
+    return '<option value="' + esc(g) + '">' + esc(g) + '</option>';
+  }).join('');
+  $('#tokQ').value = tokState.q;
+
+  function tokMatches(r) {
+    if (tokState.group && r.group !== tokState.group) return false;
+    var t = tokState.q.trim().toLowerCase();
+    if (t && (r.name + ' ' + r.group + ' ' + r.use).toLowerCase().indexOf(t) === -1) return false;
+    return true;
+  }
+
+  function renderTokenIndex() {
+    var rows = INDEX.filter(tokMatches);
+    var pages = Math.max(1, Math.ceil(rows.length / PAGE_SIZE));
+    if (tokState.page > pages) tokState.page = pages;
+    if (tokState.page < 1) tokState.page = 1;
+    var from = (tokState.page - 1) * PAGE_SIZE;
+    var slice = rows.slice(from, from + PAGE_SIZE);
+
+    var host = $('#tokTableHost');
+    host.innerHTML = '';
+    host.appendChild(ui.table([
+      { key: 'name', label: '토큰', sortable: false, cell: function (r) {
+          return '<button class="link--quiet t-num" type="button" data-token="' + esc(r.name) + '" ' +
+            'style="font-size:var(--text-xs)">' + esc(r.name) + '</button>';
+        } },
+      { key: 'group', label: '그룹', sortable: false, cell: function (r) { return ui.chip(r.group, 'idle'); } },
+      { key: 'value', label: '값', sortable: false, cell: function (r) {
+          var v = tokenValue(r.name);
+          return v ? '<span class="t-num" style="font-size:var(--text-xs)">' + esc(v) + '</span>'
+                   : '<span class="t-faint">브라우저에서 계산됩니다</span>';
+        } },
+      { key: 'use', label: '용도', sortable: false, cell: function (r) { return '<span class="t-small">' + esc(r.use) + '</span>'; } }
+    ], slice, {
+      empty: { title: '조건에 맞는 토큰이 없습니다', body: '검색어를 줄이거나 그룹 필터를 전체로 바꿔 보세요.' }
+    }));
+
+    var to = Math.min(rows.length, from + PAGE_SIZE);
+    var nums = '';
+    var lo = Math.max(1, tokState.page - 2), hi = Math.min(pages, lo + 4);
+    lo = Math.max(1, hi - 4);
+    for (var i = lo; i <= hi; i++) {
+      nums += '<button class="pager__btn" type="button" data-page="' + i + '"' +
+        (i === tokState.page ? ' aria-current="page"' : '') + '>' + i + '</button>';
+    }
+    $('#tokPager').innerHTML =
+      '<span class="t-mono">' + (rows.length ? (from + 1) + '–' + to : 0) + ' / ' + rows.length + '개 토큰</span>' +
+      '<span class="pager">' +
+        '<button class="btn btn--sm btn--ghost" type="button" data-page="' + (tokState.page - 1) + '"' +
+          (tokState.page <= 1 ? ' disabled' : '') + '>이전</button>' + nums +
+        '<button class="btn btn--sm btn--ghost" type="button" data-page="' + (tokState.page + 1) + '"' +
+          (tokState.page >= pages ? ' disabled' : '') + '>다음</button>' +
+      '</span>';
+    $('#tokCount').textContent = rows.length + '개 / 전체 ' + INDEX.length + '개';
+  }
+  renderTokenIndex();
+
+  U.on($('#tokQ'), 'input', U.debounce(function () { tokState.q = $('#tokQ').value; tokState.page = 1; renderTokenIndex(); }, 180));
+  /* 한글 조합 중에는 키를 가로채지 않습니다. */
+  U.on($('#tokQ'), 'keydown', function (e) {
+    if (e.isComposing || e.keyCode === 229) return;
+    if (e.key === 'Escape' && this.value) {
+      e.preventDefault(); e.stopPropagation();
+      this.value = ''; tokState.q = ''; tokState.page = 1; renderTokenIndex();
+    }
+  });
+  U.on($('#tokGroup'), 'change', function () { tokState.group = this.value; tokState.page = 1; renderTokenIndex(); });
+  U.on($('#tokReset'), 'click', function () {
+    tokState = { q: '', group: '', page: 1 };
+    $('#tokQ').value = ''; $('#tokGroup').value = '';
+    renderTokenIndex();
+  });
+  U.live($('#tokPager'), 'click', '[data-page]', function (e, t) {
+    var p = Number(t.dataset.page);
+    if (!p || p === tokState.page) return;
+    tokState.page = p; renderTokenIndex();
+  });
+  U.live($('#tokTableHost'), 'click', '[data-token]', function (e, t) { copyToken(t.dataset.token); });
+
+  /* ══ 2. 타이포 ═════════════════════════════════════════════════════ */
+  $('#faces').innerHTML = FACES.map(function (f) {
+    var v = tokenValue(f.token);
+    return '<div class="face" style="font-family:var(' + esc(f.token) + ')">' +
+      '<p class="t-mono t-mono--plain" style="font-family:var(--font-mono)">' + esc(f.token) + ' · ' + esc(f.name) + '</p>' +
+      '<p class="face__ko">' + esc(f.ko) + '</p>' +
+      '<p class="face__en">' + esc(f.en) + '</p>' +
+      '<p class="face__num">0 1 2 3 4 5 6 7 8 9 · 1,240,000</p>' +
+      '<p class="demo-note" style="font-family:var(--font-body)">' + esc(f.use) + '</p>' +
+      (v ? '<p class="demo-use">' + esc(v) + '</p>' : '') +
+      '</div>';
+  }).join('');
+
+  /* 실제 픽셀 값은 재 보고 적습니다. 못 재면 적지 않습니다. */
+  function pxOf(token) {
+    try {
+      var probe = el('span', { style: 'position:absolute;visibility:hidden;font-size:var(' + token + ')', text: '가' });
+      document.body.appendChild(probe);
+      var px = window.getComputedStyle(probe).fontSize;
+      document.body.removeChild(probe);
+      return /px$/.test(px || '') ? px : '';
+    } catch (e) { return ''; }
+  }
+
+  $('#typeCount').textContent = TYPE_SCALE.length + '단';
+  $('#typeScale').innerHTML = TYPE_SCALE.map(function (t) {
+    var v = tokenValue(t[0]), px = pxOf(t[0]);
+    return '<div class="spec">' +
+      '<div><p class="sw__name">' + esc(t[0]) + '</p>' +
+      '<p class="sw__val">' + esc(v || '—') + (px ? ' · ' + esc(px) : '') + '</p>' +
+      '<p class="sw__use">' + esc(t[1]) + '</p></div>' +
+      '<p class="spec__sample" style="font-size:var(' + esc(t[0]) + ')">파이프라인 커버리지 3.2배</p>' +
+      '</div>';
+  }).join('');
+
+  $('#typeMetrics').innerHTML = '<div class="kv">' + TYPE_METRICS.map(function (t) {
+    var v = tokenValue(t[0]);
+    return '<div class="kv__row"><span class="kv__k">' + esc(t[0]) + '</span>' +
+      '<span class="kv__v">' + esc(t[1]) + (v ? ' <span class="t-faint t-num">' + esc(v) + '</span>' : '') + '</span></div>';
+  }).join('') + '</div>' +
+  '<p class="demo-note">행간은 네 단계뿐입니다. 표는 <span class="t-num">--leading-snug</span>, 읽는 글은 <span class="t-num">--leading-body</span>. 그 사이의 임의 값을 만들지 않습니다.</p>';
+
+  /* ══ 3. 간격 · 반경 · 모션 ═════════════════════════════════════════ */
+  $('#spaceCount').textContent = SPACE_SCALE.length + '단 · 4pt 배수';
+  $('#spaceScale').innerHTML = SPACE_SCALE.map(function (t) {
+    var v = tokenValue(t[0]);
+    return '<div class="sp-row">' +
+      '<span class="sw__name">' + esc(t[0]) + '</span>' +
+      '<span class="sp-bar" style="width:var(' + esc(t[0]) + ')" aria-hidden="true"></span>' +
+      '<span class="sw__val" style="text-align:right">' + esc(v || '—') + '</span>' +
+      '<span class="sw__use" style="grid-column:1 / -1">' + esc(t[1]) + '</span>' +
+      '</div>';
+  }).join('') +
+  '<p class="demo-note">막대의 너비가 곧 토큰의 값입니다. 여백은 이 열 개 중에서만 고릅니다 — 사이값을 새로 만들면 리듬이 무너집니다.</p>';
+
+  $('#radiusRow').innerHTML = '<div class="rad-row">' + RADII.map(function (t) {
+    var v = tokenValue(t[0]);
+    return '<div class="rad">' +
+      '<div class="rad__box" style="border-radius:var(' + esc(t[0]) + ')" aria-hidden="true"></div>' +
+      '<p class="sw__name mt-xs">' + esc(t[0].replace('--radius-', '')) + '</p>' +
+      '<p class="sw__val">' + esc(v || '—') + '</p>' +
+      '<p class="sw__use">' + esc(t[1]) + '</p></div>';
+  }).join('') + '</div>' +
+  '<div class="kv mt-md">' + RULES_W.map(function (t) {
+    var v = tokenValue(t[0]);
+    return '<div class="kv__row"><span class="kv__k">' + esc(t[0]) + '</span>' +
+      '<span class="kv__v">' + esc(t[1]) + (v ? ' <span class="t-faint t-num">' + esc(v) + '</span>' : '') + '</span></div>';
+  }).join('') + '</div>' +
+  '<p class="demo-note">알약 모양(<span class="t-num">--radius-round</span>)은 아바타 · 도트 · 미터에만 씁니다. 버튼을 알약으로 만들지 않습니다.</p>';
+
+  var reduced = false;
+  try { reduced = !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches); } catch (e) { reduced = false; }
+  $('#motionNote').textContent = reduced ? '모션 축소 요청 감지됨' : 'transform · opacity만';
+  $('#motionRows').innerHTML = EASES.map(function (e2) {
+    var v = tokenValue(e2.token);
+    return '<div class="mo-row">' +
+      '<div><p class="sw__name">' + esc(e2.token) + '</p><p class="sw__val">' + esc(v || '—') + '</p></div>' +
+      '<div class="mo-track"><span class="mo-dot" data-ease="' + esc(e2.ease) + '"></span></div>' +
+      '<button class="btn btn--sm" type="button" data-play="' + esc(e2.ease) + '">재생</button>' +
+      '<p class="sw__use" style="grid-column:1 / -1">' + esc(e2.use) + '</p>' +
+      '</div>';
+  }).join('') +
+  '<div class="kv mt-md">' + DURS.map(function (t) {
+    var v = tokenValue(t[0]);
+    return '<div class="kv__row"><span class="kv__k">' + esc(t[0]) + '</span>' +
+      '<span class="kv__v">' + esc(t[1]) + (v ? ' <span class="t-faint t-num">' + esc(v) + '</span>' : '') + '</span></div>';
+  }).join('') + '</div>' +
+  '<p class="demo-note">움직이는 속성은 <span class="t-num">transform</span> 과 <span class="t-num">opacity</span> 둘뿐입니다. 튀는 이징(bounce · overshoot)은 쓰지 않습니다 — 계기판은 흔들리지 않습니다. ' +
+  (reduced
+    ? '이 브라우저가 모션 축소를 요청하고 있어 아래 데모는 즉시 끝납니다.'
+    : '운영체제에서 모션 축소를 켜면 이 데모를 포함한 모든 전환이 즉시 끝납니다.') + '</p>';
+
+  U.live($('#motionRows'), 'click', '[data-play]', function (e, btn) {
+    var row = btn.closest('.mo-row');
+    if (!row) return;
+    var dot = U.qs('.mo-dot', row), track = U.qs('.mo-track', row);
+    if (!dot || !track) return;
+    var far = dot.dataset.far === '1';
+    var travel = Math.max(0, track.clientWidth - 22);
+    dot.style.transform = far ? 'translateX(0px)' : 'translateX(' + travel + 'px)';
+    dot.dataset.far = far ? '0' : '1';
+  });
+
+  $('#liftRow').innerHTML = '<div class="demo-row">' + LIFTS.map(function (t) {
+    return '<div class="lift lift--' + esc(t[0].replace('--lift-', '')) + '" style="flex:1 1 180px">' +
+      '<p class="sw__name">' + esc(t[0]) + '</p>' +
+      '<p class="sw__use">' + esc(t[1]) + '</p></div>';
+  }).join('') + '</div>' +
+  '<div class="kv mt-md">' + ZS.map(function (t) {
+    var v = tokenValue(t[0]);
+    return '<div class="kv__row"><span class="kv__k">' + esc(t[0]) + '</span>' +
+      '<span class="kv__v">' + esc(t[1]) + (v ? ' <span class="t-faint t-num">' + esc(v) + '</span>' : '') + '</span></div>';
+  }).join('') + '</div>' +
+  '<p class="demo-note">층위는 일곱 단계로 이름이 붙어 있습니다. <span class="t-num">z-index: 9999</span> 는 이 시스템에 없습니다.</p>';
+
+  /* ══ 4. 컴포넌트 카탈로그 ══════════════════════════════════════════ */
+  function panel(title, meta, bodyHTML, wide, flush) {
+    return '<div class="panel reveal' + (wide ? ' cat__wide' : '') + '">' +
+      '<div class="panel__head"><h2 class="panel__title">' + esc(title) + '</h2>' +
+      '<span class="t-mono">' + esc(meta) + '</span></div>' +
+      '<div class="panel__body' + (flush ? ' panel__body--flush' : '') + '">' + bodyHTML + '</div></div>';
+  }
+  function note(text) { return '<p class="demo-note">' + text + '</p>'; }
+  function usage(text) { return '<p class="demo-use">' + esc(text) + '</p>'; }
+
+  var cat = [];
+
+  /* 버튼 */
+  cat.push(panel('버튼', '4변형 × 3크기',
+    '<div class="demo-row">' +
+      '<button class="btn btn--primary" type="button">저장</button>' +
+      '<button class="btn" type="button">기본</button>' +
+      '<button class="btn btn--ghost" type="button">고스트</button>' +
+      '<button class="btn btn--danger" type="button">삭제</button>' +
+    '</div>' +
+    '<div class="demo-row mt-sm">' +
+      '<button class="btn btn--primary btn--lg" type="button">큰 버튼</button>' +
+      '<button class="btn" type="button">보통</button>' +
+      '<button class="btn btn--sm" type="button">작게</button>' +
+      '<button class="btn btn--icon btn--sm" type="button" aria-label="더 보기">⋯</button>' +
+      '<button class="btn" type="button" disabled>비활성</button>' +
+    '</div>' +
+    '<div class="mt-sm"><button class="btn btn--block" type="button">폭 전체(btn--block)</button></div>' +
+    note('한 화면에 <strong>주 버튼은 하나</strong>입니다. 나란히 선 두 개의 파란 버튼은 사용자에게 선택을 미루는 것입니다. 위험한 동작은 색이 아니라 <span class="t-num">.btn--danger</span> 의 테두리와 호버로 표시합니다.') +
+    usage('.btn / .btn--primary / .btn--ghost / .btn--danger / .btn--sm .btn--lg .btn--icon .btn--block')));
+
+  /* 칩 · 배지 · 도트 · 아바타 */
+  cat.push(panel('칩 · 도트 · 아바타', '상태의 최소 단위',
+    '<div class="demo-row">' +
+      ui.chip('기본') + ui.chip('accent', 'accent') + ui.chip('pos', 'pos') + ui.chip('warn', 'warn') +
+      ui.chip('neg', 'neg') + ui.chip('idle', 'idle') + ui.chip('solid', 'solid') +
+      '<span class="chip chip--plain">문장형 칩</span>' +
+    '</div>' +
+    '<div class="demo-row mt-sm">' +
+      '<span class="row gap-2xs"><span class="dot"></span><span class="t-small">대기</span></span>' +
+      '<span class="row gap-2xs"><span class="dot dot--accent"></span><span class="t-small">진행</span></span>' +
+      '<span class="row gap-2xs"><span class="dot dot--pos"></span><span class="t-small">정상</span></span>' +
+      '<span class="row gap-2xs"><span class="dot dot--warn"></span><span class="t-small">임박</span></span>' +
+      '<span class="row gap-2xs"><span class="dot dot--neg"></span><span class="t-small">초과</span></span>' +
+      '<span class="kbd">⌘</span><span class="kbd">K</span>' +
+    '</div>' +
+    '<div class="demo-row mt-sm">' + ui.avatar(me, 'sm') + ui.avatar(me) + ui.avatar(me, 'lg') +
+      '<span class="prio prio--p1"><i></i><i></i><i></i><span>P1 긴급</span></span>' +
+      '<span class="prio prio--p2"><i></i><i></i><i></i><span>P2 높음</span></span>' +
+      '<span class="prio prio--p3"><i></i><i></i><i></i><span>P3 보통</span></span>' +
+      '<span class="tkt-key">PRD-000</span>' +
+    '</div>' +
+    note('칩은 <strong>상태를 읽는 자리</strong>이지 장식이 아닙니다. 같은 뜻에는 늘 같은 변형을 씁니다 — 초과는 언제나 neg, 임박은 언제나 warn.') +
+    usage('.chip .chip--pos|warn|neg|idle|accent|solid|plain · .dot · .avatar · .prio · .kbd')));
+
+  /* 입력 */
+  cat.push(panel('입력 · 선택 · 스위치', 'field 래퍼 필수',
+    '<div class="stack gap-sm">' +
+      '<label class="field"><span class="field__label">광고주명 <span class="req">*</span></span>' +
+      '<input class="input" type="text" placeholder="예: 노바커머스" autocomplete="off" />' +
+      '<span class="field__help">필수 항목은 라벨에 별표로 표시합니다.</span></label>' +
+      '<label class="field is-invalid"><span class="field__label">금액</span>' +
+      '<input class="input input--num" type="text" value="12,000,000" aria-label="금액 예시" />' +
+      '<span class="field__error">숫자만 입력할 수 있습니다.</span></label>' +
+      '<label class="field"><span class="field__label">단계</span>' +
+      '<select class="select">' + D.OPEN_STAGES.map(function (st) {
+        return '<option>' + esc(st.key) + '</option>';
+      }).join('') + '</select></label>' +
+      '<div class="input-group"><input class="input input--num" type="text" value="15" aria-label="수수료율" />' +
+      '<span class="input-group__addon">%</span></div>' +
+      '<label class="field"><span class="field__label">메모</span>' +
+      '<textarea class="textarea" placeholder="남길 내용이 있으면 적어 주세요."></textarea></label>' +
+      '<div class="demo-row">' +
+        '<label class="check"><input type="checkbox" checked /><span>체크박스</span></label>' +
+        '<label class="check"><input type="radio" name="demoRadio" checked /><span>라디오</span></label>' +
+        '<label class="check"><input type="radio" name="demoRadio" /><span>선택 안 됨</span></label>' +
+        '<label class="switch"><input type="checkbox" checked /><span>스위치</span></label>' +
+        '<label class="check"><input type="checkbox" disabled /><span>비활성</span></label>' +
+      '</div>' +
+    '</div>' +
+    note('모든 입력은 <span class="t-num">.field</span> 안에 라벨과 함께 삽니다. placeholder는 라벨을 대신하지 못합니다 — 값을 넣는 순간 사라지기 때문입니다.') +
+    usage('.field .field__label .field__help .field__error · .input .select .textarea .input-group · .check .switch')));
+
+  /* ── 어떤 데이터로 예시를 그릴지 ─────────────────────────────────────
+     제작 인력에게 파이프라인 금액으로 만든 예시는 남의 숫자입니다. 홈 화면과
+     같은 규칙으로, 그 역할이 실제로 매일 보는 레코드를 카탈로그의 재료로 씁니다. */
+  var isResMgr = me.role === '리소스매니저';
+  /* 제작본부 전체를 보는 역할 — 리소스매니저와 관리자. */
+  var wideTickets = isResMgr || me.role === '관리자';
+  var salesMode = M.opps(s).length > 0;
+  var prodTickets = wideTickets
+    ? db.all('tickets')
+    : db.where('tickets', function (t) { return t.requesterId === me.id || t.assigneeId === me.id; });
+  var prodOpen = prodTickets.filter(function (t) { return D.TICKET_OPEN.indexOf(t.status) > -1; });
+  var monday = U.addDays(C.today, -((C.today.getDay() + 6) % 7));
+  function sheetsOf(weekKey) {
+    return db.where('timesheets', function (t) {
+      return t.weekOf === weekKey && (wideTickets || t.resourceId === me.id);
+    });
+  }
+  var weekSeries = [];
+  for (var wi = 7; wi >= 0; wi--) {
+    var wStart = U.addDays(monday, -7 * wi);
+    weekSeries.push({ label: U.fmtDate(wStart, 'md'), value: U.sum(sheetsOf(U.iso(wStart)), 'hours') });
+  }
+  var capHours = weekSeries[weekSeries.length - 1].value;
+  var capMax = wideTickets ? U.sum(M.resourceLoad(), 'capacity') : D.capacityOf(me);
+  var tstat = M.ticketStats(M.scope({ userIds: null }));
+
+  /* 스탯 타일 — 실제 지표 */
+  var pipe = M.pipelineValue(s), wpipe = M.weightedPipeline(s);
+  var wr = M.winRate(s), att = M.attainment(s);
+  var openCount = M.open(s).length;
+  var statBody = salesMode
+    ? '<div class="grid grid--2">' +
+        '<article class="stat"><p class="stat__label">진행 파이프라인</p>' +
+        '<p class="stat__value">' + U.won(pipe) + '</p>' +
+        '<p class="stat__foot">가중 ' + U.won(wpipe) + ' · 열린 딜 ' + openCount + '건</p></article>' +
+        '<article class="stat"><p class="stat__label">성사율</p>' +
+        '<p class="stat__value">' + (wr === null ? '—' : Math.round(wr) + '<small>%</small>') + '</p>' +
+        '<p class="stat__foot">' + (wr === null ? '이번 분기에 마감된 딜이 없어 계산하지 않습니다' :
+          '성사 ' + M.won(s).length + '건 · 실주 ' + M.lost(s).length + '건') + '</p></article>' +
+      '</div>'
+    : '<div class="grid grid--2">' +
+        '<article class="stat"><p class="stat__label">진행 중 제작 의뢰</p>' +
+        '<p class="stat__value">' + prodOpen.length + '<small>건</small></p>' +
+        '<p class="stat__foot">예상 공수 합계 ' + U.num(U.sum(prodOpen, 'estimateHours')) + '시간</p></article>' +
+        '<article class="stat"><p class="stat__label">이번 주 투입</p>' +
+        '<p class="stat__value">' + U.num(capHours, 1) + '<small>시간</small></p>' +
+        '<p class="stat__foot">' + (capMax > 0 ? '가용 캐파 ' + U.num(capMax) + '시간' : '등록된 주간 캐파가 없습니다') + '</p></article>' +
+      '</div>';
+  cat.push(panel('스탯 타일', '숫자 + 단서', statBody +
+    note('타일은 <strong>숫자 하나 + 그 숫자를 해석할 단서 하나</strong>로 끝냅니다. 분모가 없으면 0%를 지어내지 않고 <span class="t-num">—</span> 와 이유를 씁니다.') +
+    usage('.stat .stat__label .stat__value .stat__foot')));
+
+  /* 미터 */
+  var fc = M.forecast(s);
+  var commitShare = pipe > 0 ? (fc.byCast.Commit / pipe) * 100 : null;
+  var utilRate = capMax > 0 ? (capHours / capMax) * 100 : null;
+  var doneRate = prodTickets.length ? (prodTickets.filter(function (t) { return t.status === '완료'; }).length / prodTickets.length) * 100 : null;
+  function meterRow(label, value, foot) {
+    var kind = value === null ? 'idle' : value >= 90 ? 'pos' : value >= 60 ? null : value >= 40 ? 'warn' : 'neg';
+    return '<div class="mb-sm"><div class="row row--between gap-sm">' +
+      '<span class="t-small">' + esc(label) + '</span>' +
+      '<span class="t-num t-ink">' + (value === null ? '—' : Math.round(value) + '%') + '</span></div>' +
+      (value === null ? '' : ui.meter(value, 100, kind)) +
+      '<p class="sw__use">' + esc(foot) + '</p></div>';
+  }
+  var meterBody = salesMode
+    ? meterRow('분기 목표 달성률', att, att === null ? '이 기간에 등록된 목표가 없어 계산하지 않습니다'
+        : U.won(M.wonAmount(s)) + ' / ' + U.won(M.quota(s))) +
+      meterRow('성사율(건수)', wr, wr === null ? '마감된 딜이 없습니다' : '진행 중인 딜은 분모에서 뺍니다') +
+      meterRow('파이프라인 중 커밋 비중', commitShare, commitShare === null ? '열린 파이프라인이 없습니다'
+        : '커밋 ' + U.won(fc.byCast.Commit) + ' / 전체 ' + U.won(pipe))
+    : meterRow('이번 주 가동률', utilRate, utilRate === null ? '등록된 주간 캐파가 없습니다'
+        : U.num(capHours, 1) + '시간 / ' + U.num(capMax) + '시간') +
+      meterRow('내 의뢰 완료 비율', doneRate, doneRate === null ? '집계할 의뢰가 없습니다'
+        : '완료 ' + prodTickets.filter(function (t) { return t.status === '완료'; }).length + '건 / 전체 ' + prodTickets.length + '건');
+  cat.push(panel('미터', '비율은 색으로도 말합니다',
+    meterBody +
+    meterRow('전사 제작 의뢰 납기 준수율', tstat.slaRate, tstat.slaRate === null ? '판정할 의뢰가 없습니다'
+      : '진행 ' + tstat.open + '건 · 완료 ' + tstat.done + '건 기준') +
+    note('색은 임계값이 정합니다 — 90% 이상 pos, 60% 이상 기본, 40% 이상 warn, 그 아래 neg. 사람이 그때그때 고르지 않습니다.') +
+    usage('CLOSER.ui.meter(value, max, kind) → .meter .meter__fill')));
+
+  /* Path — 실제 영업기회의 단계 */
+  var pathOpp = U.sortBy(M.opps(s), 'createdAt', 'desc')[0];
+  var curIdx = pathOpp ? D.stageIndex(pathOpp.stage) : -1;
+  var lostOpp = !!pathOpp && D.isLost(pathOpp);
+  var pathBody = '<div class="path">' + D.STAGES.filter(function (st) { return !st.lost; }).map(function (st) {
+      var i = st.order - 1;
+      var cls = (!pathOpp || lostOpp) ? '' : i < curIdx ? ' is-done' : i === curIdx ? ' is-current' : '';
+      return '<button class="path__step' + cls + '" type="button" data-stage="' + esc(st.key) + '"' +
+        (pathOpp && st.key === pathOpp.stage ? ' aria-current="step"' : '') + '>' + esc(st.key) +
+        '<span class="path__pct">' + st.prob + '% · ' + esc(st.cast) + '</span></button>';
+    }).join('') +
+    (lostOpp ? '<button class="path__step is-lost" type="button" data-stage="실주" aria-current="step">실주<span class="path__pct">0% · Omitted</span></button>' : '') +
+    '</div>' +
+    '<div id="pathGuide" class="mt-sm"></div>' +
+    (pathOpp
+      ? '<p class="demo-note">지금 그린 것은 <strong>' + esc(pathOpp.name) + '</strong> 의 실제 단계입니다 — ' +
+        esc(pathOpp.stage) + ' · ' + U.won(pathOpp.amount) + ' · 이 단계 ' + D.daysInStage(pathOpp) + '일째. ' +
+        '단계를 누르면 그 단계의 안내가 열립니다. 확률과 예측 카테고리, 완료 기준이 붙어 있어야 Path가 진행 표시줄 이상이 됩니다.</p>'
+      : '<p class="demo-note">지금 역할(' + esc(me.role) + ')이 볼 수 있는 영업기회가 없어 <strong>현재 단계 표시 없이 레일만</strong> 그렸습니다. ' +
+        '단계를 누르면 그 단계의 안내가 열립니다 — 확률과 예측 카테고리, 완료 기준이 붙어 있어야 Path가 진행 표시줄 이상이 됩니다.</p>');
+  cat.push(panel('Path — 단계 레일', '영업기회 단계', pathBody + usage('.path .path__step .is-done .is-current .is-lost'), true));
+
+  /* 테이블 */
+  var tableWrap = el('div');
+  var salesRows = U.sortBy(M.open(s), 'amount', 'desc').slice(0, 5);
+  var ticketRows = U.sortBy(prodOpen, 'dueDate').slice(0, 5);
+  if (salesMode && salesRows.length) {
+    tableWrap.appendChild(ui.table([
+      { key: 'name', label: '영업기회', sortable: false, cell: function (o) {
+          return '<a class="link--quiet" href="opportunity.html?id=' + encodeURIComponent(o.id) + '">' + esc(o.name) + '</a>';
+        } },
+      { key: 'stage', label: '단계', sortable: false, cell: function (o) {
+          return ui.chip(o.stage, D.stage(o.stage).cast === 'Commit' ? 'accent' : null);
+        } },
+      { key: 'amount', label: '금액', align: 'right', sortable: false, cell: function (o) { return U.won(o.amount); } },
+      { key: 'close', label: '마감', align: 'right', sortable: false, cell: function (o) { return U.fmtDate(o.closeDate); } }
+    ], salesRows, { sort: { key: 'amount', dir: 'desc' } }));
+  } else if (ticketRows.length) {
+    tableWrap.appendChild(ui.table([
+      { key: 'key', label: '번호', tight: true, sortable: false, cell: function (t) {
+          return '<a class="tkt-key link--quiet t-nowrap" href="ticket.html?id=' + encodeURIComponent(t.id) + '">' + esc(t.key) + '</a>';
+        } },
+      { key: 'title', label: '제목', sortable: false, cell: function (t) { return esc(t.title); } },
+      { key: 'status', label: '상태', sortable: false, cell: function (t) { return ui.chip(t.status, 'idle'); } },
+      { key: 'hours', label: '실투입/예상', align: 'right', sortable: false, cell: function (t) {
+          return U.num(t.spentHours || 0) + ' / ' + U.num(t.estimateHours) + 'h';
+        } },
+      { key: 'due', label: '납기', align: 'right', sortable: false, cell: function (t) {
+          var st = D.slaState(t);
+          return '<span class="' + (st === 'breach' ? 't-neg' : st === 'risk' ? 't-warn' : '') + '">' + U.fmtDate(t.dueDate) + '</span>';
+        } }
+    ], ticketRows, { sort: { key: 'due', dir: 'asc' } }));
+  } else {
+    tableWrap.innerHTML = ui.empty('표에 넣을 레코드가 없습니다', '지금 역할이 볼 수 있는 진행 중 레코드가 없습니다. 표는 이럴 때 빈 화면 대신 이 문장을 보여 줍니다.');
+  }
+  var tableHTML = tableWrap.innerHTML +
+    note('금액은 오른쪽 정렬 + 모노 + 고정 자릿수. 정렬 가능한 열은 머리에 <span class="t-num">aria-sort</span> 를 붙여 화살표를 띄웁니다. 행 전체가 링크지만 셀 안의 버튼은 행 이동을 가로채지 않습니다.') +
+    usage('CLOSER.ui.table(cols, rows, { onRow, sort, onSort, selectable, empty })');
+  cat.push(panel('테이블', '리스트 뷰의 기본형', tableHTML, true, true));
+
+  /* 칸반 카드 */
+  var demoTicket = db.first('tickets', function (t) { return t.requesterId === me.id || t.assigneeId === me.id; }) || db.all('tickets')[0];
+  var kanbanBody;
+  if (demoTicket && D.can('tickets', 'R')) {
+    var acc = db.get('accounts', demoTicket.accountId);
+    var sla = D.slaState(demoTicket);
+    kanbanBody = '<div class="kanban"><div class="kanban__col" style="flex:0 0 268px">' +
+      '<div class="kanban__head"><div class="kanban__title"><span>' + esc(demoTicket.status) + '</span>' +
+      '<span>1</span></div><p class="kanban__sum">예상 ' + U.num(demoTicket.estimateHours) + '시간</p></div>' +
+      '<div class="kanban__list">' +
+        '<article class="kcard">' +
+          '<div class="row gap-2xs"><span class="tkt-key">' + esc(demoTicket.key) + '</span>' +
+          '<span class="grow"></span>' + ui.chip(demoTicket.type) + '</div>' +
+          '<p class="kcard__name">' + esc(demoTicket.title) + '</p>' +
+          '<p class="sw__use">' + esc(acc ? acc.name : '광고주 미지정') + '</p>' +
+          '<div class="kcard__meta"><span class="kcard__amt">' + U.num(demoTicket.spentHours || 0) + ' / ' + U.num(demoTicket.estimateHours) + 'h</span>' +
+          '<span class="chip ' + (sla === 'breach' ? 'chip--neg' : sla === 'risk' ? 'chip--warn' : 'chip--idle') + '">' +
+          (sla === 'breach' ? '납기 초과' : sla === 'risk' ? '임박' : '정상') + '</span></div>' +
+        '</article>' +
+      '</div></div></div>' +
+      note('카드에는 <strong>끌어서 옮기기 전에 알아야 할 것</strong>만 올립니다 — 번호 · 제목 · 광고주 · 공수 · 납기 상태. 위는 실제 의뢰 ' +
+        esc(demoTicket.key) + ' 입니다.');
+  } else {
+    kanbanBody = ui.empty('그릴 제작 의뢰가 없습니다', '지금 역할이 볼 수 있는 의뢰가 없어 칸반 카드 예시를 실제 레코드로 그릴 수 없습니다.');
+  }
+  cat.push(panel('칸반 카드', '보드의 최소 단위', kanbanBody + usage('.kanban .kanban__col .kanban__head .kcard .kcard__name .kcard__meta')));
+
+  /* 인사이트 카드 */
+  var insightList = C.insights.run(s) || [];
+  var insightBody = insightList.length
+    ? insightList.slice(0, 3).map(function (x) {
+        return ui.insight({ kind: x.kind, label: x.label, say: x.say, why: x.why, actions: x.actions });
+      }).join('') +
+      note('인사이트는 <strong>주장 · 근거 · 다음 행동</strong> 세 줄입니다. 근거로 댈 숫자가 없으면 카드를 만들지 않습니다. 왼쪽 척추 색이 종류를 말합니다 — act · warn · risk · good.')
+    : ui.empty('지금 할 말이 없습니다', '분석 엔진이 근거로 댈 숫자를 찾지 못하면 카드를 만들지 않습니다. 빈 자리가 지어낸 문장보다 낫습니다.');
+  cat.push(panel('인사이트 카드', '차트가 아니라 의견', insightBody + usage('CLOSER.ui.insight({ kind, label, say, why, actions })')));
+
+  /* 타임라인 — 내 활동이 없으면 내가 볼 수 있는 범위의 활동으로 그립니다. */
+  var acts = U.sortBy(db.where('activities', function (a) { return a.ownerId === me.id && a.status === '완료'; }), 'dueDate', 'desc').slice(0, 4);
+  var actsAreMine = acts.length > 0;
+  if (!acts.length) {
+    acts = U.sortBy(db.where('activities', function (a) {
+      return a.status === '완료' && (!s.userIds || s.userIds.indexOf(a.ownerId) > -1);
+    }), 'dueDate', 'desc').slice(0, 4);
+  }
+  var ACT_LABEL = { call: '통화', email: '메일', meeting: '미팅', task: '업무' };
+  var tlBody = acts.length
+    ? '<ol class="tl">' + acts.map(function (a) {
+        return '<li class="tl__item' + (a.type === 'meeting' ? ' is-accent' : '') + '">' +
+          '<p class="tl__when">' + U.fmtDate(a.dueDate) + ' · ' + esc(ACT_LABEL[a.type] || a.type) +
+          (actsAreMine ? '' : ' · ' + esc(db.userName(a.ownerId))) + '</p>' +
+          '<p class="tl__what">' + esc(a.subject) + '</p></li>';
+      }).join('') + '</ol>' +
+      note('세로선 하나와 점 하나. 강조가 필요한 항목만 <span class="t-num">.is-accent</span> 로 점 색을 바꿉니다.' +
+        (actsAreMine ? '' : ' 내가 남긴 활동이 없어 <strong>내가 볼 수 있는 범위</strong>의 최근 활동으로 그렸습니다.'))
+    : ui.empty('기록된 활동이 없습니다', '통화 · 미팅 · 메일을 남기면 여기에 시간 순으로 쌓입니다.');
+  cat.push(panel('타임라인', '활동 기록', tlBody + usage('.tl .tl__item .tl__when .tl__what')));
+
+  /* 빈 상태 · 페이저 · 툴팁 */
+  cat.push(panel('빈 상태 · 페이저 · 툴팁', '비어 있을 때가 더 중요합니다',
+    ui.empty('조건에 맞는 레코드가 없습니다', '필터를 넓히거나 새 레코드를 만들어 보세요.',
+      '<button class="btn btn--sm btn--primary" type="button" id="emptyDemoBtn">새로 만들기</button>') +
+    '<div class="pager mt-md">' +
+      '<button class="btn btn--sm btn--ghost" type="button" disabled>이전</button>' +
+      '<button class="pager__btn" type="button" aria-current="page">1</button>' +
+      '<button class="pager__btn" type="button">2</button>' +
+      '<button class="pager__btn" type="button">3</button>' +
+      '<button class="btn btn--sm btn--ghost" type="button">다음</button>' +
+    '</div>' +
+    '<div class="demo-row mt-md">' +
+      '<span class="tip"><button class="btn btn--sm" type="button">가리켜 보세요</button>' +
+      '<span class="tip__bubble" role="tooltip">호버는 800ms, 포커스는 0ms</span></span>' +
+      '<span class="t-small">툴팁은 설명을 <strong>보충</strong>할 뿐, 라벨을 대신하지 않습니다.</span>' +
+    '</div>' +
+    note('빈 상태는 세 부분입니다 — 무엇이 없는지 · 왜 없는지 · 무엇을 하면 되는지. “데이터 없음” 한 줄로 끝내지 않습니다.') +
+    usage('CLOSER.ui.empty(title, body, actionHTML) · .pager .pager__btn · .tip .tip__bubble')));
+
+  /* 코드카드 — 이 페이지의 유일한 어두운 구획 */
+  cat.push(panel('코드카드', '이 화면의 유일한 다크 밴드',
+    '<div class="code-card on-graphite">' +
+      '<div class="code-card__bar"><span>components.css · .stat__value</span><span class="status--ok">토큰만 사용</span></div>' +
+      '<pre><span class="tok-dim">/* 값이 아니라 이름을 씁니다 */</span>\n' +
+      '.stat__value {\n' +
+      '  <span class="tok-key">font-family</span>: <span class="tok-str">var(--font-display)</span>;\n' +
+      '  <span class="tok-key">font-size</span>: <span class="tok-str">var(--text-2xl)</span>;\n' +
+      '  <span class="tok-key">color</span>: <span class="tok-str">var(--color-ink)</span>;\n' +
+      '  <span class="tok-key">font-variant-numeric</span>: tabular-nums;\n' +
+      '}</pre>' +
+    '</div>' +
+    note('코드는 진짜 <span class="t-num">&lt;pre&gt;</span> 안에 둡니다. 가짜 브라우저 창틀이나 신호등 점 세 개를 그리지 않습니다.') +
+    usage('.code-card .code-card__bar .tok-key .tok-str .tok-dim .status--ok')));
+
+  /* 탭 · 세그먼트 · kv */
+  cat.push(panel('탭 · 세그먼트 · 키-값', '같은 자리에서 관점을 바꾸는 장치',
+    '<div class="tabs" role="tablist" aria-label="탭 예시">' +
+      '<button class="tab" type="button" role="tab" aria-selected="true">개요<span class="tab__count">12</span></button>' +
+      '<button class="tab" type="button" role="tab" aria-selected="false">활동<span class="tab__count">' + acts.length + '</span></button>' +
+      '<button class="tab" type="button" role="tab" aria-selected="false">첨부</button>' +
+    '</div>' +
+    '<div class="seg mt-md" role="group" aria-label="세그먼트 예시">' +
+      '<button class="seg__item" type="button" aria-pressed="true">전체</button>' +
+      '<button class="seg__item" type="button" aria-pressed="false">내 담당</button>' +
+      '<button class="seg__item" type="button" aria-pressed="false">위험</button>' +
+    '</div>' +
+    '<div class="kv mt-md">' +
+      '<div class="kv__row"><span class="kv__k">담당</span><span class="kv__v">' + esc(me.name) + ' · ' + esc(me.role) + '</span></div>' +
+      '<div class="kv__row"><span class="kv__k">기간</span><span class="kv__v">' + esc(s.label) + '</span></div>' +
+      '<div class="kv__row"><span class="kv__k">열린 딜</span><span class="kv__v">' + openCount + '건 · ' + U.won(pipe) + '</span></div>' +
+    '</div>' +
+    note('탭은 <strong>같은 레코드의 다른 면</strong>일 때만 씁니다. 서로 다른 일을 탭으로 묶으면 사용자는 그중 하나를 영영 못 찾습니다.') +
+    usage('.tabs .tab .tab__count · .seg .seg__item[aria-pressed] · .kv .kv__row')));
+
+  /* 오버레이 · 피드백 — 실제로 눌러 보는 자리 */
+  cat.push(panel('오버레이와 피드백', '눌러서 확인하세요',
+    '<div class="demo-row">' +
+      '<button class="btn btn--sm" type="button" data-act="modal">모달</button>' +
+      '<button class="btn btn--sm" type="button" data-act="drawer">드로어</button>' +
+      '<button class="btn btn--sm" type="button" data-act="menu">메뉴</button>' +
+      '<button class="btn btn--sm" type="button" data-act="toast">토스트</button>' +
+      '<button class="btn btn--sm" type="button" data-act="toastNeg">실패 토스트</button>' +
+      '<button class="btn btn--sm" type="button" data-act="keys">단축키</button>' +
+      '<button class="btn btn--sm btn--danger" type="button" data-act="destroy">확인 모달(파괴적)</button>' +
+    '</div>' +
+    '<div class="mt-md" id="demoList"></div>' +
+    note('되돌릴 수 있는 동작에는 확인 모달을 띄우지 않습니다. 먼저 실행하고 <strong>되돌리기</strong>를 8초간 띄웁니다. ' +
+      '확인 모달은 복구할 수 없는 동작에만, 그것도 문구를 직접 입력하게 합니다. 성공에는 축하 토스트를 띄우지 않습니다 — ' +
+      '저장은 원래 되는 일이고, 매번 축하하면 진짜 경고를 놓칩니다.') +
+    usage('CLOSER.ui.modal · drawer · menu · toast(msg, { kind, undo, ms }) · confirmDestructive'), true));
+
+  $('#catalog').innerHTML = cat.join('');
+  $('#catCount').textContent = cat.length + '종';
+
+  /* ── 되돌리기 데모 — 화면 안에서만 동작하고 데이터는 건드리지 않습니다 ── */
+  var demoSeed = U.sortBy(db.where('activities', function (a) {
+    return a.ownerId === me.id || (!s.userIds || s.userIds.indexOf(a.ownerId) > -1);
+  }), 'dueDate', 'desc').slice(0, 3).map(function (a) { return { id: a.id, text: a.subject, when: U.fmtDate(a.dueDate) }; });
+  if (!demoSeed.length) {
+    demoSeed = U.sortBy(prodTickets, 'createdAt', 'desc').slice(0, 3).map(function (t) {
+      return { id: t.id, text: t.key + ' · ' + t.title, when: U.fmtDate(t.dueDate) };
+    });
+  }
+  var demoRows = demoSeed.slice();
+
+  function renderDemoList() {
+    var host = $('#demoList');
+    if (!host) return;
+    if (!demoRows.length) {
+      host.innerHTML = ui.empty('예시 목록이 비었습니다', '새로 고치면 다시 채워집니다. 이 목록은 화면 안에서만 동작하며 저장된 데이터를 바꾸지 않습니다.');
+      return;
+    }
+    host.innerHTML = demoRows.map(function (r, i) {
+      return '<div class="row gap-sm" style="padding:var(--space-xs) 0;border-bottom:var(--rule-hair) solid var(--color-rule)">' +
+        '<span class="grow" style="min-width:0"><span class="t-small t-ink">' + esc(r.text) + '</span>' +
+        '<span class="sw__val">' + esc(r.when) + '</span></span>' +
+        '<button class="btn btn--sm btn--danger" type="button" data-del="' + i + '">삭제</button></div>';
+    }).join('') +
+    '<p class="sw__use mt-xs">이 목록은 화면 안에서만 동작합니다 — 저장된 활동 기록은 바뀌지 않습니다.</p>';
+  }
+  renderDemoList();
+
+  U.live($('#demoList'), 'click', '[data-del]', function (e, btn) {
+    var i = Number(btn.dataset.del);
+    var row = demoRows[i];
+    if (!row) return;
+    demoRows.splice(i, 1);
+    renderDemoList();                       /* 바뀐 영역만 다시 그립니다 */
+    ui.toast('“' + row.text + '”을(를) 목록에서 뺐습니다.', {
+      undo: function () { demoRows.splice(i, 0, row); renderDemoList(); }
+    });
+  });
+
+  function openDemoModal() {
+    var input = el('input', { class: 'input', 'data-autofocus': '', placeholder: '예: 하반기 예산 확인 통화', autocomplete: 'off' });
+    ui.modal({
+      title: '모달 — 한 가지 일만',
+      body: el('div', { class: 'stack gap-sm' }, [
+        el('p', { class: 't-small', text: '모달은 흐름을 끊습니다. 그러니 한 번에 한 가지 일만 묻고, Esc와 바깥 클릭으로 닫히고, 닫으면 포커스가 원래 자리로 돌아가야 합니다.' }),
+        el('label', { class: 'field' }, [el('span', { class: 'field__label', text: '제목' }), input]),
+        el('p', { class: 't-micro', text: '이 예시는 아무것도 저장하지 않습니다.' })
+      ]),
+      actions: [
+        { label: '취소' },
+        { label: '확인', kind: 'primary' }
+      ]
+    });
+  }
+  function openDemoDrawer() {
+    ui.drawer({
+      kicker: '디자인 원칙', title: '이 시스템이 지키는 것',
+      body: el('div', { class: 'panel__body stack gap-sm' }, [
+        el('p', { class: 't-small', text: '1. 색은 토큰에서만 옵니다. 화면 코드의 hex 한 줄이 다크 밴드와 인쇄와 대비 검사를 한꺼번에 깨뜨립니다.' }),
+        el('p', { class: 't-small', text: '2. 숫자는 계산합니다. 분모가 없으면 0%가 아니라 —와 이유를 씁니다.' }),
+        el('p', { class: 't-small', text: '3. 구조는 헤어라인이 만듭니다. 그림자는 떠 있는 것에만 씁니다.' }),
+        el('p', { class: 't-small', text: '4. 되돌릴 수 있는 동작은 먼저 실행하고 되돌리기를 줍니다.' }),
+        el('p', { class: 't-small', text: '5. 움직이는 것은 transform과 opacity뿐입니다.' }),
+        el('p', { class: 't-micro', text: '드로어는 목록을 떠나지 않고 레코드를 들여다볼 때 씁니다. 편집이 길어지면 상세 화면으로 보냅니다.' })
+      ])
+    });
+  }
+  function openDemoDestroy() {
+    ui.confirmDestructive({
+      title: '예시 목록 비우기',
+      phrase: '비우기',
+      confirmLabel: '영구 삭제',
+      message: '되돌릴 수 없는 동작만 이 모달을 씁니다. 이 예시는 화면 안의 목록만 비우며, 새로 고치면 다시 채워집니다.',
+      onConfirm: function () { demoRows = []; renderDemoList(); }
+    });
+  }
+  function demoMenu(anchor) {
+    ui.menu(anchor, [
+      { label: '레코드 작업' },
+      { icon: '◇', label: '활동 기록', onClick: function () { ui.toast('메뉴 항목을 눌렀습니다.'); } },
+      { icon: '◎', label: '담당자 변경', onClick: function () { ui.toast('메뉴 항목을 눌렀습니다.'); } },
+      '-',
+      { icon: '⌫', label: '삭제', danger: true, onClick: function () { ui.toast('메뉴 항목을 눌렀습니다.'); } }
+    ]);
+  }
+
+  U.live($('#catalog'), 'click', '[data-act]', function (e, btn) {
+    var a = btn.dataset.act;
+    if (a === 'modal') openDemoModal();
+    else if (a === 'drawer') openDemoDrawer();
+    else if (a === 'menu') demoMenu(btn);
+    else if (a === 'keys') ui.shortcutsHelp();
+    else if (a === 'destroy') openDemoDestroy();
+    else if (a === 'toast') ui.toast('되돌릴 수 있는 동작은 이렇게 알립니다.', { undo: function () { ui.toast('되돌렸습니다.'); } });
+    else if (a === 'toastNeg') ui.toast('저장하지 못했습니다. 네트워크를 확인해 주세요.', { kind: 'neg' });
+  });
+  U.live($('#catalog'), 'click', '#emptyDemoBtn', function () {
+    ui.toast('빈 상태의 행동 버튼입니다.');
+  });
+
+  /* Path — 단계를 누르면 그 단계의 안내를 엽니다(영업기회 상세와 같은 어법). */
+  function renderPathGuide(key) {
+    var host = $('#pathGuide');
+    if (!host) return;
+    var st = D.stage(key);
+    var isCur = pathOpp && st.key === pathOpp.stage;
+    host.innerHTML =
+      '<div class="panel"><div class="panel__head">' +
+        '<h3 class="panel__title">' + esc(st.key) + ' 단계 가이드</h3>' +
+        '<span class="row gap-2xs">' + ui.chip(st.prob + '%', isCur ? 'accent' : null) + ui.chip(st.cast) + '</span>' +
+      '</div><div class="panel__body">' +
+        '<p class="t-small">' + esc(st.guide) + '</p>' +
+        '<p class="t-mono mt-sm">완료 기준</p>' +
+        '<p class="t-small">' + esc(st.exit) + '</p>' +
+        (isCur ? '<p class="t-micro mt-sm">지금 이 딜이 서 있는 단계입니다 · 체류 ' + D.daysInStage(pathOpp) + '일 · 기준 ' +
+          (D.STAGE_MAX_DAYS[st.key] || 14) + '일</p>' : '') +
+      '</div></div>';
+    U.qsa('.path__step[data-stage]', $('#catalog')).forEach(function (b) {
+      b.classList.toggle('is-sel', b.dataset.stage === key);
+    });
+  }
+  renderPathGuide(pathOpp ? pathOpp.stage : D.STAGES[0].key);
+  U.live($('#catalog'), 'click', '.path__step[data-stage]', function (e, b) { renderPathGuide(b.dataset.stage); });
+
+  /* ══ 5. 8-state 갤러리 ═════════════════════════════════════════════ */
+  var STATES = [
+    { key: 'default', label: 'default 기본', attr: '', cls: '', how: '기본값' },
+    { key: 'hover', label: 'hover 호버', attr: '', cls: ' is-hover', how: '.is-hover = :hover' },
+    { key: 'focus', label: 'focus 포커스', attr: '', cls: ' is-focus', how: '.is-focus = :focus-visible' },
+    { key: 'active', label: 'active 누름', attr: '', cls: ' is-active', how: '.is-active = :active' },
+    { key: 'disabled', label: 'disabled 비활성', attr: ' disabled', cls: '', how: 'disabled 속성' },
+    { key: 'loading', label: 'loading 로딩', attr: ' data-state="loading"', cls: '', how: 'data-state="loading"' },
+    { key: 'error', label: 'error 오류', attr: ' data-state="error"', cls: '', how: 'data-state="error"' },
+    { key: 'success', label: 'success 성공', attr: ' data-state="success"', cls: '', how: 'data-state="success"' }
+  ];
+  function stateBtn(variant, st) {
+    return '<button class="btn' + variant + st.cls + '" type="button"' + st.attr + '>저장</button>';
+  }
+  function stateInput(st) {
+    var base = '<input class="input" type="text" aria-label="입력 ' + esc(st.key) + ' 상태" ';
+    if (st.key === 'default') return base + 'placeholder="광고주명" />';
+    if (st.key === 'hover') return '<input class="input is-hover" type="text" aria-label="입력 호버 상태" placeholder="광고주명" />';
+    if (st.key === 'focus') return '<input class="input is-focus" type="text" aria-label="입력 포커스 상태" placeholder="광고주명" />';
+    if (st.key === 'active') return '<input class="input is-focus" type="text" aria-label="입력 중" value="노바커머스" />';
+    if (st.key === 'disabled') return base + 'value="수정 불가" disabled />';
+    if (st.key === 'loading') return base + 'value="확인 중…" readonly />';
+    if (st.key === 'error') return '<input class="input is-error" type="text" aria-label="입력 오류 상태" value="중복된 이름" />';
+    return '<input class="input is-success" type="text" aria-label="입력 성공 상태" value="사용 가능" />';
+  }
+  $('#stateHost').innerHTML = '<div class="table-wrap"><table class="table st">' +
+    '<thead><tr><th scope="col">상태</th><th scope="col">기본</th><th scope="col">주 버튼</th>' +
+    '<th scope="col">고스트</th><th scope="col">위험</th><th scope="col">입력</th><th scope="col">거는 법</th></tr></thead>' +
+    '<tbody>' + STATES.map(function (st) {
+      return '<tr><td><span class="t-small t-ink">' + esc(st.label) + '</span></td>' +
+        '<td>' + stateBtn('', st) + '</td>' +
+        '<td>' + stateBtn(' btn--primary', st) + '</td>' +
+        '<td>' + stateBtn(' btn--ghost', st) + '</td>' +
+        '<td>' + stateBtn(' btn--danger', st) + '</td>' +
+        '<td>' + stateInput(st) + '</td>' +
+        '<td><span class="st__how">' + esc(st.how) + '</span></td></tr>';
+    }).join('') + '</tbody></table></div>' +
+    '<div class="panel__body"><p class="demo-note">포커스 링은 <strong>지연 없이</strong> 나타나고 애니메이션하지 않습니다. 로딩은 글자를 지우는 대신 자리를 그대로 두고 그 위에 스피너를 올립니다 — 버튼 폭이 흔들리면 옆 버튼을 잘못 누르게 됩니다. 오류와 성공은 색만으로 말하지 않고 항상 문장을 함께 둡니다.</p>' +
+    '<p class="demo-use">.btn.is-hover · .btn.is-focus · .btn.is-active · .btn[disabled] · .btn[data-state="loading|error|success"] · .input.is-error · .input.is-success</p></div>';
+
+  /* ══ 6. 차트 카탈로그 ══════════════════════════════════════════════ */
+  function chartPanel(title, when, body) {
+    return '<div class="panel reveal">' +
+      '<div class="panel__head"><h2 class="panel__title">' + esc(title) + '</h2></div>' +
+      '<div class="panel__body">' + body + '<p class="demo-note">' + when + '</p></div></div>';
+  }
+  var wonFmt = function (v) { return U.won(v, { unit: false }); };
+  var charts = [];
+
+  var hourFmt = function (v) { return U.num(v) + 'h'; };
+  var cntFmt = function (v) { return U.num(v) + '건'; };
+
+  /* bars */
+  var stageData = D.OPEN_STAGES.map(function (st) {
+    var here = M.open(s).filter(function (o) { return o.stage === st.key; });
+    return { label: st.key, value: U.sum(here, 'amount'), kind: st.cast === 'Commit' ? 'pos' : null };
+  });
+  var statusData = D.TICKET_OPEN.map(function (st) {
+    var here = prodOpen.filter(function (t) { return t.status === st; });
+    var cap = D.WIP_LIMITS && D.WIP_LIMITS[st];
+    return { label: st, value: here.length, kind: cap && here.length > cap ? 'warn' : null };
+  });
+  charts.push(chartPanel('bars — 세로 막대',
+    salesMode
+      ? '<strong>언제</strong>: 카테고리 5–8개의 단일 값을 비교할 때. 지금은 단계별 열린 파이프라인 금액입니다.'
+      : '<strong>언제</strong>: 카테고리 5–8개의 단일 값을 비교할 때. 지금은 상태별 제작 의뢰 건수이며, 주황은 WIP 한도를 넘긴 상태입니다.',
+    salesMode
+      ? (U.sum(stageData, 'value') > 0
+          ? ch.bars(stageData, { h: 190, fmt: wonFmt, label: '단계별 파이프라인 금액' })
+          : ui.empty('그릴 파이프라인이 없습니다', '지금 역할이 볼 수 있는 진행 중 영업기회가 없습니다.'))
+      : (prodOpen.length
+          ? ch.bars(statusData, { h: 190, fmt: cntFmt, label: '상태별 제작 의뢰 건수' })
+          : ui.empty('그릴 제작 의뢰가 없습니다', '진행 중인 의뢰가 없습니다.'))));
+
+  /* stacked */
+  var typeData = D.TICKET_TYPES.map(function (tt) {
+    var here = prodTickets.filter(function (t) { return t.type === tt.key; });
+    return { label: tt.key, parts: [
+      { name: tt.key + ' 진행', series: 1, value: here.filter(function (t) { return D.TICKET_OPEN.indexOf(t.status) > -1; }).length },
+      { name: tt.key + ' 완료', series: 8, value: here.filter(function (t) { return t.status === '완료'; }).length }
+    ] };
+  });
+  charts.push(chartPanel('stacked — 누적 막대',
+    '<strong>언제</strong>: 전체와 구성비를 동시에 봐야 할 때. 조각은 4개를 넘기지 않습니다. 지금은 ' +
+      (wideTickets ? '제작본부 전체' : '내') + ' 제작 의뢰를 유형별·상태별로 쌓았습니다.',
+    prodTickets.length
+      ? ch.stacked(typeData, { h: 200, fmt: cntFmt, label: '유형별 제작 의뢰 건수' }) +
+        ch.legend([{ label: '진행 중', series: 1 }, { label: '완료', series: 8 }])
+      : ui.empty('그릴 제작 의뢰가 없습니다', '내가 의뢰했거나 담당하는 건이 없습니다.')));
+
+  /* line — 본인 실적이 없는 관리 역할은 볼 수 있는 범위의 합계로 그립니다. */
+  var seriesIsMine = true;
+  var series = M.monthlySeries(me.id, 6);
+  if (U.sum(series, 'actual') + U.sum(series, 'target') === 0 && s.userIds && s.userIds.length > 1) {
+    seriesIsMine = false;
+    series = series.map(function (x) { return { period: x.period, label: x.label, actual: 0, target: 0 }; });
+    s.userIds.forEach(function (uid) {
+      M.monthlySeries(uid, 6).forEach(function (x, i) { series[i].actual += x.actual; series[i].target += x.target; });
+    });
+  }
+  var hasSeries = U.sum(series, 'actual') + U.sum(series, 'target') > 0;
+  var hasWeeks = U.sum(weekSeries, 'value') > 0;
+  charts.push(chartPanel('line — 선 · 영역',
+    '<strong>언제</strong>: 시간에 따른 변화. 목표처럼 비교선이 필요하면 <span class="t-num">ghost</span> 로 점선을 겹칩니다.',
+    salesMode && hasSeries
+      ? ch.line([
+          { name: '실적', points: series.map(function (x) { return { label: x.label, value: x.actual }; }) },
+          { name: '목표', ghost: true, points: series.map(function (x) { return { label: x.label, value: x.target }; }) }
+        ], { h: 190, area: true, fmt: wonFmt, label: '월별 실적과 목표' }) +
+        ch.legend([{ label: seriesIsMine ? '내 실적' : '팀 합계 실적', color: 'var(--color-accent)' },
+                   { label: '목표', color: 'var(--color-rule-3)' }])
+      : hasWeeks
+        ? ch.line([{ name: '투입 시간', points: weekSeries.slice() }], { h: 190, area: true, fmt: hourFmt, label: '최근 8주 투입 시간' }) +
+          ch.legend([{ label: '주간 투입 시간', color: 'var(--color-accent)' }])
+        : ui.empty('그릴 추이가 없습니다', '최근 6개월 실적도, 최근 8주 타임시트도 기록되어 있지 않습니다.')));
+
+  /* funnel */
+  var TFLOW = ['접수대기', '검토', '배정됨', '진행중', '검수', '완료'];
+  var funnel = M.stageFunnel(s);
+  var flowTickets = prodTickets.filter(function (t) { return TFLOW.indexOf(t.status) > -1; });
+  var ticketFunnel = TFLOW.map(function (st, i) {
+    return { label: st, value: flowTickets.filter(function (t) { return TFLOW.indexOf(t.status) >= i; }).length };
+  });
+  charts.push(chartPanel('funnel — 퍼널',
+    '<strong>언제</strong>: 단계마다 얼마나 남는지. 옆의 괄호가 직전 단계 대비 통과율입니다 — 어디서 새는지 한 줄로 보입니다.' +
+      (salesMode ? '' : ' 지금은 제작 의뢰 상태 흐름이며, 보류·수정요청·취소 건은 제외했습니다.'),
+    salesMode && U.sum(funnel, 'value') > 0
+      ? ch.funnel(funnel, { fmt: cntFmt, label: '단계별 통과 건수' })
+      : flowTickets.length
+        ? ch.funnel(ticketFunnel, { fmt: cntFmt, label: '상태별 통과 의뢰 건수' })
+        : ui.empty('그릴 흐름이 없습니다', '집계할 영업기회도 제작 의뢰도 없습니다.')));
+
+  /* ring */
+  var quota = M.quota(s), wonAmt = M.wonAmount(s);
+  charts.push(chartPanel('ring — 도넛 링',
+    '<strong>언제</strong>: 하나의 달성률. 두 개 이상의 비율을 링으로 늘어놓지 않습니다 — 그때는 막대가 정확합니다.',
+    salesMode && quota > 0
+      ? '<div class="row gap-md"><div>' + ch.ring(wonAmt, quota, { caption: s.label, label: '분기 목표 달성률' }) + '</div>' +
+        '<div class="grow"><p class="t-mono">확정 실적</p><p class="t-h4 t-num t-ink">' + U.won(wonAmt) + '</p>' +
+        '<p class="t-mono mt-xs">분기 목표</p><p class="t-body t-num">' + U.won(quota) + '</p></div></div>'
+      : capMax > 0
+        ? '<div class="row gap-md"><div>' + ch.ring(capHours, capMax, { caption: '이번 주', label: '주간 가동률' }) + '</div>' +
+          '<div class="grow"><p class="t-mono">투입 시간</p><p class="t-h4 t-num t-ink">' + U.num(capHours, 1) + '시간</p>' +
+          '<p class="t-mono mt-xs">가용 캐파</p><p class="t-body t-num">' + U.num(capMax) + '시간</p></div></div>'
+        : ui.empty('링으로 그릴 비율이 없습니다', '이 기간의 매출 목표도, 등록된 주간 캐파도 없습니다.')));
+
+  /* spark */
+  var sparkVals = salesMode && hasSeries ? series.map(function (x) { return x.actual; }) : weekSeries.map(function (x) { return x.value; });
+  var sparkIsMoney = salesMode && hasSeries;
+  var sparkFmt = sparkIsMoney ? function (v) { return U.won(v); } : function (v) { return U.num(v, 1) + '시간'; };
+  charts.push(chartPanel('spark — 스파크라인',
+    '<strong>언제</strong>: 표 셀이나 문장 안에서 추세만 보여 줄 때. 축도 눈금도 없으며, 마지막 값이 첫 값보다 높으면 초록으로 그립니다.',
+    U.sum(sparkVals) > 0
+      ? '<div class="demo-row"><span class="t-small">' +
+        (sparkIsMoney ? (seriesIsMine ? '최근 6개월 내 실적' : '최근 6개월 팀 합계') : '최근 8주 투입 시간') + '</span>' +
+        ch.spark(sparkVals) +
+        '<span class="t-num t-ink">' + esc(sparkFmt(sparkVals[sparkVals.length - 1])) + '</span>' +
+        ui.delta(sparkVals[sparkVals.length - 1] - sparkVals[0], sparkFmt) + '</div>'
+      : ui.empty('그릴 추세가 없습니다', '최근 6개월 실적도, 최근 8주 타임시트도 기록되어 있지 않습니다.')));
+
+  /* waterfall */
+  var lostAmt = U.sum(M.lost(s), 'amount');
+  var totalAmt = pipe + wonAmt + lostAmt;
+  var doneCnt = prodTickets.filter(function (t) { return t.status === '완료'; }).length;
+  var cancelCnt = prodTickets.filter(function (t) { return t.status === '취소'; }).length;
+  charts.push(chartPanel('waterfall — 워터폴',
+    '<strong>언제</strong>: 시작에서 끝까지 무엇이 더하고 뺐는지. 지금은 ' +
+      (salesMode && totalAmt > 0 ? esc(s.label) + ' 영업기회 금액이 어디로 갔는지' : '제작 의뢰가 어디로 갔는지') + ' 보여 줍니다.',
+    salesMode && totalAmt > 0
+      ? ch.waterfall([
+          { label: '전체', value: totalAmt, total: true },
+          { label: '성사', value: -wonAmt },
+          { label: '실주', value: -lostAmt },
+          { label: '진행 중', value: pipe, total: true }
+        ], { h: 220, fmt: wonFmt, label: '영업기회 금액의 흐름' })
+      : prodTickets.length
+        ? ch.waterfall([
+            { label: '전체', value: prodTickets.length, total: true },
+            { label: '완료', value: -doneCnt },
+            { label: '취소', value: -cancelCnt },
+            { label: '진행 중', value: prodOpen.length, total: true }
+          ], { h: 220, fmt: cntFmt, label: '제작 의뢰 건수의 흐름' })
+        : ui.empty('그릴 흐름이 없습니다', '집계할 영업기회도 제작 의뢰도 없습니다.')));
+
+  $('#chartCount').textContent = charts.length + '종';
+  $('#chartHost').innerHTML = charts.join('') +
+    '<div class="panel reveal cat__wide"><div class="panel__head"><h2 class="panel__title">차트 공통 규칙</h2>' +
+    '<span class="t-mono">직접 그린 SVG · 라이브러리 없음</span></div><div class="panel__body">' +
+    '<div class="kv">' +
+      '<div class="kv__row"><span class="kv__k">색</span><span class="kv__v">계열은 <span class="t-num">--color-series-1…8</span> 순서대로. 의미가 있는 값만 상태색(pos · warn · neg)을 씁니다.</span></div>' +
+      '<div class="kv__row"><span class="kv__k">축</span><span class="kv__v">눈금은 0 · 50% · 100% 세 줄이면 충분합니다. 격자를 더 그리면 데이터가 격자에 묻힙니다.</span></div>' +
+      '<div class="kv__row"><span class="kv__k">라벨</span><span class="kv__v">막대마다 값을 적지 않습니다. 정확한 값이 필요하면 표를 함께 둡니다.</span></div>' +
+      '<div class="kv__row"><span class="kv__k">접근성</span><span class="kv__v">모든 차트는 <span class="t-num">role="img"</span> 과 <span class="t-num">aria-label</span> 을 갖고, 각 마크에 <span class="t-num">&lt;title&gt;</span> 이 붙습니다.</span></div>' +
+      '<div class="kv__row"><span class="kv__k">빈 데이터</span><span class="kv__v">0으로 채운 축을 그리지 않고 빈 상태로 이유를 씁니다.</span></div>' +
+    '</div></div></div>';
+
+  /* ══ 7. 하지 말 것 ═════════════════════════════════════════════════ */
+  var DONTS = [
+    ['보라 그라디언트 히어로', '신호가 되는 색은 하나뿐입니다. 그라디언트는 경계를 흐려 데이터의 구획을 지웁니다.', '그래파이트 밴드 한 번 + 헤어라인으로 구획을 나눕니다.'],
+    ['3열 아이콘 타일', '아이콘 세 개는 정보를 주지 않고 스크롤만 늘립니다.', '숫자와 근거가 붙은 스탯 타일, 또는 그냥 문단.'],
+    ['가짜 브라우저 · 폰 크롬', '실제 화면을 그대로 쓰는 앱에서 창틀을 그리면 같은 것을 두 번 그리는 셈입니다.', '컴포넌트를 진짜로 렌더합니다. 이 화면처럼.'],
+    ['이탤릭 제목', '제목은 로만입니다. base.css가 <span class="t-num">font-style: normal</span> 로 못 박아 두었습니다.', '무게(600)와 크기로 위계를 만듭니다.'],
+    ['이모지 아이콘', '플랫폼마다 모양과 색이 달라 톤이 무너지고, 스크린리더가 이름을 읽어 버립니다.', '모노 기호(◈ ▤ ◆)에 <span class="t-num">aria-hidden</span> 을 붙여 씁니다.'],
+    ['토큰 밖 색상 값', 'hex 한 줄이 다크 밴드 · 인쇄 · 대비 검사를 한꺼번에 깨뜨립니다.', '언제나 <span class="t-num">var(--color-*)</span>. 필요한 색이 없으면 토큰을 추가합니다.'],
+    ['되돌릴 수 있는 동작에 확인 모달', '확인 모달은 판단을 사용자에게 떠넘기고, 반복되면 아무도 읽지 않습니다.', '먼저 실행하고 되돌리기 토스트를 8초 띄웁니다.'],
+    ['축하 토스트', '저장은 원래 되는 일입니다. 매번 축하하면 진짜 경고가 묻힙니다.', '조용한 성공. 화면이 바뀐 것 자체가 확인입니다.'],
+    ['튀는 이징 · 오버슛', '계기판은 흔들리지 않습니다. 관성은 신뢰를 깎습니다.', '<span class="t-num">--ease-out</span> 세 종류 안에서만 고릅니다.'],
+    ['라벨 대신 placeholder', '값을 넣는 순간 라벨이 사라져, 다시 볼 때 무슨 칸인지 알 수 없습니다.', '<span class="t-num">.field__label</span> 을 항상 둡니다.']
+  ];
+  $('#dontCount').textContent = DONTS.length + '가지';
+  $('#dontHost').innerHTML = '<div class="table-wrap"><table class="table">' +
+    '<thead><tr><th scope="col">하지 말 것</th><th scope="col">왜</th><th scope="col">대신 이렇게</th></tr></thead><tbody>' +
+    DONTS.map(function (d) {
+      return '<tr><td><span class="t-small t-ink">' + esc(d[0]) + '</span></td>' +
+        '<td><span class="t-small">' + d[1] + '</span></td>' +
+        '<td><span class="t-small">' + d[2] + '</span></td></tr>';
+    }).join('') + '</tbody></table></div>';
+
+  /* ══ 상단 액션 배선 ════════════════════════════════════════════════ */
+  U.on($('#demoModal'), 'click', openDemoModal);
+  U.on($('#demoDrawer'), 'click', openDemoDrawer);
+  U.on($('#demoKeys'), 'click', function () { ui.shortcutsHelp(); });
+  U.on($('#demoToast'), 'click', function () {
+    ui.toast('되돌릴 수 있는 동작은 이렇게 알립니다.', { undo: function () { ui.toast('되돌렸습니다.'); } });
+  });
+
+  U.revealAll();
+})();
+</script>
+</body>
+</html>

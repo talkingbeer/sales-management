@@ -1,0 +1,1024 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>계약 · CLOSER</title>
+<meta name="description" content="CLOSER 계약 화면. 유효 계약과 갱신 임박 건을 D-day로 관리하고, 월별 매출 인식 스케줄과 집행 캠페인 소진율을 계약 단위로 확인합니다." />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=IBM+Plex+Sans+KR:wght@400;500;600&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="../tokens.css" />
+<link rel="stylesheet" href="../assets/css/base.css" />
+<link rel="stylesheet" href="../assets/css/components.css" />
+<link rel="stylesheet" href="../assets/css/app.css" />
+<style>
+  /* 이 화면에만 필요한 조각 — 값은 모두 토큰을 참조합니다. */
+  .list-frame {
+    border: var(--rule-hair) solid var(--color-rule);
+    border-radius: 0 0 var(--radius-md) var(--radius-md);
+    background: var(--color-surface);
+    overflow: hidden;
+  }
+  .list-frame .table-wrap { border: none; border-radius: 0; }
+  /* 열이 많은 표는 페이지가 아니라 제 안에서 가로로 스크롤합니다. */
+  .list-frame table { min-width: 1320px; }
+
+  .list-foot {
+    display: flex; align-items: center; justify-content: space-between;
+    gap: var(--space-sm); flex-wrap: wrap;
+    padding: var(--space-xs) var(--space-md);
+    border-top: var(--rule-hair) solid var(--color-rule);
+    background: var(--color-paper-2);
+  }
+  .pager__gap { font-family: var(--font-mono); font-size: var(--text-2xs); color: var(--color-ink-4); padding-inline: var(--space-3xs); }
+  .pager__btn[disabled] { opacity: 0.4; cursor: not-allowed; }
+  .pager__btn[disabled]:hover { background: transparent; color: var(--color-ink-3); }
+
+  .seg__n { font-family: var(--font-mono); font-size: var(--text-2xs); color: var(--color-ink-4); margin-left: var(--space-2xs); }
+  .seg__item[aria-pressed="true"] .seg__n { color: var(--color-accent-press); }
+
+  .fbar__search { flex: 1 1 220px; min-width: 0; }
+  .fbar__sel { flex: 0 1 150px; min-width: 0; }
+  .filterbar .input, .filterbar .select { min-height: 28px; height: 28px; font-size: var(--text-xs); }
+
+  /* 갱신 임박 경고 — 목록보다 먼저 읽혀야 하는 줄들 */
+  .panel--warn { border-color: var(--color-warn); }
+  .renew-row {
+    display: flex; align-items: center; gap: var(--space-sm); flex-wrap: wrap;
+    padding: var(--space-xs) 0;
+    border-bottom: var(--rule-hair) solid var(--color-rule);
+  }
+  .renew-row:last-child { border-bottom: none; }
+  .renew-row__name { font-size: var(--text-sm); color: var(--color-ink); }
+  .renew-row__dday { font-family: var(--font-mono); font-variant-numeric: tabular-nums; font-size: var(--text-sm); color: var(--color-warn); min-width: 58px; }
+  .renew-row__dday.is-urgent { color: var(--color-neg); }
+
+  /* 만료 D-day 열 */
+  .dday { font-family: var(--font-mono); font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .dday--soon { color: var(--color-warn); font-weight: 600; }
+  .dday--urgent { color: var(--color-neg); font-weight: 600; }
+
+  .pace { display: flex; align-items: center; gap: var(--space-xs); min-width: 128px; }
+  .pace__num { font-family: var(--font-mono); font-variant-numeric: tabular-nums; font-size: var(--text-xs); color: var(--color-ink-2); width: 38px; text-align: right; }
+  .pace .meter { flex: 1 1 auto; min-width: 52px; }
+
+  /* 드로어 안의 표 — 매출 인식 스케줄과 캠페인 */
+  .drawer-tbl table { min-width: 420px; }
+  .drawer-tbl tfoot td {
+    background: var(--color-paper-2);
+    border-top: var(--rule-thick) solid var(--color-rule-2);
+    border-bottom: none;
+    color: var(--color-ink);
+    font-weight: 500;
+  }
+
+  .chart-duo { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: var(--space-lg); align-items: start; }
+  @media (max-width: 900px) { .chart-duo { grid-template-columns: minmax(0, 1fr); } }
+  @media (max-width: 640px) {
+    .fbar__sel { flex: 1 1 44%; }
+    .list-foot { padding-inline: var(--space-sm); }
+  }
+</style>
+</head>
+<body class="app">
+<a class="skip-link" href="#main">본문으로 건너뛰기</a>
+
+<div class="app-main">
+  <main class="app-page" id="main">
+
+    <div class="page-head">
+      <div>
+        <h1 class="page-head__title">계약</h1>
+        <p class="page-head__sub" id="subline"></p>
+      </div>
+      <div class="page-head__acts" id="headActs">
+        <a class="btn btn--sm" href="accounts.html">광고주 목록</a>
+        <a class="btn btn--sm" href="opportunities.html">영업기회 목록</a>
+      </div>
+    </div>
+
+    <section class="mb-lg" id="renewalSec" data-gated aria-label="갱신 임박 계약">
+      <div class="panel panel--warn reveal">
+        <div class="panel__head">
+          <h2 class="panel__title">갱신 임박 계약</h2>
+          <span class="t-mono" id="renewCount"></span>
+        </div>
+        <div class="panel__body" id="renewBody"></div>
+      </div>
+    </section>
+
+    <section class="grid grid--4 mb-lg" id="tiles" data-gated data-verify aria-label="계약 요약 지표"></section>
+
+    <section aria-label="계약 목록">
+      <div class="filterbar" data-gated>
+        <div class="scroll-x">
+          <div class="seg" id="views" role="group" aria-label="계약 상태 뷰"></div>
+        </div>
+        <div class="fbar__search">
+          <input class="input" type="search" id="q" placeholder="계약번호 · 광고주 · 영업기회 검색" aria-label="계약번호·광고주·영업기회 검색" autocomplete="off" />
+        </div>
+        <select class="select fbar__sel" id="fOwner" aria-label="담당자 필터"></select>
+        <select class="select fbar__sel" id="fBilling" aria-label="정산 주기 필터"></select>
+        <button class="btn btn--sm" type="button" id="clearBtn">필터 해제</button>
+        <span class="grow"></span>
+        <button class="btn btn--sm" type="button" id="csvBtn">CSV 내보내기</button>
+        <span class="filterbar__count" id="countText"></span>
+      </div>
+
+      <div class="list-frame">
+        <div id="tableHost" data-verify></div>
+        <div class="list-foot" data-gated>
+          <span class="t-mono" id="rangeInfo"></span>
+          <div class="pager" id="pager" role="group" aria-label="페이지 이동"></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="mt-lg chart-duo" data-gated aria-label="계약 만료와 기간 분포">
+      <div class="panel reveal">
+        <div class="panel__head">
+          <h2 class="panel__title">향후 12개월 만료 일정</h2>
+          <span class="t-mono" id="expiryRange"></span>
+        </div>
+        <div class="panel__body" id="expiryChart"></div>
+      </div>
+      <div class="panel reveal">
+        <div class="panel__head">
+          <h2 class="panel__title">계약 기간 분포</h2>
+          <span class="t-mono" id="termNote"></span>
+        </div>
+        <div class="panel__body" id="termChart"></div>
+      </div>
+    </section>
+
+    <footer class="hairline mt-2xl" style="padding-block:var(--space-md)">
+      <p class="t-mono t-faint">CLOSER · 데모 데이터 · 모든 회사·인물·연락처는 가상입니다</p>
+    </footer>
+  </main>
+</div>
+
+<script src="../assets/js/seed.js"></script>
+<script src="../assets/js/util.js"></script>
+<script src="../assets/js/store.js"></script>
+<script src="../assets/js/domain.js"></script>
+<script src="../assets/js/metrics.js"></script>
+<script src="../assets/js/insights.js"></script>
+<script src="../assets/js/ui.js"></script>
+<script src="../assets/js/charts.js"></script>
+<script src="../assets/js/shell.js"></script>
+<script>
+(function () {
+  'use strict';
+  var C = window.CLOSER, U = C.util, db = C.db, D = C.domain, ui = C.ui, ch = C.charts;
+  C.shell.mount('contracts');
+
+  var $ = U.qs, esc = U.esc, el = U.el;
+  var me = db.me();
+  var PER = 15;
+  /** 갱신 통보 기한. 계약 레코드에 값이 없으면 이 기본값을 씁니다. */
+  var NOTICE_DAYS = 60;
+  var ACTIVE = '유효';
+
+  var canR = D.can('contracts', 'R');
+  var canU = D.can('contracts', 'U');
+  var canOpp = D.can('opportunities', 'C');
+
+  function option(v, label, sel) {
+    return '<option value="' + esc(v) + '"' + (sel ? ' selected' : '') + '>' + esc(label) + '</option>';
+  }
+
+  /* ── 권한 게이트 ────────────────────────────────────────────────────
+     PERMS 매트릭스에서 contracts 권한이 비어 있는 역할(제작인력·리소스매니저)은
+     계약 목록 자체를 볼 수 없습니다. 버튼만 감추는 것은 권한이 아닙니다. */
+  if (!canR) {
+    U.qsa('[data-gated]').forEach(function (n) { if (n.parentNode) n.parentNode.removeChild(n); });
+    $('#subline').textContent = U.fmtDate(C.today) + ' 기준 · ' + me.role + ' 역할';
+    $('#headActs').innerHTML = '<a class="btn btn--sm" href="tickets.html">제작 의뢰로 이동</a>';
+    $('#tableHost').innerHTML = ui.empty(
+      '계약을 볼 수 있는 권한이 없습니다',
+      me.role + ' 역할에는 계약 객체의 권한이 없습니다. 열람이 필요하면 영업관리자에게 요청하세요.',
+      '<a class="btn btn--sm btn--primary" href="dashboard.html">홈으로 돌아가기</a>');
+    U.revealAll();
+    return;
+  }
+
+  /* ── 계약 한 건에서 나오는 값들 — 화면의 모든 숫자는 여기서만 나옵니다 ─ */
+  function isActive(ct) { return ct.status === ACTIVE; }
+  function noticeOf(ct) { return Number(ct.renewalNoticeDays) || NOTICE_DAYS; }
+  /** 만료까지 남은 일수. 음수면 이미 지난 계약입니다. */
+  function ddayOf(ct) { return ct.endDate ? U.days(C.today, ct.endDate) : null; }
+  function isRenewal(ct) {
+    var d = ddayOf(ct);
+    return isActive(ct) && d !== null && d >= 0 && d <= noticeOf(ct);
+  }
+  /** 계약기간(월). 값이 비어 있으면 시작일과 종료일에서 되짚습니다. */
+  function termOf(ct) {
+    var t = Number(ct.termMonths);
+    if (t > 0) return Math.round(t);
+    if (!ct.startDate || !ct.endDate) return 1;
+    var a = U.date(ct.startDate), b = U.date(ct.endDate);
+    return Math.max(1, (b.getFullYear() - a.getFullYear()) * 12 + (b.getMonth() - a.getMonth()));
+  }
+  /** 같은 광고주에 열려 있는 갱신·재계약 영업기회. 갱신 준비 여부의 근거입니다. */
+  function renewalOppOf(ct) {
+    return db.first('opportunities', function (o) {
+      return o.accountId === ct.accountId && D.isOpen(o) && (o.type === '갱신' || o.type === '재계약');
+    });
+  }
+
+  function buildRows() {
+    return db.all('contracts').map(function (ct) {
+      var acc = db.get('accounts', ct.accountId);
+      var opp = db.get('opportunities', ct.oppId);
+      return {
+        id: ct.id, ct: ct, acc: acc, opp: opp,
+        accName: acc ? acc.name : '',
+        oppName: opp ? opp.name : '',
+        ownerName: db.userName(ct.ownerId),
+        dday: ddayOf(ct),
+        active: isActive(ct),
+        renewal: isRenewal(ct),
+        term: termOf(ct)
+      };
+    });
+  }
+
+  /* ── 뷰(세그먼트) ───────────────────────────────────────────────────── */
+  var VIEWS = {
+    all:     { label: '전체',           test: function () { return true; } },
+    active:  { label: '유효',           test: function (r) { return r.active; } },
+    renewal: { label: '갱신 임박 60일', test: function (r) { return r.renewal; } },
+    ended:   { label: '종료',           test: function (r) { return !r.active; } }
+  };
+  var VIEW_KEYS = ['all', 'active', 'renewal', 'ended'];
+
+  var urlView = U.param('filter', '');
+  var state = {
+    view: VIEWS[urlView] ? urlView : 'all',
+    q: U.param('q', '') || '',
+    owner: U.param('owner', '') || '',
+    billing: '',
+    sort: { key: 'dday', dir: 'asc' },
+    page: 1,
+    focusSort: false
+  };
+
+  /* ── 정렬 ───────────────────────────────────────────────────────────── */
+  var SORTS = {
+    no:       { get: function (r) { return r.ct.no || ''; }, dir: 'asc' },
+    account:  { get: function (r) { return r.accName; }, dir: 'asc' },
+    opp:      { get: function (r) { return r.oppName; }, dir: 'asc' },
+    amount:   { get: function (r) { return Number(r.ct.amount) || 0; }, dir: 'desc' },
+    period:   { get: function (r) { return r.ct.startDate || ''; }, dir: 'asc' },
+    term:     { get: function (r) { return r.term; }, dir: 'desc' },
+    status:   { get: function (r) { return r.active ? 0 : 1; }, dir: 'asc' },
+    auto:     { get: function (r) { return r.ct.autoRenew ? 0 : 1; }, dir: 'asc' },
+    billing:  { get: function (r) { return r.ct.billingCycle || ''; }, dir: 'asc' },
+    tax:      { get: function (r) { return r.ct.taxInvoice || ''; }, dir: 'asc' },
+    owner:    { get: function (r) { return r.ownerName; }, dir: 'asc' },
+    dday:     { get: function (r) { return r.ct.endDate || ''; }, dir: 'asc' }
+  };
+
+  function matches(r) {
+    if (!(VIEWS[state.view] || VIEWS.all).test(r)) return false;
+    if (state.owner && r.ct.ownerId !== state.owner) return false;
+    if (state.billing && r.ct.billingCycle !== state.billing) return false;
+    var term = state.q.trim().toLowerCase();
+    if (term) {
+      var hay = [r.ct.no, r.accName, r.oppName, r.ownerName, r.ct.billingCycle, r.ct.taxInvoice].join(' ').toLowerCase();
+      if (hay.indexOf(term) === -1) return false;
+    }
+    return true;
+  }
+  function hasFilter() { return !!(state.q.trim() || state.owner || state.billing); }
+
+  /* ── 필터바 채우기 ──────────────────────────────────────────────────── */
+  var seedRows = buildRows();
+  var ownerIds = U.uniq(seedRows.map(function (r) { return r.ct.ownerId; })).filter(Boolean);
+  $('#fOwner').innerHTML = option('', '담당자 전체') + U.sortBy(ownerIds.map(function (id) {
+    return { id: id, name: db.userName(id) };
+  }), 'name').map(function (u) { return option(u.id, u.name, state.owner === u.id); }).join('');
+  if (state.owner && !ownerIds.length) state.owner = '';
+
+  var BILLINGS = U.uniq(db.all('contracts').map(function (c) { return c.billingCycle; })
+    .concat(['월 정산', '분기 정산', '일시불', '집행 완료 후'])).filter(Boolean).sort();
+  $('#fBilling').innerHTML = option('', '정산 주기 전체') + BILLINGS.map(function (b) { return option(b, b); }).join('');
+
+  var TAX_TERMS = U.uniq(db.all('contracts').map(function (c) { return c.taxInvoice; })
+    .concat(['매월 말일 발행', '집행 완료 후 발행'])).filter(Boolean).sort();
+  var STATUSES = U.uniq([ACTIVE, '종료'].concat(db.all('contracts').map(function (c) { return c.status; }))).filter(Boolean);
+
+  $('#q').value = state.q;
+
+  /* ── 표 정의 ────────────────────────────────────────────────────────── */
+  function statusChip(ct) {
+    var kind = ct.status === ACTIVE ? 'accent'
+      : ct.status === '해지' ? 'neg'
+      : ct.status === '승인대기' ? 'warn'
+      : ct.status === '초안' ? null : 'idle';
+    return ui.chip(ct.status || '상태 미지정', kind);
+  }
+  function ddayCell(r) {
+    if (r.dday === null) return '<span class="t-faint">종료일 없음</span>';
+    if (!r.active) return '<span class="dday t-muted">' + (r.dday < 0 ? U.num(-r.dday) + '일 전 종료' : '종료 처리됨') + '</span>';
+    if (r.dday < 0) return '<span class="dday dday--urgent">만료 ' + U.num(-r.dday) + '일 경과</span>';
+    var cls = r.dday <= 14 ? ' dday--urgent' : r.dday <= noticeOf(r.ct) ? ' dday--soon' : '';
+    return '<span class="dday' + cls + '">D-' + U.num(r.dday) + '</span>';
+  }
+  function autoCell(r) {
+    if (!canU) {
+      return r.ct.autoRenew ? ui.chip('자동갱신', 'accent') : '<span class="t-faint">수동 갱신</span>';
+    }
+    return '<label class="switch"><input type="checkbox" data-auto="' + esc(r.id) + '"' +
+      (r.ct.autoRenew ? ' checked' : '') +
+      ' aria-label="' + esc(r.ct.no || r.accName) + ' 자동갱신" />' +
+      '<span class="t-mono" data-autotext="' + esc(r.id) + '" style="font-size:10px">' +
+      (r.ct.autoRenew ? '자동' : '수동') + '</span></label>';
+  }
+
+  var COLS = [
+    { key: 'no', label: '계약번호', cell: function (r) {
+        return '<span class="t-num t-ink">' + esc(r.ct.no || r.ct.id) + '</span>';
+      } },
+    { key: 'account', label: '광고주', cell: function (r) {
+        return r.acc
+          ? '<a class="link--quiet t-nowrap" href="account.html?id=' + encodeURIComponent(r.acc.id) + '">' + esc(r.acc.name) + '</a>'
+          : '<span class="t-faint">연결된 광고주 없음</span>';
+      } },
+    { key: 'opp', label: '영업기회', cell: function (r) {
+        return r.opp
+          ? '<a class="link--quiet" href="opportunity.html?id=' + encodeURIComponent(r.opp.id) + '">' + esc(r.opp.name) + '</a>'
+          : '<span class="t-faint">연결 없음</span>';
+      } },
+    { key: 'amount', label: '계약금액', align: 'right', cell: function (r) {
+        return '<span class="t-num t-ink">' + U.won(r.ct.amount) + '</span>';
+      } },
+    { key: 'period', label: '기간', align: 'right', cell: function (r) {
+        return '<span class="t-mono t-muted t-nowrap">' + U.fmtDate(r.ct.startDate) + ' ~ ' + U.fmtDate(r.ct.endDate) + '</span>';
+      } },
+    { key: 'term', label: '계약 개월', align: 'right', cell: function (r) {
+        return '<span class="t-num">' + U.num(r.term) + '개월</span>';
+      } },
+    { key: 'status', label: '상태', cell: function (r) { return statusChip(r.ct); } },
+    { key: 'auto', label: '자동갱신', cell: autoCell },
+    { key: 'billing', label: '정산 주기', cell: function (r) {
+        return '<span class="t-small t-nowrap">' + esc(r.ct.billingCycle || '미지정') + '</span>';
+      } },
+    { key: 'tax', label: '세금계산서 조건', cell: function (r) {
+        return '<span class="t-small t-nowrap">' + esc(r.ct.taxInvoice || '미지정') + '</span>';
+      } },
+    { key: 'owner', label: '담당자', cell: function (r) { return ui.personCell(db.get('users', r.ct.ownerId)); } },
+    { key: 'dday', label: '만료까지', align: 'right', cell: ddayCell }
+  ];
+
+  /* ── 렌더 ───────────────────────────────────────────────────────────── */
+  var viewRows = [];
+  var pageRows = [];
+
+  function render() {
+    var rows = buildRows().filter(matches);
+    var s = SORTS[state.sort.key] || SORTS.dday;
+    viewRows = U.sortBy(rows, s.get, state.sort.dir);
+
+    var pages = Math.max(1, Math.ceil(viewRows.length / PER));
+    if (state.page > pages) state.page = pages;
+    if (state.page < 1) state.page = 1;
+    var start = (state.page - 1) * PER;
+    pageRows = viewRows.slice(start, start + PER);
+
+    renderSubline();
+    renderTiles();
+    renderRenewal();
+    renderViews();
+    renderTable();
+    renderFoot(viewRows.length, start, pageRows.length, pages);
+    renderCharts(viewRows);
+
+    $('#countText').textContent = U.num(viewRows.length) + '건' + (hasFilter() ? ' (필터 적용)' : '');
+    $('#clearBtn').disabled = !hasFilter();
+    $('#csvBtn').disabled = !viewRows.length;
+    U.revealAll();
+
+    if (state.focusSort) {
+      state.focusSort = false;
+      var th = $('#tableHost th[aria-sort]');
+      if (th) th.focus();
+    }
+  }
+
+  function portfolio() {
+    var all = buildRows();
+    var act = all.filter(function (r) { return r.active; });
+    var soon = all.filter(function (r) { return r.renewal; });
+    return {
+      all: all, active: act, soon: soon,
+      activeAmt: U.sum(act, function (r) { return Number(r.ct.amount) || 0; }),
+      soonAmt: U.sum(soon, function (r) { return Number(r.ct.amount) || 0; }),
+      auto: act.filter(function (r) { return !!r.ct.autoRenew; })
+    };
+  }
+
+  function renderSubline() {
+    var p = portfolio();
+    $('#subline').innerHTML = U.fmtDate(C.today) + ' 기준 · 계약 <strong>' + U.num(p.all.length) + '건</strong> · ' +
+      '유효 <strong>' + U.num(p.active.length) + '건</strong> · 유효 계약 총액 ' + U.won(p.activeAmt) +
+      ' · ' + NOTICE_DAYS + '일 내 만료 ' + U.num(p.soon.length) + '건';
+  }
+
+  function renderTiles() {
+    var p = portfolio();
+    var remain = p.active.filter(function (r) { return r.dday !== null && r.dday >= 0; });
+    var autoRate = p.active.length ? (p.auto.length / p.active.length) * 100 : null;
+    var soonNoOpp = p.soon.filter(function (r) { return !renewalOppOf(r.ct); });
+
+    var tiles = [
+      { label: '유효 계약', value: U.num(p.active.length) + '<small>건</small>',
+        foot: '전체 ' + U.num(p.all.length) + '건 중 · 종료 ' + U.num(p.all.length - p.active.length) + '건' },
+      { label: '유효 계약 총액', value: U.won(p.activeAmt),
+        foot: p.active.length
+          ? '1건 평균 ' + U.won(p.activeAmt / p.active.length) + ' · 평균 잔여 ' +
+            (remain.length ? U.num(Math.round(U.avg(remain, 'dday'))) + '일' : '—')
+          : '유효한 계약이 없습니다' },
+      { label: NOTICE_DAYS + '일 내 만료', value: U.num(p.soon.length) + '<small>건</small>',
+        foot: p.soon.length
+          ? U.won(p.soonAmt) + ' 규모 · 갱신 기회 미생성 ' + U.num(soonNoOpp.length) + '건'
+          : '통보 기한 안에 만료되는 계약이 없습니다' },
+      { label: '자동갱신 비율', value: autoRate === null ? '—' : U.pct(autoRate),
+        foot: p.active.length
+          ? '유효 ' + U.num(p.active.length) + '건 중 ' + U.num(p.auto.length) + '건 자동갱신'
+          : '유효 계약이 없어 비율을 낼 수 없습니다' }
+    ];
+    $('#tiles').innerHTML = tiles.map(function (t) {
+      return '<article class="stat reveal"><p class="stat__label">' + esc(t.label) + '</p>' +
+        '<p class="stat__value">' + t.value + '</p>' +
+        '<p class="stat__foot">' + t.foot + '</p></article>';
+    }).join('');
+  }
+
+  /* ── 갱신 임박 경고 — 목록보다 먼저 읽혀야 합니다 ───────────────────── */
+  function renderRenewal() {
+    var sec = $('#renewalSec');
+    if (!sec) return;
+    var soon = U.sortBy(portfolio().soon, 'dday');
+    if (!soon.length) {
+      if (sec.parentNode) sec.parentNode.removeChild(sec);
+      return;
+    }
+    var noOpp = soon.filter(function (r) { return !renewalOppOf(r.ct); });
+    $('#renewCount').textContent = U.num(soon.length) + '건 · ' +
+      U.won(U.sum(soon, function (r) { return Number(r.ct.amount) || 0; }));
+
+    var head = '<p class="t-small mb-sm">통보 기한 ' + NOTICE_DAYS + '일 안에 만료되는 계약입니다. ' +
+      (noOpp.length
+        ? '이 가운데 <strong>' + U.num(noOpp.length) + '건</strong>은 아직 갱신 영업기회가 만들어지지 않았습니다.'
+        : '모두 갱신 영업기회가 열려 있습니다.') + '</p>';
+
+    $('#renewBody').innerHTML = head + soon.slice(0, 6).map(function (r) {
+      var opp = renewalOppOf(r.ct);
+      return '<div class="renew-row">' +
+        '<span class="renew-row__dday' + (r.dday <= 14 ? ' is-urgent' : '') + '">D-' + U.num(r.dday) + '</span>' +
+        '<span class="grow renew-row__name" style="min-width:0">' +
+          (r.acc ? '<a class="link--quiet t-nowrap" href="account.html?id=' + encodeURIComponent(r.acc.id) + '">' + esc(r.acc.name) + '</a>' : '광고주 미지정') +
+          ' <span class="t-mono t-faint">' + esc(r.ct.no || r.ct.id) + '</span>' +
+          ' <span class="t-muted">' + U.fmtDate(r.ct.endDate) + ' 만료 · ' + U.won(r.ct.amount) + '</span>' +
+        '</span>' +
+        (r.ct.autoRenew ? ui.chip('자동갱신', 'accent') : '') +
+        (opp
+          ? '<a class="btn btn--sm" href="opportunity.html?id=' + encodeURIComponent(opp.id) + '">갱신 기회 보기</a>'
+          : canOpp
+            ? '<button class="btn btn--sm btn--primary" type="button" data-renew="' + esc(r.id) + '">갱신 제안 만들기</button>'
+            : '<span class="t-faint t-small">갱신 기회 없음</span>') +
+        '</div>';
+    }).join('') +
+    (soon.length > 6
+      ? '<p class="t-micro mt-sm">나머지 ' + U.num(soon.length - 6) + '건은 아래 목록의 “갱신 임박 60일” 뷰에서 볼 수 있습니다.</p>'
+      : '');
+  }
+
+  function renderViews() {
+    var all = buildRows();
+    $('#views').innerHTML = VIEW_KEYS.map(function (k) {
+      var v = VIEWS[k];
+      var n = all.filter(v.test).length;
+      return '<button class="seg__item t-nowrap" type="button" data-view="' + esc(k) + '" aria-pressed="' + (k === state.view) + '">' +
+        esc(v.label) + '<span class="seg__n">' + U.num(n) + '</span></button>';
+    }).join('');
+  }
+
+  function renderTable() {
+    var host = $('#tableHost');
+    host.innerHTML = '';
+    host.appendChild(ui.table(COLS, pageRows, {
+      sort: state.sort,
+      onSort: function (key) {
+        if (!SORTS[key]) return;
+        if (state.sort.key === key) state.sort = { key: key, dir: state.sort.dir === 'asc' ? 'desc' : 'asc' };
+        else state.sort = { key: key, dir: SORTS[key].dir };
+        state.page = 1;
+        state.focusSort = true;
+        render();
+      },
+      onRow: function (r) { openContract(r.id); },
+      empty: {
+        title: db.count('contracts') ? '조건에 맞는 계약이 없습니다' : '체결된 계약이 없습니다',
+        body: db.count('contracts')
+          ? '검색어를 줄이거나 뷰를 전체로 바꿔 보세요.'
+          : '영업기회를 계약체결로 전환하면 계약이 생성됩니다.'
+      }
+    }));
+  }
+
+  function renderFoot(total, start, shown, pages) {
+    $('#rangeInfo').textContent = total
+      ? (U.num(start + 1) + '–' + U.num(start + shown) + ' / ' + U.num(total) + '건')
+      : '표시할 레코드 없음';
+
+    var out = ['<button class="pager__btn" type="button" data-page="' + (state.page - 1) + '"' +
+      (state.page <= 1 ? ' disabled' : '') + '>이전</button>'];
+    var list = [];
+    for (var i = 1; i <= pages; i++) {
+      if (i === 1 || i === pages || Math.abs(i - state.page) <= 1) list.push(i);
+      else if (list[list.length - 1] !== '…') list.push('…');
+    }
+    list.forEach(function (p) {
+      if (p === '…') { out.push('<span class="pager__gap" aria-hidden="true">…</span>'); return; }
+      out.push('<button class="pager__btn" type="button" data-page="' + p + '"' +
+        (p === state.page ? ' aria-current="page"' : '') + ' aria-label="' + p + '페이지">' + p + '</button>');
+    });
+    out.push('<button class="pager__btn" type="button" data-page="' + (state.page + 1) + '"' +
+      (state.page >= pages ? ' disabled' : '') + '>다음</button>');
+    $('#pager').innerHTML = out.join('');
+  }
+
+  /* ── 차트 ───────────────────────────────────────────────────────────── */
+  function renderCharts(rows) {
+    /* 만료 일정 — 지금 화면에 걸린 조건 안에서 앞으로 12개월을 봅니다. */
+    var months = [];
+    for (var i = 0; i < 12; i++) {
+      var d = new Date(C.today.getFullYear(), C.today.getMonth() + i, 1);
+      months.push({ y: d.getFullYear(), m: d.getMonth(), label: (d.getMonth() + 1) + '월', amount: 0, count: 0 });
+    }
+    rows.forEach(function (r) {
+      if (!r.ct.endDate) return;
+      var e = U.date(r.ct.endDate);
+      for (var i = 0; i < months.length; i++) {
+        if (months[i].y === e.getFullYear() && months[i].m === e.getMonth()) {
+          months[i].amount += Number(r.ct.amount) || 0;
+          months[i].count += 1;
+          return;
+        }
+      }
+    });
+    var hit = months.filter(function (m) { return m.count > 0; });
+    $('#expiryRange').textContent = months[0].y + '.' + (months[0].m + 1) + ' ~ ' +
+      months[11].y + '.' + (months[11].m + 1);
+
+    if (!hit.length) {
+      $('#expiryChart').innerHTML = ui.empty('앞으로 12개월 안에 만료되는 계약이 없습니다',
+        '조건을 넓히면 만료가 몰리는 달을 확인할 수 있습니다.');
+    } else {
+      $('#expiryChart').innerHTML = ch.bars(months.map(function (m, i) {
+        return { label: m.label, value: m.amount, kind: i < 2 && m.count ? 'warn' : null };
+      }), { h: 200, fmt: function (v) { return U.won(v, { unit: false }); }, label: '월별 만료 계약 금액' }) +
+        '<p class="t-micro mt-xs">막대는 그 달에 종료되는 계약금액 합계입니다. 주황은 지금부터 두 달 안에 만료되는 구간입니다. ' +
+        hit.map(function (m) { return m.y + '.' + (m.m + 1) + ' ' + U.num(m.count) + '건'; }).join(' · ') + '.</p>';
+    }
+
+    /* 기간 분포 */
+    var byTerm = U.groupBy(rows, function (r) { return r.term; });
+    var keys = Object.keys(byTerm).map(Number).sort(function (a, b) { return a - b; });
+    if (!keys.length) {
+      $('#termChart').innerHTML = ui.empty('표시할 계약이 없습니다', '필터를 넓히면 계약 기간 분포가 다시 그려집니다.');
+      $('#termNote').textContent = '';
+    } else {
+      $('#termChart').innerHTML = ch.bars(keys.map(function (k) {
+        return { label: k + '개월', value: byTerm[k].length };
+      }), { h: 200, fmt: function (v) { return U.num(v) + '건'; }, label: '계약 기간별 건수' }) +
+        '<p class="t-micro mt-xs">' + keys.map(function (k) {
+          var g = byTerm[k];
+          return k + '개월 ' + U.num(g.length) + '건 · ' + U.won(U.sum(g, function (r) { return Number(r.ct.amount) || 0; }));
+        }).join(' · ') + '.</p>';
+      $('#termNote').textContent = '현재 조건 ' + U.num(rows.length) + '건';
+    }
+  }
+
+  /* ══ 자동갱신 토글 — 되돌릴 수 있는 변경이므로 확인 창을 띄우지 않습니다 ══ */
+  function setAutoRenew(id, val, announce) {
+    var ct = db.get('contracts', id);
+    if (!ct || !canU) return;
+    db.update('contracts', id, { autoRenew: val });
+    var box = U.qs('input[data-auto="' + id + '"]', $('#tableHost'));
+    if (box) box.checked = val;
+    var txt = U.qs('[data-autotext="' + id + '"]', $('#tableHost'));
+    if (txt) txt.textContent = val ? '자동' : '수동';
+    renderTiles();
+    renderRenewal();
+    if (announce) {
+      ui.toast('“' + (ct.no || ct.id) + '” 자동갱신을 ' + (val ? '켰습니다' : '껐습니다') + '.', {
+        undo: function () { setAutoRenew(id, !val, false); }
+      });
+    }
+  }
+
+  U.live($('#tableHost'), 'change', 'input[data-auto]', function (e, box) {
+    setAutoRenew(box.dataset.auto, box.checked, true);
+  });
+
+  /* ══ 계약 상세 드로어 ════════════════════════════════════════════════ */
+  function openContract(id) {
+    var ct = db.get('contracts', id);
+    if (!ct) { ui.toast('계약을 찾을 수 없습니다.', { kind: 'neg' }); return; }
+    var acc = db.get('accounts', ct.accountId);
+    var body = el('div', { class: 'panel__body stack gap-lg' });
+    ui.drawer({
+      kicker: '계약 · ' + (ct.no || ct.id),
+      title: acc ? acc.name : '광고주 미지정',
+      body: body
+    });
+    paint();
+
+    function paint() {
+      ct = db.get('contracts', id);
+      if (!ct) return;
+      acc = db.get('accounts', ct.accountId);
+      var opp = db.get('opportunities', ct.oppId);
+      var owner = db.get('users', ct.ownerId);
+      var dday = ddayOf(ct);
+      var term = termOf(ct);
+      var rOpp = renewalOppOf(ct);
+
+      body.innerHTML = '';
+
+      /* ── 계약 정보 ─────────────────────────────────────────────────── */
+      var info = el('div', { class: 'panel' });
+      info.innerHTML =
+        '<div class="panel__head"><h2 class="panel__title">계약 정보</h2>' +
+        (canU ? '<button class="btn btn--sm" type="button" data-act="edit">편집</button>' : '<span class="t-mono t-faint">읽기 전용</span>') +
+        '</div>' +
+        '<div class="panel__body"><div class="kv">' +
+          kv('계약번호', '<span class="t-num">' + esc(ct.no || ct.id) + '</span> ' + statusChip(ct)) +
+          kv('광고주', acc
+            ? '<a class="link--quiet" href="account.html?id=' + encodeURIComponent(acc.id) + '">' + esc(acc.name) + '</a> · ' + esc(acc.tier || '등급 미지정')
+            : '<span class="t-faint">연결된 광고주 없음</span>') +
+          kv('영업기회', opp
+            ? '<a class="link--quiet" href="opportunity.html?id=' + encodeURIComponent(opp.id) + '">' + esc(opp.name) + '</a> · ' + esc(opp.type || '유형 미지정')
+            : '<span class="t-faint">연결 없음</span>') +
+          kv('계약금액', '<span class="t-num t-ink">' + U.won(ct.amount) + '</span> <span class="t-muted">(' + U.won(ct.amount, { exact: true }) + ')</span>') +
+          kv('기간', U.fmtDate(ct.startDate) + ' ~ ' + U.fmtDate(ct.endDate) + ' · ' + U.num(term) + '개월') +
+          kv('만료까지', dday === null ? '<span class="t-faint">종료일 없음</span>'
+            : isActive(ct)
+              ? (dday < 0 ? '<span class="t-neg">만료 ' + U.num(-dday) + '일 경과</span>'
+                          : '<span class="' + (dday <= 14 ? 't-neg' : dday <= noticeOf(ct) ? 't-warn' : '') + '">D-' + U.num(dday) + '</span>' +
+                            ' <span class="t-muted">(통보 기한 ' + U.num(noticeOf(ct)) + '일)</span>')
+              : '<span class="t-muted">' + (dday < 0 ? U.num(-dday) + '일 전 종료' : '종료 처리됨') + '</span>') +
+          kv('자동갱신', ct.autoRenew ? ui.chip('사용', 'accent') : '<span class="t-faint">사용 안 함</span>') +
+          kv('정산 주기', esc(ct.billingCycle || '미지정')) +
+          kv('세금계산서 조건', esc(ct.taxInvoice || '미지정')) +
+          kv('날인일', ct.signedAt ? U.fmtDate(ct.signedAt) + ' <span class="t-muted">(' + esc(U.ago(ct.signedAt)) + ')</span>' : '<span class="t-faint">기록 없음</span>') +
+          kv('담당자', owner ? esc(owner.name) + ' · ' + esc(owner.title || owner.role) : '<span class="t-faint">미지정</span>') +
+        '</div></div>';
+      body.appendChild(info);
+
+      /* ── 집행 캠페인과 소진율 ──────────────────────────────────────── */
+      var camps = U.sortBy(db.where('campaigns', function (c) { return c.contractId === ct.id; }), 'startDate');
+      var camp = el('div', { class: 'panel drawer-tbl' });
+      var budget = U.sum(camps, function (c) { return Number(c.budget) || 0; });
+      var spend = U.sum(camps, function (c) { return Number(c.spend) || 0; });
+      camp.innerHTML = '<div class="panel__head"><h2 class="panel__title">이 계약으로 집행된 캠페인</h2>' +
+        '<span class="t-mono">' + U.num(camps.length) + '건</span></div>';
+      if (!camps.length) {
+        camp.insertAdjacentHTML('beforeend', '<div class="panel__body">' +
+          ui.empty('집행 이력이 없습니다', '이 계약으로 만들어진 캠페인이 아직 없습니다.') + '</div>');
+      } else {
+        camp.appendChild(ui.table([
+          { key: 'name', label: '캠페인', sortable: false, cell: function (c) {
+              return '<span class="t-small t-ink">' + esc(c.name) + '</span>' +
+                '<span class="tkt-key" style="display:block">' + U.fmtDate(c.startDate, 'md') + '~' + U.fmtDate(c.endDate, 'md') +
+                ' · ' + esc(c.objective || '목표 미지정') + '</span>';
+            } },
+          { key: 'status', label: '상태', sortable: false, cell: function (c) {
+              return ui.chip(c.status, c.status === '집행중' ? 'accent' : c.status === '종료' ? 'idle' : null);
+            } },
+          { key: 'budget', label: '예산', align: 'right', sortable: false, cell: function (c) { return U.won(c.budget); } },
+          { key: 'pace', label: '소진율', sortable: false, cell: function (c) {
+              var p = M_pace(c);
+              if (p === null) return '<span class="t-faint">예산 없음</span>';
+              var kind = p > 105 ? 'neg' : p >= 80 ? 'pos' : 'warn';
+              return '<span class="pace"><span class="pace__num">' + U.pct(p) + '</span>' + ui.meter(p, 100, kind) + '</span>';
+            } },
+          { key: 'spend', label: '소진액', align: 'right', sortable: false, cell: function (c) { return U.won(c.spend); } }
+        ], camps, { compact: true }));
+        var ctbl = camp.querySelector('table');
+        if (ctbl) {
+          ctbl.appendChild(el('tfoot', {}, [
+            el('tr', {}, [
+              el('td', { colspan: 2, class: 't-mono', text: '합계 · ' + U.num(camps.length) + '건' }),
+              el('td', { class: 'cell-num', text: U.won(budget) }),
+              el('td', { class: 'cell-num', text: budget > 0 ? U.pct((spend / budget) * 100) : '—' }),
+              el('td', { class: 'cell-num', text: U.won(spend) })
+            ])
+          ]));
+        }
+        camp.insertAdjacentHTML('beforeend', '<div class="panel__foot"><p class="t-micro">' +
+          '소진율은 소진액 ÷ 예산입니다. 계약금액 ' + U.won(ct.amount) + ' 가운데 캠페인 예산으로 배정된 금액은 ' +
+          U.won(budget) + '입니다.</p></div>');
+      }
+      body.appendChild(camp);
+
+      /* ── 월별 매출 인식 스케줄 ─────────────────────────────────────── */
+      var sched = scheduleOf(ct);
+      var recognized = sched.filter(function (x) { return x.done; });
+      var sch = el('div', { class: 'panel drawer-tbl' });
+      sch.innerHTML = '<div class="panel__head"><h2 class="panel__title">월별 매출 인식 스케줄</h2>' +
+        '<span class="t-mono">' + U.num(term) + '개월 안분</span></div>';
+      sch.appendChild(ui.table([
+        { key: 'period', label: '기간', sortable: false, cell: function (x) {
+            return '<span class="t-mono' + (x.current ? ' t-ink' : '') + '">' + esc(x.period) + '</span>';
+          } },
+        { key: 'amount', label: '인식 금액', align: 'right', sortable: false, cell: function (x) {
+            return '<span class="t-num">' + U.won(x.amount) + '</span>';
+          } },
+        { key: 'state', label: '상태', sortable: false, cell: function (x) {
+            return x.done ? ui.chip('인식 완료', 'pos') : x.current ? ui.chip('인식 중', 'accent') : ui.chip('예정', 'idle');
+          } }
+      ], sched, { compact: true }));
+      var stbl = sch.querySelector('table');
+      if (stbl) {
+        stbl.appendChild(el('tfoot', {}, [
+          el('tr', {}, [
+            el('td', { class: 't-mono', text: '합계' }),
+            el('td', { class: 'cell-num', text: U.won(U.sum(sched, 'amount')) }),
+            el('td', { class: 't-micro', text: '인식 완료 ' + U.num(recognized.length) + '개월' })
+          ])
+        ]));
+      }
+      sch.insertAdjacentHTML('beforeend', '<div class="panel__foot"><p class="t-micro">' +
+        '계약금액을 계약 개월로 균등 안분한 값입니다. 나눈 나머지는 마지막 달에 붙여 합계가 계약금액과 일치합니다. ' +
+        '이미 끝난 달은 인식 완료로 표시했습니다 — 지금까지 인식된 금액은 ' +
+        U.won(U.sum(recognized, 'amount')) + '입니다.</p></div>');
+      body.appendChild(sch);
+
+      /* ── 갱신 ─────────────────────────────────────────────────────── */
+      var act = el('div', { class: 'panel' });
+      act.innerHTML = '<div class="panel__head"><h2 class="panel__title">갱신</h2>' +
+        '<span class="t-mono">' + (dday === null ? '종료일 없음' : isActive(ct) && dday >= 0 ? 'D-' + U.num(dday) : '만료됨') + '</span></div>' +
+        '<div class="panel__body">' +
+        (rOpp
+          ? '<p class="t-small">이 광고주에 <a class="link" href="opportunity.html?id=' + encodeURIComponent(rOpp.id) + '">' +
+            esc(rOpp.name) + '</a> 영업기회가 열려 있습니다. 단계 ' + esc(rOpp.stage) + ' · ' + U.won(rOpp.amount) + ' · 마감 ' + U.fmtDate(rOpp.closeDate) + '.</p>'
+          : canOpp
+            ? '<p class="t-small">이 계약을 이어받을 갱신 영업기회가 아직 없습니다. 같은 광고주로 유형 “갱신”인 딜을 만들고 바로 이동합니다.</p>' +
+              '<div class="mt-sm"><button class="btn btn--sm btn--primary" type="button" data-act="renew">갱신 제안 만들기</button></div>'
+            : '<p class="t-small t-muted">갱신 영업기회가 없습니다. 영업기회를 만들 권한이 없어 이 화면에서는 생성할 수 없습니다.</p>') +
+        '</div>';
+      body.appendChild(act);
+    }
+
+    function kv(k, v) {
+      return '<div class="kv__row"><span class="kv__k">' + esc(k) + '</span><span class="kv__v">' + v + '</span></div>';
+    }
+    function M_pace(c) {
+      var b = Number(c.budget) || 0;
+      return b > 0 ? (Number(c.spend) || 0) / b * 100 : null;
+    }
+
+    U.live(body, 'click', 'button[data-act]', function (e, btn) {
+      if (btn.dataset.act === 'edit') editContract(id, paint);
+      else if (btn.dataset.act === 'renew') renewFrom(id);
+    });
+  }
+
+  /** 계약금액을 계약 개월로 균등 안분합니다. 나머지는 마지막 달에 붙여
+      합계가 계약금액과 정확히 일치하게 만듭니다. */
+  function scheduleOf(ct) {
+    var n = termOf(ct);
+    var total = Math.round(Number(ct.amount) || 0);
+    var base = Math.floor(total / n);
+    var start = ct.startDate ? U.date(ct.startDate) : new Date(C.today.getFullYear(), C.today.getMonth(), 1);
+    var out = [], acc = 0;
+    for (var i = 0; i < n; i++) {
+      var d = new Date(start.getFullYear(), start.getMonth() + i, 1);
+      var amt = i === n - 1 ? total - acc : base;
+      acc += amt;
+      var monthEnd = new Date(d.getFullYear(), d.getMonth() + 1, 0);
+      var monthStart = d;
+      out.push({
+        id: ct.id + '-m' + i,
+        period: d.getFullYear() + '.' + (d.getMonth() < 9 ? '0' : '') + (d.getMonth() + 1),
+        amount: amt,
+        done: monthEnd < C.today,
+        current: monthStart <= C.today && monthEnd >= C.today
+      });
+    }
+    return out;
+  }
+
+  /* ── 계약 편집 ──────────────────────────────────────────────────────── */
+  function editContract(id, after) {
+    var ct = db.get('contracts', id);
+    if (!ct || !canU) return;
+    var stSel = el('select', { class: 'select', 'data-autofocus': '', 'aria-label': '계약 상태' });
+    stSel.innerHTML = STATUSES.map(function (s) { return option(s, s, s === ct.status); }).join('');
+    var bcSel = el('select', { class: 'select', 'aria-label': '정산 주기' });
+    bcSel.innerHTML = BILLINGS.map(function (b) { return option(b, b, b === ct.billingCycle); }).join('');
+    var txSel = el('select', { class: 'select', 'aria-label': '세금계산서 조건' });
+    txSel.innerHTML = TAX_TERMS.map(function (t) { return option(t, t, t === ct.taxInvoice); }).join('');
+    var autoBox = el('input', { type: 'checkbox', 'aria-label': '자동갱신 사용' });
+    autoBox.checked = !!ct.autoRenew;
+
+    var body = el('div', { class: 'stack gap-sm' }, [
+      field('상태', stSel),
+      field('정산 주기', bcSel),
+      field('세금계산서 조건', txSel),
+      el('label', { class: 'switch' }, [autoBox, el('span', { text: '자동갱신 사용 — 만료 ' + noticeOf(ct) + '일 전에 갱신 기회를 만듭니다' })]),
+      el('p', { class: 't-micro', text: '계약금액과 기간은 계약서 원본을 따르므로 이 화면에서 고치지 않습니다. 금액이 달라졌다면 새 계약을 등록하세요.' })
+    ]);
+
+    ui.modal({
+      title: '계약 ' + (ct.no || ct.id) + ' 편집',
+      body: body,
+      actions: [
+        { label: '취소' },
+        { label: '저장', kind: 'primary', onClick: function () {
+            var prev = { status: ct.status, billingCycle: ct.billingCycle, taxInvoice: ct.taxInvoice, autoRenew: !!ct.autoRenew };
+            var next = { status: stSel.value, billingCycle: bcSel.value, taxInvoice: txSel.value, autoRenew: autoBox.checked };
+            var same = Object.keys(next).every(function (k) { return next[k] === prev[k]; });
+            if (same) return;
+            db.update('contracts', id, next);
+            if (after) after();
+            render();
+            ui.toast('계약 ' + (ct.no || ct.id) + ' 정보를 수정했습니다.', {
+              undo: function () {
+                db.update('contracts', id, prev);
+                if (after) after();
+                render();
+              }
+            });
+          } }
+      ]
+    });
+  }
+
+  /* ── 갱신 제안 만들기 ───────────────────────────────────────────────── */
+  function renewFrom(id) {
+    var ct = db.get('contracts', id);
+    if (!ct || !canOpp) return;
+    var acc = db.get('accounts', ct.accountId);
+    var srcOpp = db.get('opportunities', ct.oppId);
+    var stage = D.OPEN_STAGES[0];
+
+    var nameIn = el('input', { class: 'input', 'data-autofocus': '', autocomplete: 'off' });
+    nameIn.value = (acc ? acc.name : '광고주') + ' · ' + (ct.no || ct.id) + ' 갱신';
+    var nameField = el('label', { class: 'field' }, [
+      el('span', { class: 'field__label', html: '영업기회명 <span class="req">*</span>' }),
+      nameIn,
+      el('span', { class: 'field__error', text: '영업기회명을 입력해 주세요.' })
+    ]);
+    var amtIn = el('input', { class: 'input input--num', type: 'number', min: '0', step: '1000000', 'aria-label': '예상 금액(원)' });
+    amtIn.value = String(Math.round(Number(ct.amount) || 0));
+    var dateIn = el('input', { class: 'input', type: 'date', 'aria-label': '마감 예정일' });
+    dateIn.value = ct.endDate ? U.iso(ct.endDate) : U.iso(U.addDays(C.today, 30));
+    var ownerSel = el('select', { class: 'select', 'aria-label': '담당자' });
+    var owners = U.sortBy(db.where('users', function (u) {
+      return u.active !== false && ['영업사원', '영업관리자', '관리자'].indexOf(u.role) > -1;
+    }), 'name');
+    ownerSel.innerHTML = owners.map(function (u) {
+      return option(u.id, u.name + ' · ' + (u.title || u.role), u.id === ct.ownerId);
+    }).join('');
+    if (!owners.some(function (u) { return u.id === ct.ownerId; }) && owners.length) ownerSel.value = owners[0].id;
+
+    var body = el('div', { class: 'stack gap-sm' }, [
+      nameField,
+      el('div', { class: 'grid grid--2' }, [
+        field('예상 금액 (원)', amtIn),
+        field('마감 예정일', dateIn)
+      ]),
+      field('담당자', ownerSel),
+      el('p', { class: 't-micro', text: '유형 “갱신”, 단계 “' + stage.key + '”로 만들어집니다. 금액과 마감일은 기존 계약의 계약금액과 종료일을 기본값으로 넣었습니다. 만든 뒤 영업기회 상세로 이동합니다.' })
+    ]);
+
+    ui.modal({
+      title: '갱신 제안 만들기',
+      body: body,
+      actions: [
+        { label: '취소' },
+        { label: '만들고 이동', kind: 'primary', onClick: function () {
+            var nm = nameIn.value.trim();
+            if (!nm) { nameField.classList.add('is-invalid'); nameIn.focus(); return false; }
+            var amt = Math.round(Number(amtIn.value));
+            if (!(amt >= 0)) amt = 0;
+            var close = dateIn.value && !isNaN(U.date(dateIn.value).getTime()) ? U.iso(dateIn.value) : U.iso(U.addDays(C.today, 30));
+            var now = new Date(C.today).toISOString();
+            var rec = db.insert('opportunities', {
+              name: nm,
+              accountId: ct.accountId,
+              ownerId: ownerSel.value || ct.ownerId,
+              stage: stage.key,
+              amount: amt,
+              probability: stage.prob,
+              forecastCategory: stage.cast,
+              closeDate: close,
+              createdAt: now,
+              stageEnteredAt: now,
+              type: '갱신',
+              source: srcOpp ? srcOpp.source : null,
+              competitorId: srcOpp ? srcOpp.competitorId : null,
+              nextStep: (ct.no || ct.id) + ' 갱신 조건 협의',
+              lossReason: null,
+              contactId: srcOpp ? srcOpp.contactId : null,
+              campaignId: null,
+              teamIds: []
+            });
+            window.location.href = db.linkAs('opportunity.html?id=' + encodeURIComponent(rec.id));
+          } }
+      ]
+    });
+  }
+
+  function field(labelText, control) {
+    return el('label', { class: 'field' }, [
+      el('span', { class: 'field__label', text: labelText }),
+      control
+    ]);
+  }
+
+  /* ── CSV — 지금 보고 있는 조건과 정렬이 그대로 나갑니다 ──────────────── */
+  function exportCSV() {
+    if (!viewRows.length) { ui.toast('내보낼 계약이 없습니다.', { kind: 'neg' }); return; }
+    var head = ['계약번호', '광고주', '영업기회', '계약금액', '시작일', '종료일', '계약 개월',
+      '상태', '자동갱신', '정산 주기', '세금계산서 조건', '담당자', '만료까지(일)'];
+    var rows = [head].concat(viewRows.map(function (r) {
+      return [
+        r.ct.no || r.ct.id, r.accName, r.oppName, Math.round(Number(r.ct.amount) || 0),
+        r.ct.startDate || '', r.ct.endDate || '', r.term,
+        r.ct.status || '', r.ct.autoRenew ? '자동' : '수동',
+        r.ct.billingCycle || '', r.ct.taxInvoice || '', r.ownerName,
+        r.dday === null ? '' : r.dday
+      ];
+    }));
+    ui.exportCSV('closer-contracts-' + U.iso(C.today) + '.csv', rows);
+  }
+
+  /* ── 이벤트 배선 ────────────────────────────────────────────────────── */
+  U.live($('#views'), 'click', '[data-view]', function (e, b) {
+    state.view = b.dataset.view;
+    state.page = 1;
+    syncURL();
+    render();
+  });
+
+  U.on($('#q'), 'input', U.debounce(function () {
+    state.q = $('#q').value;
+    state.page = 1;
+    render();
+  }, 200));
+  /* 한글 조합 중에는 키를 가로채지 않습니다. */
+  U.on($('#q'), 'keydown', function (e) {
+    if (e.isComposing || e.keyCode === 229) return;
+    if (e.key === 'Escape' && this.value) { this.value = ''; state.q = ''; state.page = 1; render(); }
+  });
+
+  U.on($('#fOwner'), 'change', function () { state.owner = this.value; state.page = 1; render(); });
+  U.on($('#fBilling'), 'change', function () { state.billing = this.value; state.page = 1; render(); });
+
+  U.on($('#clearBtn'), 'click', function () {
+    state.q = ''; state.owner = ''; state.billing = ''; state.page = 1;
+    $('#q').value = ''; $('#fOwner').value = ''; $('#fBilling').value = '';
+    render();
+  });
+
+  U.on($('#csvBtn'), 'click', exportCSV);
+
+  U.live($('#pager'), 'click', '[data-page]', function (e, b) {
+    if (b.disabled) return;
+    var p = Number(b.dataset.page);
+    if (!p || p === state.page) return;
+    state.page = p;
+    render();
+    var top = $('#tableHost');
+    if (top && top.scrollIntoView) top.scrollIntoView({ block: 'start' });
+  });
+
+  U.live(document.body, 'click', '[data-renew]', function (e, b) {
+    e.stopPropagation();
+    renewFrom(b.dataset.renew);
+  });
+
+  function syncURL() {
+    try {
+      window.history.replaceState(null, '', 'contracts.html?filter=' + encodeURIComponent(state.view));
+    } catch (err) { /* file:// 에서는 주소를 못 바꿀 수 있습니다 — 화면 상태는 그대로 유지됩니다. */ }
+  }
+
+  /* ── 시작 ───────────────────────────────────────────────────────────── */
+  render();
+
+  var deepId = U.param('id', '');
+  if (deepId && db.get('contracts', deepId)) openContract(deepId);
+
+  U.revealAll();
+})();
+</script>
+</body>
+</html>

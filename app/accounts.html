@@ -1,0 +1,691 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>광고주 · CLOSER</title>
+<meta name="description" content="CLOSER 광고주 목록. 등급·산업·담당자별로 광고주를 살펴보고 건강도, 최근 1년 매출, 진행 중 영업기회를 한 표에서 비교합니다." />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=IBM+Plex+Sans+KR:wght@400;500;600&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="../tokens.css" />
+<link rel="stylesheet" href="../assets/css/base.css" />
+<link rel="stylesheet" href="../assets/css/components.css" />
+<link rel="stylesheet" href="../assets/css/app.css" />
+<style>
+  /* 이 화면에만 필요한 조각. 색·간격·반경·이징은 모두 토큰만 사용합니다. */
+  .list-card {
+    border: var(--rule-hair) solid var(--color-rule);
+    border-top: none;
+    border-radius: 0 0 var(--radius-md) var(--radius-md);
+    background: var(--color-surface);
+  }
+  .bulkbar {
+    display: flex; align-items: center; gap: var(--space-xs); flex-wrap: wrap;
+    padding: var(--space-xs) var(--space-md);
+    border-bottom: var(--rule-hair) solid var(--color-rule);
+    background: var(--color-accent-soft);
+  }
+  .pagerbar {
+    display: flex; align-items: center; justify-content: space-between;
+    gap: var(--space-sm); flex-wrap: wrap;
+    padding: var(--space-xs) var(--space-md);
+    border-top: var(--rule-hair) solid var(--color-rule);
+  }
+  .filterbar .input, .filterbar .select { min-height: 28px; height: 28px; font-size: var(--text-xs); }
+  .filterbar .select { max-width: 150px; }
+  .filterbar__q { width: min(210px, 46vw); }
+  /* 좁은 화면에서 저장된 뷰는 잘리는 대신 제 안에서 가로로 스크롤합니다. */
+  #views { max-width: 100%; overflow-x: auto; }
+  @media (max-width: 640px) {
+    .filterbar { padding-inline: var(--space-sm); }
+    .filterbar .select { max-width: 44vw; }
+    .bulkbar, .pagerbar { padding-inline: var(--space-sm); }
+  }
+  .health { display: flex; align-items: center; gap: var(--space-xs); min-width: 116px; }
+  .health__num { font-family: var(--font-mono); font-variant-numeric: tabular-nums; font-size: var(--text-xs); color: var(--color-ink-2); width: 22px; text-align: right; }
+  .health .meter { flex: 1 1 auto; min-width: 48px; }
+  .chart-duo { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: var(--space-lg); align-items: start; }
+  @media (max-width: 900px) { .chart-duo { grid-template-columns: minmax(0, 1fr); } }
+</style>
+</head>
+<body class="app">
+<a class="skip-link" href="#main">본문으로 건너뛰기</a>
+
+<div class="app-main">
+  <main class="app-page" id="main">
+
+    <div class="page-head">
+      <div>
+        <h1 class="page-head__title">광고주</h1>
+        <p class="page-head__sub" id="subline"></p>
+      </div>
+      <div class="page-head__acts" id="headActs"></div>
+    </div>
+
+    <section class="grid grid--4" id="tiles" data-verify aria-label="광고주 요약 지표"></section>
+
+    <section class="mt-lg" id="opinionSec" aria-label="광고주 분석 의견">
+      <div class="stack gap-xs" id="opinionList"></div>
+    </section>
+
+    <section class="mt-lg" aria-label="광고주 목록">
+      <div class="filterbar" id="filterbar">
+        <div class="seg" id="views" role="group" aria-label="저장된 뷰"></div>
+
+        <label class="field" style="flex:0 0 auto">
+          <span class="sr-only">광고주 검색</span>
+          <input class="input filterbar__q" type="search" id="q" placeholder="광고주명 · 산업 · 담당자" autocomplete="off" />
+        </label>
+
+        <label class="field" style="flex:0 0 auto">
+          <span class="sr-only">등급</span>
+          <select class="select" id="fTier"></select>
+        </label>
+        <label class="field" style="flex:0 0 auto">
+          <span class="sr-only">산업</span>
+          <select class="select" id="fIndustry"></select>
+        </label>
+        <label class="field" style="flex:0 0 auto">
+          <span class="sr-only">담당자</span>
+          <select class="select" id="fOwner"></select>
+        </label>
+        <label class="field" style="flex:0 0 auto">
+          <span class="sr-only">상태</span>
+          <select class="select" id="fStatus"></select>
+        </label>
+
+        <button class="btn btn--sm btn--ghost" type="button" id="reset">필터 초기화</button>
+        <span class="grow"></span>
+        <label class="check t-nowrap"><input type="checkbox" id="selAll" /><span>이 페이지 전체 선택</span></label>
+        <span class="filterbar__count" id="count"></span>
+      </div>
+
+      <div class="list-card">
+        <div class="bulkbar" id="bulkbar" hidden></div>
+        <div id="tableHost" data-verify></div>
+        <div class="pagerbar" id="pagerHost"></div>
+      </div>
+    </section>
+
+    <section class="mt-lg chart-duo" aria-label="광고주 구성 분석">
+      <div class="panel reveal">
+        <div class="panel__head">
+          <h2 class="panel__title">산업별 매출 구성</h2>
+          <span class="t-mono">최근 1년 · 등급별 누적</span>
+        </div>
+        <div class="panel__body" id="industryChart"></div>
+      </div>
+      <div class="panel reveal">
+        <div class="panel__head">
+          <h2 class="panel__title">등급별 광고주 분포</h2>
+          <span class="t-mono" id="tierNote"></span>
+        </div>
+        <div class="panel__body" id="tierChart"></div>
+      </div>
+    </section>
+
+    <footer class="hairline mt-2xl" style="padding-block:var(--space-md)">
+      <p class="t-mono t-faint">CLOSER · 데모 데이터 · 모든 회사·인물·연락처는 가상입니다</p>
+    </footer>
+  </main>
+</div>
+
+<script src="../assets/js/seed.js"></script>
+<script src="../assets/js/util.js"></script>
+<script src="../assets/js/store.js"></script>
+<script src="../assets/js/domain.js"></script>
+<script src="../assets/js/metrics.js"></script>
+<script src="../assets/js/insights.js"></script>
+<script src="../assets/js/ui.js"></script>
+<script src="../assets/js/charts.js"></script>
+<script src="../assets/js/shell.js"></script>
+<script>
+(function () {
+  'use strict';
+  var C = window.CLOSER, U = C.util, db = C.db, D = C.domain, M = C.metrics, ui = C.ui, ch = C.charts;
+  C.shell.mount('accounts');
+
+  var me = db.me();
+  var $ = U.qs, esc = U.esc, el = U.el;
+  var PAGE_SIZE = 15;
+  var TIER_KIND = { Key: 'solid', Major: 'accent', Growth: null, 'Long-tail': 'idle' };
+
+  var canEdit = D.can('accounts', 'U');
+  var canCreate = D.can('accounts', 'C');
+  var canOpp = D.can('opportunities', 'C');
+
+  /* ── 상태 — URL 파라미터가 초기값을 결정합니다 ───────────────────── */
+  var initView = U.param('filter', '');
+  if (['key', 'risk', 'mine'].indexOf(initView) === -1) initView = 'all';
+  var initSort = U.param('sort', '') === 'lastActivity'
+    ? { key: 'lastActivity', dir: 'asc' }
+    : { key: 'revenue', dir: 'desc' };
+
+  var state = {
+    view: initView,
+    q: U.param('q', '') || '',
+    tier: '', industry: '', owner: U.param('owner', '') || '', status: '',
+    sort: initSort,
+    page: 1,
+    sel: {}
+  };
+
+  /* ── 정렬 정의 — 헤더 키 하나당 값 하나 ──────────────────────────── */
+  var SORTS = {
+    name:         { get: function (r) { return r.acc.name; }, dir: 'asc' },
+    industry:     { get: function (r) { return r.acc.industry; }, dir: 'asc' },
+    tier:         { get: function (r) { return D.ACCOUNT_TIERS.indexOf(r.acc.tier); }, dir: 'asc' },
+    owner:        { get: function (r) { return r.ownerName; }, dir: 'asc' },
+    health:       { get: function (r) { return r.health.score; }, dir: 'asc' },
+    budget:       { get: function (r) { return r.acc.annualBudget || 0; }, dir: 'desc' },
+    revenue:      { get: function (r) { return r.rev; }, dir: 'desc' },
+    openDeals:    { get: function (r) { return r.openAmt; }, dir: 'desc' },
+    lastActivity: { get: function (r) { return r.acc.lastActivityDate || ''; }, dir: 'asc' },
+    campaigns:    { get: function (r) { return r.running; }, dir: 'desc' }
+  };
+
+  /* ── 파생 행 — 표·타일·차트가 모두 이 배열 하나를 봅니다 ─────────── */
+  function build() {
+    var oppsBy = U.groupBy(db.all('opportunities'), 'accountId');
+    var campsBy = U.groupBy(db.all('campaigns'), 'accountId');
+    return db.all('accounts').map(function (a) {
+      var open = (oppsBy[a.id] || []).filter(D.isOpen);
+      var camps = campsBy[a.id] || [];
+      return {
+        id: a.id, acc: a,
+        health: D.accountHealth(a),
+        ownerName: db.userName(a.ownerId),
+        rev: M.accountRevenue(a.id, 365),
+        openCount: open.length,
+        openAmt: U.sum(open, 'amount'),
+        running: camps.filter(function (c) { return c.status === '집행중'; }).length
+      };
+    });
+  }
+
+  function matches(r) {
+    var a = r.acc;
+    if (state.view === 'key' && a.tier !== 'Key') return false;
+    if (state.view === 'risk' && r.health.score >= 55) return false;
+    if (state.view === 'mine' && a.ownerId !== me.id) return false;
+    if (state.tier && a.tier !== state.tier) return false;
+    if (state.industry && a.industry !== state.industry) return false;
+    if (state.owner && a.ownerId !== state.owner) return false;
+    if (state.status && a.status !== state.status) return false;
+    if (state.q) {
+      var t = state.q.trim().toLowerCase();
+      if (t && (a.name + ' ' + a.industry + ' ' + r.ownerName + ' ' + a.tier).toLowerCase().indexOf(t) === -1) return false;
+    }
+    return true;
+  }
+
+  /* ── 필터바 채우기 ───────────────────────────────────────────────── */
+  var VIEWS = [
+    { key: 'all', label: '전체' },
+    { key: 'key', label: 'Key 광고주' },
+    { key: 'risk', label: '이탈 위험' },
+    { key: 'mine', label: '내 담당' }
+  ];
+  $('#views').innerHTML = VIEWS.map(function (v) {
+    return '<button class="seg__item" type="button" data-view="' + v.key + '" aria-pressed="' +
+      (state.view === v.key) + '">' + esc(v.label) + '</button>';
+  }).join('');
+
+  function fillSelect(node, placeholder, values, current) {
+    node.innerHTML = '<option value="">' + esc(placeholder) + '</option>' + values.map(function (v) {
+      return '<option value="' + esc(v.value) + '"' + (current === v.value ? ' selected' : '') + '>' + esc(v.label) + '</option>';
+    }).join('');
+  }
+  var allRows = build();
+  var industries = U.uniq(allRows.map(function (r) { return r.acc.industry; })).sort();
+  var ownerIds = U.uniq(allRows.map(function (r) { return r.acc.ownerId; }));
+  fillSelect($('#fTier'), '등급 전체', D.ACCOUNT_TIERS.map(function (t) { return { value: t, label: t }; }), state.tier);
+  fillSelect($('#fIndustry'), '산업 전체', industries.map(function (t) { return { value: t, label: t }; }), state.industry);
+  fillSelect($('#fOwner'), '담당자 전체', U.sortBy(ownerIds.map(function (id) {
+    return { value: id, label: db.userName(id) };
+  }), 'label'), state.owner);
+  fillSelect($('#fStatus'), '상태 전체', [{ value: '거래중', label: '거래중' }, { value: '휴면', label: '휴면' }], state.status);
+  $('#q').value = state.q;
+
+  /* ── 머리말 ──────────────────────────────────────────────────────── */
+  var mineCount = allRows.filter(function (r) { return r.acc.ownerId === me.id; }).length;
+  var riskCount = allRows.filter(function (r) { return r.health.score < 55; }).length;
+  $('#subline').innerHTML = '전체 <strong>' + allRows.length + '개사</strong> · 내 담당 ' + mineCount + '개사 · ' +
+    '이탈 위험 ' + riskCount + '개사 · 최근 1년 매출 합계 ' + U.won(U.sum(allRows, 'rev'));
+
+  $('#headActs').innerHTML =
+    '<a class="btn btn--sm" href="contacts.html">담당자 목록</a>' +
+    '<a class="btn btn--sm" href="campaigns.html">집행 캠페인</a>' +
+    (canCreate ? '<button class="btn btn--primary btn--sm" type="button" id="newAcc">새 광고주</button>' : '');
+
+  /* ── 광고주 관련 분석 의견 ───────────────────────────────────────── */
+  var WANT = ['at-risk', 'silent-account', 'renewal'];
+  var opinions = C.insights.run(M.scope()).filter(function (x) { return WANT.indexOf(x.id) > -1; }).slice(0, 2);
+  if (opinions.length) {
+    $('#opinionList').innerHTML = opinions.map(function (x) {
+      return ui.insight({ kind: x.kind, label: x.label, say: x.say, why: x.why, actions: x.actions });
+    }).join('');
+  } else {
+    $('#opinionSec').parentNode.removeChild($('#opinionSec'));
+  }
+
+  /* ── 렌더 ────────────────────────────────────────────────────────── */
+  var pageRows = [];
+
+  function render() {
+    allRows = build();
+    var rows = allRows.filter(matches);
+    var s = SORTS[state.sort.key] || SORTS.revenue;
+    rows = U.sortBy(rows, s.get, state.sort.dir);
+
+    var pages = Math.max(1, Math.ceil(rows.length / PAGE_SIZE));
+    if (state.page > pages) state.page = pages;
+    if (state.page < 1) state.page = 1;
+    var from = (state.page - 1) * PAGE_SIZE;
+    pageRows = rows.slice(from, from + PAGE_SIZE);
+
+    renderTiles(rows);
+    renderTable(rows);
+    renderPager(rows, from, pages);
+    renderCharts(rows);
+    renderBulk();
+    $('#count').textContent = rows.length + '개사 / 전체 ' + allRows.length + '개사';
+    U.revealAll();
+  }
+
+  function renderTiles(rows) {
+    var keyRows = rows.filter(function (r) { return r.acc.tier === 'Key'; });
+    var risk = U.sortBy(rows.filter(function (r) { return r.health.score < 55; }), function (r) { return r.health.score; });
+    var rev = U.sum(rows, 'rev');
+    var keyRev = U.sum(keyRows, 'rev');
+    var tiles = [
+      { label: '광고주 수', value: U.num(rows.length) + '<small>개사</small>',
+        foot: '거래중 ' + rows.filter(function (r) { return r.acc.status === '거래중'; }).length + ' · 휴면 ' +
+              rows.filter(function (r) { return r.acc.status === '휴면'; }).length },
+      { label: 'Key 등급', value: U.num(keyRows.length) + '<small>개사</small>',
+        foot: rev > 0 ? '최근 1년 매출의 ' + U.pct((keyRev / rev) * 100) + '를 차지' : '매출 기록이 아직 없습니다' },
+      { label: '이탈 위험', value: U.num(risk.length) + '<small>개사</small>',
+        foot: risk.length ? '건강도 55점 미만 · 최저 ' + risk[0].health.score + '점 (' + esc(risk[0].acc.name) + ')'
+                          : '건강도 55점 미만인 광고주가 없습니다' },
+      { label: '최근 1년 매출', value: U.won(rev),
+        foot: rows.length ? '성사된 딜 기준 · 1개사 평균 ' + U.won(rev / rows.length) : '표시할 광고주가 없습니다' }
+    ];
+    $('#tiles').innerHTML = tiles.map(function (t) {
+      return '<article class="stat reveal"><p class="stat__label">' + esc(t.label) + '</p>' +
+        '<p class="stat__value">' + t.value + '</p>' +
+        '<p class="stat__foot">' + t.foot + '</p></article>';
+    }).join('');
+  }
+
+  function healthCell(r) {
+    var sc = r.health.score;
+    var kind = sc >= 70 ? 'pos' : sc >= 55 ? 'warn' : 'neg';
+    return '<span class="health" title="' + esc(r.health.reasons.join(' · ') || '판단 근거가 될 기록이 부족합니다') + '">' +
+      '<span class="health__num">' + sc + '</span>' + ui.meter(sc, 100, kind) + '</span>';
+  }
+
+  function renderTable(rows) {
+    var cols = [
+      { key: 'name', label: '광고주', width: '18%', cell: function (r) {
+          return '<a class="link--quiet" href="account.html?id=' + encodeURIComponent(r.id) + '">' + esc(r.acc.name) + '</a>' +
+            (r.acc.status === '휴면' ? ' ' + ui.chip('휴면', 'idle') : '');
+        } },
+      { key: 'industry', label: '산업', cell: function (r) { return '<span class="t-small">' + esc(r.acc.industry) + '</span>'; } },
+      { key: 'tier', label: '등급', cell: function (r) { return ui.chip(r.acc.tier, TIER_KIND[r.acc.tier]); } },
+      { key: 'owner', label: '담당자', cell: function (r) { return ui.personCell(db.get('users', r.acc.ownerId)); } },
+      { key: 'health', label: '건강도', cell: healthCell },
+      { key: 'budget', label: '연간 예산', align: 'right', cell: function (r) { return U.won(r.acc.annualBudget); } },
+      { key: 'revenue', label: '최근 1년 매출', align: 'right', cell: function (r) {
+          return r.rev > 0 ? U.won(r.rev) : '<span class="t-faint">기록 없음</span>';
+        } },
+      { key: 'openDeals', label: '진행 딜', align: 'right', cell: function (r) {
+          if (!r.openCount) return '<span class="t-faint">없음</span>';
+          return '<span class="t-num">' + r.openCount + '건</span> <span class="t-muted">' + U.won(r.openAmt) + '</span>';
+        } },
+      { key: 'lastActivity', label: '최근 활동', align: 'right', cell: function (r) {
+          var d = r.acc.lastActivityDate;
+          if (!d) return '<span class="t-faint">없음</span>';
+          var gap = U.days(d, C.today);
+          return '<span class="' + (gap > 45 ? 't-neg' : gap > 21 ? 't-warn' : '') + '">' + esc(U.ago(d)) + '</span>';
+        } },
+      { key: 'campaigns', label: '집행 캠페인', align: 'right', cell: function (r) {
+          return r.running ? '<span class="t-num">' + r.running + '건</span>' : '<span class="t-faint">0건</span>';
+        } }
+    ];
+    if (canEdit || canOpp) {
+      cols.push({ key: 'act', label: '', sortable: false, tight: true, cell: function (r) {
+        return '<button class="btn btn--ghost btn--icon btn--sm" type="button" data-menu="' + esc(r.id) +
+          '" aria-label="' + esc(r.acc.name) + ' 작업 메뉴">⋯</button>';
+      } });
+    }
+
+    var host = $('#tableHost');
+    host.innerHTML = '';
+    host.appendChild(ui.table(cols, pageRows, {
+      selectable: canEdit,
+      sort: state.sort,
+      onSort: function (key) {
+        if (!SORTS[key]) return;
+        if (state.sort.key === key) state.sort = { key: key, dir: state.sort.dir === 'asc' ? 'desc' : 'asc' };
+        else state.sort = { key: key, dir: SORTS[key].dir };
+        state.page = 1;
+        render();
+      },
+      onRow: function (r) { window.location.href = 'account.html?id=' + encodeURIComponent(r.id); },
+      empty: {
+        title: '조건에 맞는 광고주가 없습니다',
+        body: '검색어를 줄이거나 저장된 뷰를 전체로 바꿔 보세요.'
+      }
+    }));
+    U.qsa('input[data-id]', host).forEach(function (n) { n.checked = !!state.sel[n.dataset.id]; });
+    syncSelAll();
+  }
+
+  function renderPager(rows, from, pages) {
+    var to = Math.min(rows.length, from + PAGE_SIZE);
+    var nums = '';
+    var lo = Math.max(1, state.page - 2), hi = Math.min(pages, lo + 4);
+    lo = Math.max(1, hi - 4);
+    if (lo > 1) nums += '<button class="pager__btn" type="button" data-page="1">1</button><span class="pager__btn t-faint">…</span>';
+    for (var i = lo; i <= hi; i++) {
+      nums += '<button class="pager__btn" type="button" data-page="' + i + '"' +
+        (i === state.page ? ' aria-current="page"' : '') + '>' + i + '</button>';
+    }
+    if (hi < pages) nums += '<span class="pager__btn t-faint">…</span><button class="pager__btn" type="button" data-page="' + pages + '">' + pages + '</button>';
+
+    $('#pagerHost').innerHTML =
+      '<span class="t-mono">' + (rows.length ? (from + 1) + '–' + to : 0) + ' / ' + rows.length + '개사</span>' +
+      '<span class="pager">' +
+        '<button class="btn btn--sm btn--ghost" type="button" data-page="' + (state.page - 1) + '"' +
+          (state.page <= 1 ? ' disabled' : '') + '>이전</button>' +
+        nums +
+        '<button class="btn btn--sm btn--ghost" type="button" data-page="' + (state.page + 1) + '"' +
+          (state.page >= pages ? ' disabled' : '') + '>다음</button>' +
+      '</span>';
+  }
+
+  function renderCharts(rows) {
+    var withRev = rows.filter(function (r) { return r.rev > 0; });
+    if (!withRev.length) {
+      $('#industryChart').innerHTML = ui.empty('매출 기록이 없습니다', '최근 1년 안에 성사된 딜이 있는 광고주가 조건에 포함되면 구성이 표시됩니다.');
+    } else {
+      var byInd = U.groupBy(withRev, function (r) { return r.acc.industry; });
+      var list = U.sortBy(Object.keys(byInd).map(function (k) {
+        return { label: k, rows: byInd[k], total: U.sum(byInd[k], 'rev') };
+      }), 'total', 'desc').slice(0, 7);
+      var data = list.map(function (x) {
+        return {
+          label: x.label,
+          parts: D.ACCOUNT_TIERS.map(function (t, i) {
+            return {
+              name: x.label + ' · ' + t,
+              value: U.sum(x.rows.filter(function (r) { return r.acc.tier === t; }), 'rev'),
+              series: i + 1
+            };
+          })
+        };
+      });
+      $('#industryChart').innerHTML =
+        ch.stacked(data, { h: 210, fmt: function (v) { return U.won(v, { unit: false }); }, label: '산업별 최근 1년 매출을 등급별로 나눈 누적 막대' }) +
+        ch.legend(D.ACCOUNT_TIERS.map(function (t, i) { return { label: t, series: i + 1 }; })) +
+        '<p class="t-micro mt-xs">매출 상위 ' + list.length + '개 산업입니다. 막대 한 칸은 해당 산업 안에서 등급이 만든 매출입니다.</p>';
+    }
+
+    var tierData = D.ACCOUNT_TIERS.map(function (t) {
+      return { label: t, value: rows.filter(function (r) { return r.acc.tier === t; }).length };
+    });
+    if (!rows.length) {
+      $('#tierChart').innerHTML = ui.empty('표시할 광고주가 없습니다', '필터를 넓히면 등급 분포가 다시 그려집니다.');
+      $('#tierNote').textContent = '';
+    } else {
+      $('#tierChart').innerHTML =
+        ch.bars(tierData, { h: 190, fmt: function (v) { return U.num(v) + '개사'; }, label: '등급별 광고주 수' }) +
+        '<p class="t-micro mt-xs">' + D.ACCOUNT_TIERS.map(function (t) {
+          var g = rows.filter(function (r) { return r.acc.tier === t; });
+          return esc(t) + ' ' + g.length + '개사 · 평균 건강도 ' +
+            (g.length ? Math.round(U.avg(g, function (r) { return r.health.score; })) + '점' : '—');
+        }).join(' · ') + '</p>';
+      $('#tierNote').textContent = '현재 필터 ' + rows.length + '개사';
+    }
+  }
+
+  /* ── 선택과 일괄 변경 ────────────────────────────────────────────── */
+  function selectedIds() {
+    return Object.keys(state.sel).filter(function (k) { return state.sel[k] && db.get('accounts', k); });
+  }
+  function syncSelAll() {
+    var box = $('#selAll');
+    if (!box) return;
+    box.disabled = !canEdit || !pageRows.length;
+    box.checked = !!pageRows.length && pageRows.every(function (r) { return state.sel[r.id]; });
+  }
+  function renderBulk() {
+    var bar = $('#bulkbar');
+    var ids = selectedIds();
+    if (!ids.length || !canEdit) { bar.hidden = true; bar.innerHTML = ''; return; }
+    bar.hidden = false;
+    bar.innerHTML = '<span class="t-mono">' + ids.length + '개사 선택됨</span>' +
+      '<button class="btn btn--sm btn--primary" type="button" id="bulkOwner">담당자 일괄 변경</button>' +
+      '<button class="btn btn--sm btn--ghost" type="button" id="bulkClear">선택 해제</button>';
+  }
+
+  var ownerOptions = U.sortBy(db.where('users', function (u) {
+    return u.active !== false && ['영업사원', '영업관리자', '관리자'].indexOf(u.role) > -1;
+  }), 'name');
+
+  function ownerModal(ids) {
+    if (!ids.length) return;
+    var sel = el('select', { class: 'select', 'data-autofocus': '', 'aria-label': '새 담당자' });
+    ownerOptions.forEach(function (u) {
+      sel.appendChild(el('option', { value: u.id, text: u.name + ' · ' + (u.title || u.role) }));
+    });
+    var first = db.get('accounts', ids[0]);
+    if (ids.length === 1 && first) sel.value = first.ownerId;
+
+    var body = el('div', { class: 'stack gap-sm' }, [
+      el('p', { class: 't-small', text: ids.length === 1 && first
+        ? '“' + first.name + '”의 담당자를 바꿉니다. 새 담당자에게 알림이 갑니다.'
+        : ids.length + '개 광고주의 담당자를 한 번에 바꿉니다. 되돌리기는 변경 직후 토스트에서 가능합니다.' }),
+      el('label', { class: 'field' }, [el('span', { class: 'field__label', text: '새 담당자' }), sel])
+    ]);
+
+    ui.modal({
+      title: '담당자 변경', body: body,
+      actions: [
+        { label: '취소' },
+        { label: '변경', kind: 'primary', onClick: function () { applyOwner(ids, sel.value); } }
+      ]
+    });
+  }
+
+  function applyOwner(ids, newId) {
+    var target = db.get('users', newId);
+    if (!target) return;
+    var changed = ids.map(function (id) {
+      var a = db.get('accounts', id);
+      return a && a.ownerId !== newId ? { id: id, prev: a.ownerId } : null;
+    }).filter(Boolean);
+    if (!changed.length) { ui.toast('선택한 광고주는 이미 ' + target.name + ' 담당입니다.'); return; }
+
+    changed.forEach(function (c) { db.update('accounts', c.id, { ownerId: newId }); });
+    db.notify(newId, 'assign', changed.length + '개 광고주의 담당자로 지정되었습니다.', 'accounts.html');
+    state.sel = {};
+    render();
+    ui.toast('광고주 ' + changed.length + '개사의 담당자를 ' + target.name + '(으)로 바꿨습니다.', {
+      undo: function () {
+        changed.forEach(function (c) { db.update('accounts', c.id, { ownerId: c.prev }); });
+        render();
+      }
+    });
+  }
+
+  /* ── 활동 기록 ───────────────────────────────────────────────────── */
+  var ACT_TYPES = [['call', '통화'], ['email', '메일'], ['meeting', '미팅'], ['task', '업무']];
+  function activityModal(acc) {
+    var type = el('select', { class: 'select', 'aria-label': '활동 유형' });
+    ACT_TYPES.forEach(function (t) { type.appendChild(el('option', { value: t[0], text: t[1] })); });
+    var subject = el('input', { class: 'input', 'data-autofocus': '', placeholder: '예: 하반기 예산 확인 통화', autocomplete: 'off' });
+    var date = el('input', { class: 'input', type: 'date', value: U.iso(C.today), 'aria-label': '활동 일자' });
+    var note = el('textarea', { class: 'textarea', placeholder: '남길 내용이 있으면 적어 주세요. 비워 두어도 됩니다.' });
+    var subjField = el('label', { class: 'field' }, [
+      el('span', { class: 'field__label', html: '제목 <span class="req">*</span>' }), subject,
+      el('span', { class: 'field__error', text: '제목을 입력해야 활동을 남길 수 있습니다.' })
+    ]);
+
+    ui.modal({
+      title: acc.name + ' 활동 기록',
+      body: el('div', { class: 'stack gap-sm' }, [
+        el('div', { class: 'row gap-sm' }, [
+          el('label', { class: 'field grow' }, [el('span', { class: 'field__label', text: '유형' }), type]),
+          el('label', { class: 'field grow' }, [el('span', { class: 'field__label', text: '일자' }), date])
+        ]),
+        subjField,
+        el('label', { class: 'field' }, [el('span', { class: 'field__label', text: '메모' }), note])
+      ]),
+      actions: [
+        { label: '취소' },
+        { label: '기록', kind: 'primary', onClick: function () {
+            var text = subject.value.trim();
+            if (!text) { subjField.classList.add('is-invalid'); subject.focus(); return false; }
+            saveActivity(acc, type.value, text, date.value || U.iso(C.today), note.value.trim());
+          } }
+      ]
+    });
+  }
+
+  function saveActivity(acc, type, subject, dateStr, note) {
+    var past = U.days(dateStr, C.today) >= 0;
+    var rec = db.insert('activities', {
+      type: type, subject: subject, relatedType: 'account', relatedId: acc.id,
+      ownerId: me.id, dueDate: dateStr, doneAt: past ? new Date().toISOString() : null,
+      status: past ? '완료' : '예정', priority: '보통', note: note || ''
+    });
+    var prevLast = acc.lastActivityDate;
+    if (past && (!prevLast || dateStr > prevLast)) db.update('accounts', acc.id, { lastActivityDate: dateStr });
+    render();
+    ui.toast('“' + acc.name + '” 활동을 기록했습니다.', {
+      undo: function () {
+        db.remove('activities', rec.id);
+        db.update('accounts', acc.id, { lastActivityDate: prevLast });
+        render();
+      }
+    });
+  }
+
+  /* ── 새 광고주 ───────────────────────────────────────────────────── */
+  function newAccountModal() {
+    var name = el('input', { class: 'input', 'data-autofocus': '', placeholder: '광고주명', autocomplete: 'off' });
+    var nameField = el('label', { class: 'field' }, [
+      el('span', { class: 'field__label', html: '광고주명 <span class="req">*</span>' }), name,
+      el('span', { class: 'field__error', text: '광고주명을 입력해 주세요.' })
+    ]);
+    var industry = el('select', { class: 'select', 'aria-label': '산업' });
+    D.INDUSTRIES.forEach(function (i) { industry.appendChild(el('option', { value: i, text: i })); });
+    var tier = el('select', { class: 'select', 'aria-label': '등급' });
+    D.ACCOUNT_TIERS.forEach(function (t) { tier.appendChild(el('option', { value: t, text: t })); });
+    tier.value = 'Growth';
+    var owner = el('select', { class: 'select', 'aria-label': '담당자' });
+    ownerOptions.forEach(function (u) { owner.appendChild(el('option', { value: u.id, text: u.name + ' · ' + (u.title || u.role) })); });
+    if (db.get('users', me.id) && ownerOptions.some(function (u) { return u.id === me.id; })) owner.value = me.id;
+    var budget = el('input', { class: 'input input--num', type: 'number', min: '0', step: '10000000', value: '100000000', 'aria-label': '연간 예산(원)' });
+
+    ui.modal({
+      title: '새 광고주',
+      body: el('div', { class: 'stack gap-sm' }, [
+        nameField,
+        el('div', { class: 'row gap-sm' }, [
+          el('label', { class: 'field grow' }, [el('span', { class: 'field__label', text: '산업' }), industry]),
+          el('label', { class: 'field grow' }, [el('span', { class: 'field__label', text: '등급' }), tier])
+        ]),
+        el('div', { class: 'row gap-sm' }, [
+          el('label', { class: 'field grow' }, [el('span', { class: 'field__label', text: '담당자' }), owner]),
+          el('label', { class: 'field grow' }, [el('span', { class: 'field__label', text: '연간 예산 (원)' }), budget])
+        ]),
+        el('p', { class: 't-micro', text: '연락처와 계약 정보는 광고주 상세 화면에서 이어서 채울 수 있습니다.' })
+      ]),
+      actions: [
+        { label: '취소' },
+        { label: '만들기', kind: 'primary', onClick: function () {
+            var nm = name.value.trim();
+            if (!nm) { nameField.classList.add('is-invalid'); name.focus(); return false; }
+            var rec = db.insert('accounts', {
+              name: nm, industry: industry.value, tier: tier.value, ownerId: owner.value,
+              annualBudget: Number(budget.value) || 0, status: '거래중',
+              firstDealDate: U.iso(C.today), lastActivityDate: U.iso(C.today),
+              website: '', phone: '', address: '', employees: null, parentId: null, memo: ''
+            });
+            state.view = 'all'; state.page = 1;
+            U.qsa('[data-view]', $('#views')).forEach(function (b) { b.setAttribute('aria-pressed', String(b.dataset.view === 'all')); });
+            render();
+            ui.toast('“' + rec.name + '”을(를) 광고주 목록에 추가했습니다.', {
+              undo: function () { db.remove('accounts', rec.id); render(); }
+            });
+          } }
+      ]
+    });
+  }
+
+  /* ── 이벤트 배선 ─────────────────────────────────────────────────── */
+  U.live($('#views'), 'click', '[data-view]', function (e, t) {
+    state.view = t.dataset.view; state.page = 1;
+    U.qsa('[data-view]', $('#views')).forEach(function (b) { b.setAttribute('aria-pressed', String(b === t)); });
+    render();
+  });
+  U.on($('#q'), 'input', U.debounce(function () { state.q = $('#q').value; state.page = 1; render(); }, 180));
+  U.on($('#fTier'), 'change', function () { state.tier = this.value; state.page = 1; render(); });
+  U.on($('#fIndustry'), 'change', function () { state.industry = this.value; state.page = 1; render(); });
+  U.on($('#fOwner'), 'change', function () { state.owner = this.value; state.page = 1; render(); });
+  U.on($('#fStatus'), 'change', function () { state.status = this.value; state.page = 1; render(); });
+  U.on($('#reset'), 'click', function () {
+    state.view = 'all'; state.q = ''; state.tier = ''; state.industry = ''; state.owner = ''; state.status = '';
+    state.page = 1; state.sel = {};
+    $('#q').value = ''; $('#fTier').value = ''; $('#fIndustry').value = ''; $('#fOwner').value = ''; $('#fStatus').value = '';
+    U.qsa('[data-view]', $('#views')).forEach(function (b) { b.setAttribute('aria-pressed', String(b.dataset.view === 'all')); });
+    render();
+  });
+
+  U.on($('#selAll'), 'change', function () {
+    var on = this.checked;
+    pageRows.forEach(function (r) { if (on) state.sel[r.id] = true; else delete state.sel[r.id]; });
+    U.qsa('input[data-id]', $('#tableHost')).forEach(function (n) { n.checked = on; });
+    renderBulk();
+  });
+
+  U.live($('#tableHost'), 'change', 'input[data-id]', function (e, t) {
+    if (t.checked) state.sel[t.dataset.id] = true; else delete state.sel[t.dataset.id];
+    syncSelAll();
+    renderBulk();
+  });
+
+  U.live($('#tableHost'), 'click', '[data-menu]', function (e, t) {
+    e.stopPropagation();
+    var acc = db.get('accounts', t.dataset.menu);
+    if (!acc) return;
+    var items = [];
+    if (canEdit) items.push({ icon: '◇', label: '활동 기록', onClick: function () { activityModal(acc); } });
+    if (canOpp) items.push({ icon: '◆', label: '새 영업기회', onClick: function () {
+      window.location.href = 'opportunities.html?new=1&account=' + encodeURIComponent(acc.id);
+    } });
+    if (canEdit) items.push({ icon: '◎', label: '담당자 변경', onClick: function () { ownerModal([acc.id]); } });
+    if (items.length) ui.menu(t, items);
+  });
+
+  U.live($('#bulkbar'), 'click', '#bulkOwner', function () { ownerModal(selectedIds()); });
+  U.live($('#bulkbar'), 'click', '#bulkClear', function () { state.sel = {}; render(); });
+
+  U.live($('#pagerHost'), 'click', '[data-page]', function (e, t) {
+    var p = Number(t.dataset.page);
+    if (!p || p === state.page) return;
+    state.page = p;
+    render();
+    $('#tableHost').scrollIntoView({ block: 'start' });
+  });
+
+  if (canCreate) U.on($('#newAcc'), 'click', newAccountModal);
+
+  render();
+})();
+</script>
+</body>
+</html>

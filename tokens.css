@@ -1,0 +1,155 @@
+/* Hallmark · genre: modern-minimal · theme: Cobalt · tokens export
+ * paper band: cool light (L 98.5%, hue ~250) · display style: grotesk-sans · accent hue: electric cobalt
+ * Every colour and every font in this project references a token from this file.
+ * Inline hex / rgb() / oklch() outside this file is a defect.
+ */
+
+:root {
+  /* ── Paper & surfaces ───────────────────────────────────────────────
+     Cool engineered near-white. Never #fff, never #000. */
+  --color-paper:        oklch(98.5% 0.004 250);
+  --color-paper-2:      oklch(96.9% 0.005 252);
+  --color-paper-3:      oklch(94.4% 0.006 252);
+  --color-surface:      oklch(99.6% 0.002 250);
+  --color-surface-sunk: oklch(97.4% 0.005 252);
+
+  /* Translucent variants — derived from the tokens above so no page ever
+     needs to write a raw colour to get an overlay or a blurred bar. */
+  --color-paper-blur:  color-mix(in oklab, oklch(98.5% 0.004 250) 86%, transparent);
+  --color-veil:        color-mix(in oklab, oklch(24% 0.020 258) 34%, transparent);
+  --color-paper-print: oklch(100% 0 0);
+
+  /* ── Ink ──────────────────────────────────────────────────────────── */
+  --color-ink:    oklch(24% 0.020 258);
+  --color-ink-2:  oklch(34% 0.018 257);
+  --color-ink-3:  oklch(52% 0.015 256);
+  --color-ink-4:  oklch(66% 0.012 256);
+
+  /* ── Rules (hairlines do the structural work) ─────────────────────── */
+  --color-rule:   oklch(90.5% 0.006 252);
+  --color-rule-2: oklch(84% 0.008 253);
+  --color-rule-3: oklch(76% 0.010 254);
+
+  /* ── The one signal ───────────────────────────────────────────────── */
+  --color-accent:       oklch(58% 0.200 256);
+  --color-accent-press: oklch(50% 0.190 256);
+  --color-accent-soft:  oklch(94.5% 0.042 256);
+  --color-accent-soft-2:oklch(89% 0.070 256);
+  --color-accent-ink:   oklch(99% 0.004 250);
+  --color-focus:        oklch(52% 0.200 256);
+
+  /* ── Graphite band (the page's single dark beat) ──────────────────── */
+  --color-graphite:      oklch(22% 0.016 260);
+  --color-graphite-2:    oklch(26.5% 0.016 260);
+  --color-graphite-3:    oklch(31% 0.016 260);
+  --color-graphite-rule: oklch(36% 0.014 260);
+  --color-graphite-ink:  oklch(93% 0.008 255);
+  --color-graphite-ink-2:oklch(74% 0.012 256);
+  --color-graphite-ink-3:oklch(58% 0.014 258);
+
+  /* ── Semantic state marks ─────────────────────────────────────────────
+     Not decoration. A sales-ops console must distinguish 승인 / 지연 / 반려
+     at a glance; the accent alone cannot carry three meanings. Confined to
+     chips, dots, table marks and data series — never to a surface fill. */
+  --color-pos:        oklch(56% 0.130 155);
+  --color-pos-soft:   oklch(94.5% 0.042 155);
+  --color-warn:       oklch(64% 0.140 72);
+  --color-warn-soft:  oklch(95% 0.052 82);
+  --color-neg:        oklch(55% 0.175 25);
+  --color-neg-soft:   oklch(95% 0.038 25);
+  --color-idle:       oklch(60% 0.010 256);
+  --color-idle-soft:  oklch(94% 0.005 254);
+
+  /* ── Data-series ramp (charts only; ordered, cobalt-anchored) ─────── */
+  --color-series-1: oklch(58% 0.200 256);
+  --color-series-2: oklch(66% 0.130 218);
+  --color-series-3: oklch(56% 0.120 175);
+  --color-series-4: oklch(64% 0.140 128);
+  --color-series-5: oklch(70% 0.130 88);
+  --color-series-6: oklch(62% 0.150 32);
+  --color-series-7: oklch(54% 0.130 300);
+  --color-series-8: oklch(68% 0.030 256);
+
+  /* ── Type ─────────────────────────────────────────────────────────────
+     Space Grotesk carries Latin display; IBM Plex Sans KR carries Korean and
+     body Latin; JetBrains Mono carries labels, IDs, code and figures.
+     Malgun Gothic is the offline Windows fallback for Hangul. */
+  --font-display: "Space Grotesk", "IBM Plex Sans KR", "Malgun Gothic", system-ui, sans-serif;
+  --font-body:    "IBM Plex Sans KR", "Inter", "Malgun Gothic", system-ui, sans-serif;
+  --font-mono:    "JetBrains Mono", "IBM Plex Sans KR", ui-monospace, "Consolas", monospace;
+
+  --text-2xs:  0.6875rem;
+  --text-xs:   0.75rem;
+  --text-sm:   0.8125rem;
+  --text-base: 0.875rem;
+  --text-md:   1rem;
+  --text-lg:   1.125rem;
+  --text-xl:   1.375rem;
+  --text-2xl:  1.75rem;
+  --text-3xl:  2.25rem;
+  --text-4xl:  3rem;
+  --text-display-s: clamp(2rem, 3.4vw + 0.6rem, 3.25rem);
+  --text-display:   clamp(2.5rem, 5vw + 0.4rem, 4.5rem);
+
+  --leading-tight: 1.08;
+  --leading-snug:  1.28;
+  --leading-body:  1.6;
+  --leading-loose: 1.75;
+
+  --track-display: -0.028em;
+  --track-tight:   -0.012em;
+  --track-normal:  0;
+  --track-mono:    0.06em;
+
+  /* ── Space — 4 pt scale ───────────────────────────────────────────── */
+  --space-3xs: 0.125rem;
+  --space-2xs: 0.25rem;
+  --space-xs:  0.5rem;
+  --space-sm:  0.75rem;
+  --space-md:  1rem;
+  --space-lg:  1.5rem;
+  --space-xl:  2rem;
+  --space-2xl: 3rem;
+  --space-3xl: 4.5rem;
+  --space-4xl: 7rem;
+
+  /* ── Radii — drawn with a ruler, never pills ──────────────────────── */
+  --radius-xs: 4px;
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 14px;
+  --radius-round: 999px;
+
+  /* ── Rules ────────────────────────────────────────────────────────── */
+  --rule-hair: 1px;
+  --rule-thick: 2px;
+
+  /* ── Motion ───────────────────────────────────────────────────────── */
+  --ease-out:    cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-in:     cubic-bezier(0.7, 0, 0.84, 0);
+  --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
+  --dur-short: 120ms;
+  --dur-mid:   220ms;
+  --dur-long:  600ms;
+
+  /* ── Elevation — borders carry depth; shadow is a whisper ─────────── */
+  --lift-1: 0 1px 2px oklch(24% 0.02 258 / 0.05);
+  --lift-2: 0 2px 6px oklch(24% 0.02 258 / 0.07);
+  --lift-3: 0 12px 32px oklch(24% 0.02 258 / 0.12);
+
+  /* ── Z scale — six named levels, never 9999 ───────────────────────── */
+  --z-base: 0;
+  --z-sticky: 10;
+  --z-rail: 20;
+  --z-drawer: 30;
+  --z-nav: 40;
+  --z-modal: 50;
+  --z-toast: 60;
+
+  /* ── App shell metrics ────────────────────────────────────────────── */
+  --rail-w: 232px;
+  --rail-w-collapsed: 56px;
+  --topbar-h: 52px;
+  --subbar-h: 44px;
+  --page-max: 1560px;
+}

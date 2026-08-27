@@ -1,0 +1,15 @@
+{
+  "name": "closer-crm",
+  "version": "1.0.0",
+  "private": true,
+  "description": "CLOSER — 광고대행사 세일즈 오퍼레이션 플랫폼. Salesforce Sales Cloud 벤치마크 데모.",
+  "scripts": {
+    "start": "node serve.js",
+    "seed": "node tools/gen-seed.js",
+    "verify": "node tools/verify.js",
+    "roles": "node tools/role-check.js app/dashboard.html"
+  },
+  "devDependencies": {
+    "jsdom": "^29.1.1"
+  }
+}

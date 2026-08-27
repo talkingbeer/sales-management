@@ -1,0 +1,792 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>영업기회 · CLOSER</title>
+<meta name="description" content="CLOSER 영업기회 리스트뷰. 저장된 리스트뷰, 정렬, 필터, 인라인 편집, 대량 작업으로 파이프라인 전체를 표에서 다룹니다." />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=IBM+Plex+Sans+KR:wght@400;500;600&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="../tokens.css" />
+<link rel="stylesheet" href="../assets/css/base.css" />
+<link rel="stylesheet" href="../assets/css/components.css" />
+<link rel="stylesheet" href="../assets/css/app.css" />
+<style>
+  /* 이 화면에만 필요한 조각들 — 값은 모두 토큰을 참조합니다. */
+
+  /* 필터바 아래로 이어지는 리스트 프레임 (대량 작업 줄이 표 위에 들어오므로
+     components.css 의 .filterbar + .table-wrap 인접 규칙을 대신합니다) */
+  .list-frame {
+    border: var(--rule-hair) solid var(--color-rule);
+    border-radius: 0 0 var(--radius-md) var(--radius-md);
+    background: var(--color-surface);
+    overflow: hidden;
+  }
+  .list-frame .table-wrap { border: none; border-radius: 0; }
+  .list-frame table { min-width: 1080px; }
+
+  /* 선택 행 · 대량 작업 줄 */
+  .bulkbar {
+    display: flex; align-items: center; gap: var(--space-xs); flex-wrap: wrap;
+    padding: var(--space-xs) var(--space-md);
+    background: var(--color-accent-soft);
+    border-bottom: var(--rule-hair) solid var(--color-rule);
+  }
+  .bulkbar__count { font-family: var(--font-mono); font-size: var(--text-2xs); letter-spacing: var(--track-mono); color: var(--color-accent-press); }
+  /* .bulkbar 와 .check 는 display 를 직접 지정하므로 hidden 속성을 다시 살려 둡니다. */
+  .bulkbar[hidden], .check[hidden] { display: none; }
+
+  /* 표 하단 합계 행 */
+  .list-frame tfoot td {
+    background: var(--color-paper-2);
+    border-top: var(--rule-thick) solid var(--color-rule-2);
+    border-bottom: none;
+    color: var(--color-ink);
+    font-weight: 500;
+  }
+
+  /* 페이지네이션 줄 */
+  .list-foot {
+    display: flex; align-items: center; justify-content: space-between; gap: var(--space-sm);
+    flex-wrap: wrap;
+    padding: var(--space-xs) var(--space-md);
+    border-top: var(--rule-hair) solid var(--color-rule);
+    background: var(--color-paper-2);
+  }
+  .pager__gap { font-family: var(--font-mono); font-size: var(--text-2xs); color: var(--color-ink-4); padding-inline: var(--space-3xs); }
+  .pager__btn[disabled] { opacity: 0.4; cursor: not-allowed; }
+  .pager__btn[disabled]:hover { background: transparent; color: var(--color-ink-3); }
+
+  /* 더블클릭 인라인 편집 셀 */
+  .cell-edit {
+    display: inline-flex; align-items: center; max-width: 100%;
+    gap: var(--space-2xs);
+    padding: var(--space-3xs) var(--space-md) var(--space-3xs) var(--space-2xs);
+    border: var(--rule-hair) solid transparent;
+    border-radius: var(--radius-xs);
+    color: inherit; font: inherit; text-align: inherit;
+    transition: background-color var(--dur-short) var(--ease-out),
+                border-color var(--dur-short) var(--ease-out);
+  }
+  .cell-edit:hover { background: var(--color-surface); border-color: var(--color-rule-2); }
+  .cell-edit:active { border-color: var(--color-accent); }
+  .cell-edit[disabled] { opacity: 0.5; cursor: not-allowed; }
+  .cell-edit__val { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  td.cell-num .cell-edit { justify-content: flex-end; }
+
+  /* 저장된 리스트뷰 세그먼트의 건수 */
+  .seg__n { font-family: var(--font-mono); font-size: var(--text-2xs); color: var(--color-ink-4); margin-left: var(--space-2xs); }
+  .seg__item[aria-pressed="true"] .seg__n { color: var(--color-accent-press); }
+
+  .fbar__search { flex: 1 1 220px; min-width: 0; }
+  .fbar__sel { flex: 0 1 138px; min-width: 0; }
+
+  @media (max-width: 640px) {
+    .fbar__sel { flex: 1 1 44%; }
+  }
+</style>
+</head>
+<body class="app">
+<a class="skip-link" href="#main">본문으로 건너뛰기</a>
+
+<div class="app-main">
+  <main class="app-page" id="main">
+
+    <div class="page-head">
+      <div>
+        <h1 class="page-head__title">영업기회</h1>
+        <p class="page-head__sub" id="subline"></p>
+      </div>
+      <div class="page-head__acts" id="headActs">
+        <a class="btn btn--sm" href="pipeline.html">보드로 보기</a>
+        <a class="btn btn--sm" href="forecast.html">매출 예측</a>
+      </div>
+    </div>
+
+    <section aria-label="저장된 리스트뷰" class="mb-md">
+      <div class="scroll-x">
+        <div class="seg" id="views" data-verify="views"></div>
+      </div>
+      <p class="t-micro mt-xs" id="viewNote"></p>
+    </section>
+
+    <section aria-label="영업기회 목록">
+      <div class="filterbar">
+        <div class="fbar__search">
+          <input class="input" type="search" id="q" placeholder="딜명 또는 광고주 검색" aria-label="딜명·광고주 검색" autocomplete="off" />
+        </div>
+        <select class="select fbar__sel" id="fStage" aria-label="단계 필터"></select>
+        <select class="select fbar__sel" id="fType" aria-label="유형 필터"></select>
+        <select class="select fbar__sel" id="fOwner" aria-label="담당자 필터"></select>
+        <button class="btn btn--sm" type="button" id="clearBtn">필터 해제</button>
+        <span class="grow"></span>
+        <label class="check" id="selAllWrap"><input type="checkbox" id="selAll" /><span>페이지 전체 선택</span></label>
+        <span class="filterbar__count" id="countText"></span>
+      </div>
+
+      <div class="list-frame">
+        <div class="bulkbar" id="bulkbar" hidden></div>
+        <div id="tableHost" data-verify="tableHost"></div>
+        <div class="list-foot">
+          <span class="t-mono" id="rangeInfo"></span>
+          <div class="pager" id="pager" role="group" aria-label="페이지 이동"></div>
+        </div>
+      </div>
+    </section>
+
+    <footer class="hairline mt-2xl" style="padding-block:var(--space-md)">
+      <p class="t-mono t-faint">CLOSER · 데모 데이터 · 모든 회사·인물·연락처는 가상입니다</p>
+    </footer>
+  </main>
+</div>
+
+<script src="../assets/js/seed.js"></script>
+<script src="../assets/js/util.js"></script>
+<script src="../assets/js/store.js"></script>
+<script src="../assets/js/domain.js"></script>
+<script src="../assets/js/metrics.js"></script>
+<script src="../assets/js/insights.js"></script>
+<script src="../assets/js/ui.js"></script>
+<script src="../assets/js/charts.js"></script>
+<script src="../assets/js/shell.js"></script>
+<script>
+(function () {
+  'use strict';
+  var C = window.CLOSER, U = C.util, db = C.db, D = C.domain, M = C.metrics, ui = C.ui;
+  C.shell.mount('opportunities');
+
+  var $ = U.qs, esc = U.esc;
+  var me = db.me();
+  var canU = D.can('opportunities', 'U');
+  var canC = D.can('opportunities', 'C');
+  var PER = 25;
+
+  /* ── 저장된 리스트뷰 ────────────────────────────────────────────────
+     seed 의 listViews 레코드가 세그먼트를 만들고, URL ?filter= 가 같은 키를
+     받습니다. 저장뷰에 없는 키(overdue·won·lost)로 들어오면 그 키도 세그먼트에
+     한 칸 추가해 지금 무엇을 보고 있는지 항상 보이게 합니다. */
+  var VIEWS = {
+    'mine-open':       { label: '내 진행 딜',    note: '내가 담당하는 진행 중 영업기회입니다.',
+      test: function (o) { return o.ownerId === me.id && D.isOpen(o); } },
+    'closing-quarter': { label: '이번 분기 마감', note: '이번 분기 안에 마감일이 잡힌 진행 중 영업기회입니다.',
+      test: function (o) { var s = M.scope(); return D.isOpen(o) && U.days(s.from, o.closeDate) >= 0 && U.days(o.closeDate, s.to) >= 0; } },
+    'stalled':         { label: '정체 딜',       note: '단계별 허용 체류일을 넘긴 진행 중 영업기회입니다.',
+      test: function (o) { return D.isStalled(o); } },
+    'overdue':         { label: '마감일 초과',   note: '마감일이 지났는데 아직 열려 있는 영업기회입니다.',
+      test: function (o) { return D.isOverdue(o); } },
+    'won':             { label: '성사',          note: '계약체결로 마감된 영업기회입니다.',
+      test: function (o) { return D.isWon(o); } },
+    'lost':            { label: '실주',          note: '실주로 마감된 영업기회입니다. 실주 사유는 상세에서 확인합니다.',
+      test: function (o) { return D.isLost(o); } },
+    'all':             { label: '전체',          note: '단계와 상관없이 모든 영업기회입니다.',
+      test: function () { return true; } }
+  };
+  var savedKeys = db.where('listViews', function (v) { return v.object === 'opportunities'; })
+    .map(function (v) { return v.filter; })
+    .filter(function (k) { return !!VIEWS[k]; });
+  savedKeys.push('all');
+
+  /* ── 상태 ───────────────────────────────────────────────────────── */
+  var urlFilter = U.param('filter', '');
+  var mineCount = db.where('opportunities', VIEWS['mine-open'].test).length;
+  var state = {
+    filter: VIEWS[urlFilter] ? urlFilter : (mineCount ? 'mine-open' : 'all'),
+    q: U.param('q', '') || '',
+    stage: '',
+    type: '',
+    owner: '',
+    sort: { key: 'closeDate', dir: 'asc' },
+    page: 1,
+    sel: {},
+    focusSort: false
+  };
+
+  /* ── 표 정의 ────────────────────────────────────────────────────── */
+  function editable(o, field, innerHTML, label) {
+    if (!canU) return innerHTML;
+    return '<button type="button" class="cell-edit" data-edit="' + esc(field) + '" data-id="' + esc(o.id) + '"' +
+      ' title="더블클릭하면 편집" aria-label="' + esc(label) + ' 편집">' +
+      '<span class="cell-edit__val">' + innerHTML + '</span>' +
+      '<span class="cell-edit__pen" aria-hidden="true">✎</span></button>';
+  }
+
+  var cols = [
+    { key: 'name', label: '영업기회명', cell: function (o) {
+        return '<a class="link--quiet" href="opportunity.html?id=' + encodeURIComponent(o.id) + '">' + esc(o.name) + '</a>' +
+          (D.isStalled(o) ? ' <span class="chip chip--warn">정체 ' + D.daysInStage(o) + '일</span>' : '');
+      } },
+    { key: 'account', label: '광고주', cell: function (o) {
+        var a = db.accountOf(o);
+        return a ? '<a class="link--quiet" href="account.html?id=' + encodeURIComponent(a.id) + '">' + esc(a.name) + '</a>' : '';
+      } },
+    { key: 'stage', label: '단계', cell: function (o) {
+        var st = D.stage(o.stage);
+        return ui.chip(o.stage, st.won ? 'pos' : st.lost ? 'neg' : st.cast === 'Commit' ? 'accent' : null);
+      } },
+    { key: 'amount', label: '금액', align: 'right', cell: function (o) {
+        return editable(o, 'amount', '<span class="t-num">' + U.won(o.amount) + '</span>', '금액');
+      } },
+    { key: 'weighted', label: '가중', align: 'right', cell: function (o) {
+        return '<span class="t-muted t-num">' + U.won(D.weighted(o)) + '</span>';
+      } },
+    { key: 'prob', label: '확률', align: 'right', cell: function (o) {
+        return '<span class="t-muted">' + U.pct(D.stage(o.stage).prob) + '</span>';
+      } },
+    { key: 'type', label: '유형', cell: function (o) { return o.type ? '<span class="t-small">' + esc(o.type) + '</span>' : ''; } },
+    { key: 'owner', label: '담당자', cell: function (o) { return ui.personCell(db.get('users', o.ownerId)); } },
+    { key: 'closeDate', label: '마감일', align: 'right', cell: function (o) {
+        var left = U.days(C.today, o.closeDate);
+        var cls = D.isOpen(o) && left < 0 ? 't-neg' : D.isOpen(o) && left < 8 ? 't-warn' : 't-muted';
+        return editable(o, 'closeDate', '<span class="' + cls + ' t-num">' + U.fmtDate(o.closeDate) + '</span>', '마감일');
+      } },
+    { key: 'next', label: '다음 액션', cell: function (o) {
+        var txt = o.nextStep ? esc(o.nextStep) : '<span class="t-faint">미입력</span>';
+        return editable(o, 'nextStep', '<span class="t-small">' + txt + '</span>', '다음 액션');
+      } },
+    { key: 'createdAt', label: '생성일', align: 'right', cell: function (o) {
+        return '<span class="t-muted t-num">' + U.fmtDate(o.createdAt) + '</span>';
+      } }
+  ];
+
+  function sortVal(o, key) {
+    if (key === 'account') { var a = db.accountOf(o); return a ? a.name : ''; }
+    if (key === 'owner') { var u = db.get('users', o.ownerId); return u ? u.name : ''; }
+    if (key === 'stage') return D.stage(o.stage).order;
+    if (key === 'prob') return D.stage(o.stage).prob;
+    if (key === 'weighted') return D.weighted(o);
+    if (key === 'next') return o.nextStep || '';
+    if (key === 'amount') return o.amount || 0;
+    var v = o[key];
+    return (v === null || v === void 0) ? '' : v;
+  }
+
+  /* ── 필터링 ─────────────────────────────────────────────────────── */
+  function passView(o, key) { return (VIEWS[key] || VIEWS.all).test(o); }
+
+  function filtered() {
+    var q = state.q.trim().toLowerCase();
+    var list = db.where('opportunities', function (o) {
+      if (!passView(o, state.filter)) return false;
+      if (state.stage && o.stage !== state.stage) return false;
+      if (state.type && o.type !== state.type) return false;
+      if (state.owner && o.ownerId !== state.owner) return false;
+      if (q) {
+        var a = db.accountOf(o);
+        if (String(o.name).toLowerCase().indexOf(q) === -1 &&
+            !(a && String(a.name).toLowerCase().indexOf(q) > -1)) return false;
+      }
+      return true;
+    });
+    return U.sortBy(list, function (o) { return sortVal(o, state.sort.key); }, state.sort.dir);
+  }
+
+  function hasFilter() { return !!(state.q.trim() || state.stage || state.type || state.owner); }
+
+  /* ── 필터바 채우기 (한 번만) ────────────────────────────────────── */
+  function option(v, label) { return '<option value="' + esc(v) + '">' + esc(label) + '</option>'; }
+  $('#fStage').innerHTML = option('', '단계 전체') + D.STAGES.map(function (s) { return option(s.key, s.key); }).join('');
+  $('#fType').innerHTML = option('', '유형 전체') + D.OPP_TYPES.map(function (t) { return option(t, t); }).join('');
+  var ownerIds = U.uniq(db.all('opportunities').map(function (o) { return o.ownerId; }));
+  var ownerUsers = U.sortBy(ownerIds.map(function (id) { return db.get('users', id); }).filter(Boolean), 'name');
+  $('#fOwner').innerHTML = option('', '담당자 전체') + ownerUsers.map(function (u) { return option(u.id, u.name); }).join('');
+
+  if (canC) {
+    $('#headActs').insertAdjacentHTML('beforeend',
+      '<button class="btn btn--primary btn--sm" type="button" id="newBtn">새 영업기회</button>');
+    U.on($('#newBtn'), 'click', function () { openNew(); });
+  }
+  if (!canU) {
+    $('#selAllWrap').hidden = true;
+  }
+
+  /* ── 렌더 ───────────────────────────────────────────────────────── */
+  function render() {
+    var rows = filtered();
+    var pages = Math.max(1, Math.ceil(rows.length / PER));
+    if (state.page > pages) state.page = pages;
+    var start = (state.page - 1) * PER;
+    var pageRows = rows.slice(start, start + PER);
+
+    renderViews();
+    renderSubline();
+    $('#countText').textContent = U.num(rows.length) + '건' + (hasFilter() ? ' (필터 적용)' : '');
+    $('#clearBtn').disabled = !hasFilter();
+
+    var host = $('#tableHost');
+    host.innerHTML = '';
+    var wrap = ui.table(cols, pageRows, {
+      selectable: canU,
+      sort: state.sort,
+      onSort: setSort,
+      empty: {
+        title: '조건에 맞는 영업기회가 없습니다',
+        body: hasFilter() ? '검색어나 필터를 넓혀 보세요.' : '다른 리스트뷰를 고르거나 새 영업기회를 만들어 보세요.'
+      }
+    });
+    if (rows.length) addTotals(wrap, rows, pageRows);
+    host.appendChild(wrap);
+
+    U.qsa('#tableHost input[type="checkbox"][data-id]').forEach(function (cb) {
+      if (state.sel[cb.dataset.id]) { cb.checked = true; cb.closest('tr').classList.add('is-selected'); }
+    });
+    var allOnPage = pageRows.length > 0 && pageRows.every(function (o) { return !!state.sel[o.id]; });
+    $('#selAll').checked = allOnPage;
+
+    renderBulk();
+    renderFoot(rows.length, start, pageRows.length, pages);
+
+    if (state.focusSort) {
+      state.focusSort = false;
+      var th = $('#tableHost th[aria-sort]');
+      if (th) th.focus();
+    }
+  }
+
+  function renderViews() {
+    var keys = savedKeys.slice();
+    if (keys.indexOf(state.filter) === -1) keys.unshift(state.filter);
+    $('#views').innerHTML = keys.map(function (k) {
+      var v = VIEWS[k];
+      var n = db.where('opportunities', v.test).length;
+      return '<button class="seg__item" type="button" data-view="' + esc(k) + '" aria-pressed="' + (k === state.filter) + '">' +
+        esc(v.label) + '<span class="seg__n">' + U.num(n) + '</span></button>';
+    }).join('');
+    $('#viewNote').textContent = (VIEWS[state.filter] || VIEWS.all).note;
+  }
+
+  function renderSubline() {
+    var all = db.all('opportunities');
+    var open = all.filter(D.isOpen);
+    $('#subline').innerHTML = U.fmtDate(C.today) + ' 기준 · 전체 <strong>' + U.num(all.length) + '건</strong> · ' +
+      '진행 중 <strong>' + U.num(open.length) + '건</strong> · 진행 금액 ' + U.won(U.sum(open, 'amount')) +
+      ' · 가중 ' + U.won(U.sum(open, D.weighted));
+  }
+
+  function addTotals(wrap, rows, pageRows) {
+    var tbl = wrap.querySelector('table');
+    if (!tbl) return;
+    var keys = cols.map(function (c) { return c.key; });
+    var lead = (canU ? 1 : 0) + keys.indexOf('amount');
+    var trail = cols.length - (keys.indexOf('weighted') + 1);
+    var tf = U.el('tfoot', {}, [
+      U.el('tr', {}, [
+        U.el('td', { colspan: lead, class: 't-mono', text: '합계 · ' + U.num(rows.length) + '건' }),
+        U.el('td', { class: 'cell-num', text: U.won(U.sum(rows, 'amount')) }),
+        U.el('td', { class: 'cell-num', text: U.won(U.sum(rows, D.weighted)) }),
+        U.el('td', { colspan: trail, class: 't-micro',
+          text: '이 페이지 ' + U.num(pageRows.length) + '건 · ' + U.won(U.sum(pageRows, 'amount')) })
+      ])
+    ]);
+    tbl.appendChild(tf);
+  }
+
+  function renderFoot(total, start, shown, pages) {
+    $('#rangeInfo').textContent = total
+      ? (U.num(start + 1) + '–' + U.num(start + shown) + ' / ' + U.num(total) + '건')
+      : '표시할 레코드 없음';
+
+    var out = ['<button class="pager__btn" type="button" data-page="' + (state.page - 1) + '"' +
+      (state.page <= 1 ? ' disabled' : '') + '>이전</button>'];
+    var list = [];
+    for (var i = 1; i <= pages; i++) {
+      if (i === 1 || i === pages || Math.abs(i - state.page) <= 1) list.push(i);
+      else if (list[list.length - 1] !== '…') list.push('…');
+    }
+    list.forEach(function (p) {
+      if (p === '…') { out.push('<span class="pager__gap" aria-hidden="true">…</span>'); return; }
+      out.push('<button class="pager__btn" type="button" data-page="' + p + '"' +
+        (p === state.page ? ' aria-current="page"' : '') + ' aria-label="' + p + '페이지">' + p + '</button>');
+    });
+    out.push('<button class="pager__btn" type="button" data-page="' + (state.page + 1) + '"' +
+      (state.page >= pages ? ' disabled' : '') + '>다음</button>');
+    $('#pager').innerHTML = out.join('');
+  }
+
+  /* ── 정렬 ───────────────────────────────────────────────────────── */
+  function setSort(key) {
+    if (state.sort.key === key) state.sort = { key: key, dir: state.sort.dir === 'asc' ? 'desc' : 'asc' };
+    else state.sort = { key: key, dir: 'asc' };
+    state.page = 1;
+    state.focusSort = true;
+    render();
+  }
+
+  /* ── 선택과 대량 작업 ───────────────────────────────────────────── */
+  function selectedIds() { return Object.keys(state.sel); }
+
+  function renderBulk() {
+    var ids = selectedIds();
+    var bar = $('#bulkbar');
+    if (!canU || !ids.length) { bar.hidden = true; bar.innerHTML = ''; return; }
+    bar.hidden = false;
+    bar.innerHTML =
+      '<span class="bulkbar__count">' + U.num(ids.length) + '건 선택됨</span>' +
+      '<button class="btn btn--sm" type="button" data-bulk="owner">담당자 일괄 변경</button>' +
+      '<button class="btn btn--sm" type="button" data-bulk="stage">단계 일괄 변경</button>' +
+      '<button class="btn btn--sm" type="button" data-bulk="defer">마감일 일괄 연기</button>' +
+      '<span class="grow"></span>' +
+      '<button class="btn btn--ghost btn--sm" type="button" data-bulk="clear">선택 해제</button>';
+  }
+
+  U.live($('#tableHost'), 'change', 'input[type="checkbox"][data-id]', function (e, cb) {
+    if (cb.checked) state.sel[cb.dataset.id] = true; else delete state.sel[cb.dataset.id];
+    var tr = cb.closest('tr');
+    if (tr) tr.classList.toggle('is-selected', cb.checked);
+    var boxes = U.qsa('#tableHost input[type="checkbox"][data-id]');
+    $('#selAll').checked = boxes.length > 0 && boxes.every(function (b) { return b.checked; });
+    renderBulk();
+  });
+
+  U.on($('#selAll'), 'change', function () {
+    var on = this.checked;
+    U.qsa('#tableHost input[type="checkbox"][data-id]').forEach(function (cb) {
+      cb.checked = on;
+      if (on) state.sel[cb.dataset.id] = true; else delete state.sel[cb.dataset.id];
+      var tr = cb.closest('tr');
+      if (tr) tr.classList.toggle('is-selected', on);
+    });
+    renderBulk();
+  });
+
+  U.live($('#bulkbar'), 'click', '[data-bulk]', function (e, b) {
+    var kind = b.dataset.bulk;
+    if (kind === 'clear') { state.sel = {}; render(); return; }
+    if (kind === 'owner') bulkOwner();
+    if (kind === 'stage') bulkStage();
+    if (kind === 'defer') bulkDefer();
+  });
+
+  /** 낙관적 일괄 변경 — 즉시 반영하고 토스트의 되돌리기로 원복합니다. */
+  function applyBulk(ids, patchOf, message) {
+    var before = ids.map(function (id) {
+      var o = db.get('opportunities', id);
+      var patch = patchOf(o), prev = {};
+      Object.keys(patch).forEach(function (k) { prev[k] = o[k]; });
+      return { id: id, patch: patch, prev: prev };
+    });
+    before.forEach(function (b) { db.update('opportunities', b.id, b.patch); });
+    state.sel = {};
+    render();
+    ui.toast(message, { undo: function () {
+      before.forEach(function (b) { db.update('opportunities', b.id, b.prev); });
+      render();
+    } });
+  }
+
+  function pickModal(title, labelText, options, confirmLabel, onPick) {
+    var sel = U.el('select', { class: 'select', 'data-autofocus': '' });
+    sel.innerHTML = options.map(function (o) { return option(o.value, o.label); }).join('');
+    var body = U.el('div', { class: 'stack gap-sm' }, [
+      U.el('p', { class: 't-small', text: U.num(selectedIds().length) + '건에 함께 적용됩니다.' }),
+      U.el('label', { class: 'field' }, [
+        U.el('span', { class: 'field__label', text: labelText }),
+        sel
+      ])
+    ]);
+    ui.modal({
+      title: title, body: body,
+      actions: [
+        { label: '취소' },
+        { label: confirmLabel, kind: 'primary', onClick: function () { onPick(sel.value); } }
+      ]
+    });
+  }
+
+  function bulkOwner() {
+    var ids = selectedIds();
+    var people = U.sortBy(db.where('users', function (u) {
+      return u.active !== false && (u.role === '영업사원' || u.role === '영업관리자');
+    }), 'name');
+    pickModal('담당자 일괄 변경', '새 담당자',
+      people.map(function (u) { return { value: u.id, label: u.name + ' · ' + u.role }; }),
+      '변경', function (userId) {
+        var name = db.userName(userId);
+        applyBulk(ids, function () { return { ownerId: userId }; },
+          U.num(ids.length) + '건의 담당자를 ' + name + '님으로 바꿨습니다.');
+      });
+  }
+
+  function bulkStage() {
+    var ids = selectedIds();
+    pickModal('단계 일괄 변경', '새 단계 (진행 단계만)',
+      D.OPEN_STAGES.map(function (s) { return { value: s.key, label: s.key + ' · 확률 ' + s.prob + '%' }; }),
+      '변경', function (stage) {
+        var st = D.stage(stage);
+        var now = new Date(C.today).toISOString();
+        applyBulk(ids, function () {
+          /* 마감된 딜을 다시 진행 단계로 되돌리면 실주 사유는 더 이상 유효하지 않습니다. */
+          return { stage: stage, probability: st.prob, forecastCategory: st.cast, stageEnteredAt: now, lossReason: null };
+        }, U.num(ids.length) + '건을 ' + stage + ' 단계로 옮겼습니다.');
+      });
+  }
+
+  function bulkDefer() {
+    var ids = selectedIds();
+    pickModal('마감일 일괄 연기', '연기 기간',
+      [{ value: '7', label: '7일 뒤로' }, { value: '14', label: '14일 뒤로' }, { value: '30', label: '30일 뒤로' }],
+      '연기', function (n) {
+        var days = Number(n);
+        applyBulk(ids, function (o) { return { closeDate: U.iso(U.addDays(o.closeDate, days)) }; },
+          U.num(ids.length) + '건의 마감일을 ' + days + '일 미뤘습니다.');
+      });
+  }
+
+  /* ── 인라인 편집 ────────────────────────────────────────────────────
+     더블클릭(또는 Enter·F2)으로 셀이 입력으로 바뀝니다.
+     Enter·blur → 저장, Esc → 취소. 저장은 되돌리기 토스트를 함께 띄웁니다. */
+  var FIELD_LABEL = { amount: '금액', closeDate: '마감일', nextStep: '다음 액션' };
+
+  U.live($('#tableHost'), 'dblclick', '.cell-edit', function (e, b) { beginEdit(b); });
+  U.live($('#tableHost'), 'keydown', '.cell-edit', function (e, b) {
+    if (e.key === 'Enter' || e.key === 'F2') { e.preventDefault(); beginEdit(b); }
+  });
+
+  function beginEdit(btn) {
+    var td = btn.closest('td');
+    var id = btn.dataset.id, field = btn.dataset.edit;
+    var o = db.get('opportunities', id);
+    if (!o || !td || td.querySelector('input')) return;
+
+    var input = U.el('input', {
+      class: 'input' + (field === 'amount' ? ' input--num' : ''),
+      type: field === 'amount' ? 'number' : field === 'closeDate' ? 'date' : 'text',
+      value: field === 'amount' ? String(o.amount || 0) : field === 'closeDate' ? U.iso(o.closeDate) : (o.nextStep || ''),
+      'aria-label': FIELD_LABEL[field] + ' 편집',
+      autocomplete: 'off'
+    });
+    if (field === 'amount') { input.step = '100000'; input.min = '0'; }
+    if (field === 'nextStep') input.maxLength = 80;
+
+    var prevHTML = td.innerHTML, closed = false;
+    td.innerHTML = '';
+    td.appendChild(input);
+    input.focus();
+    if (input.select) input.select();
+
+    function restore() {
+      td.innerHTML = prevHTML;
+      var back = td.querySelector('.cell-edit');
+      if (back) back.focus();
+    }
+    function cancel() { if (closed) return; closed = true; restore(); }
+    function commit(fromKey) {
+      if (closed) return;
+      var raw = input.value;
+      var val;
+      if (field === 'amount') {
+        val = Math.round(Number(raw));
+        if (raw === '' || isNaN(val) || val < 0) {
+          input.classList.add('is-error');
+          ui.toast('금액은 0 이상의 숫자여야 합니다.', { kind: 'neg' });
+          if (fromKey) { input.focus(); return; }
+          closed = true; restore(); return;
+        }
+      } else if (field === 'closeDate') {
+        if (!raw || isNaN(new Date(raw).getTime())) {
+          input.classList.add('is-error');
+          ui.toast('마감일을 날짜 형식으로 입력해 주세요.', { kind: 'neg' });
+          if (fromKey) { input.focus(); return; }
+          closed = true; restore(); return;
+        }
+        val = U.iso(raw);
+      } else {
+        val = raw.trim();
+      }
+      closed = true;
+      var cur = o[field];
+      if (String(val) === String(cur === null || cur === void 0 ? '' : cur)) { restore(); return; }
+
+      var prev = o[field], patch = {};
+      patch[field] = val;
+      db.update('opportunities', id, patch);
+      render();
+      var cell = $('#tableHost [data-edit="' + field + '"][data-id="' + id + '"]');
+      if (cell) cell.focus();
+      ui.toast('“' + o.name + '”의 ' + FIELD_LABEL[field] + '을 바꿨습니다.', { undo: function () {
+        var back = {};
+        back[field] = prev;
+        db.update('opportunities', id, back);
+        render();
+      } });
+    }
+
+    input.addEventListener('keydown', function (e) {
+      if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); cancel(); }
+      else if (e.key === 'Enter') { e.preventDefault(); commit(true); }
+    });
+    input.addEventListener('blur', function () { commit(false); });
+  }
+
+  /* ── 새 영업기회 ────────────────────────────────────────────────── */
+  function fieldBox(labelText, control, required) {
+    return U.el('label', { class: 'field' }, [
+      U.el('span', { class: 'field__label', html: esc(labelText) + (required ? ' <span class="req">*</span>' : '') }),
+      control,
+      U.el('span', { class: 'field__error', text: '이 항목을 확인해 주세요.' })
+    ]);
+  }
+
+  function openNew() {
+    if (!canC) return;
+    var nameIn = U.el('input', { class: 'input', 'data-autofocus': '', autocomplete: 'off', placeholder: '예) 광고주명 · 하반기 브랜드 캠페인' });
+    var accSel = U.el('select', { class: 'select' });
+    accSel.innerHTML = U.sortBy(db.all('accounts'), 'name')
+      .map(function (a) { return option(a.id, a.name + ' · ' + a.tier); }).join('');
+    var amtIn = U.el('input', { class: 'input input--num', type: 'number', min: '0', step: '100000', value: '0' });
+    var dateIn = U.el('input', { class: 'input', type: 'date', value: U.iso(U.addDays(C.today, 30)) });
+    var stageSel = U.el('select', { class: 'select' });
+    stageSel.innerHTML = D.OPEN_STAGES.map(function (s) { return option(s.key, s.key + ' · 확률 ' + s.prob + '%'); }).join('');
+    var typeSel = U.el('select', { class: 'select' });
+    typeSel.innerHTML = D.OPP_TYPES.map(function (t) { return option(t, t); }).join('');
+    var ownerSel = U.el('select', { class: 'select' });
+    var assignable = U.sortBy(db.where('users', function (u) {
+      return u.active !== false && (u.role === '영업사원' || u.role === '영업관리자');
+    }), 'name');
+    if (!assignable.length) assignable = [me];
+    ownerSel.innerHTML = assignable.map(function (u) { return option(u.id, u.name + ' · ' + u.role); }).join('');
+    ownerSel.value = assignable.some(function (u) { return u.id === me.id; }) ? me.id : assignable[0].id;
+
+    var body = U.el('div', { class: 'stack gap-sm' }, [
+      fieldBox('딜명', nameIn, true),
+      fieldBox('광고주', accSel, true),
+      U.el('div', { class: 'grid grid--2' }, [
+        fieldBox('금액 (원)', amtIn, true),
+        fieldBox('마감일', dateIn, true)
+      ]),
+      U.el('div', { class: 'grid grid--2' }, [
+        fieldBox('단계', stageSel, true),
+        fieldBox('유형', typeSel, true)
+      ]),
+      fieldBox('담당자', ownerSel, true),
+      U.el('p', { class: 't-micro', text: '확률과 예측 카테고리는 선택한 단계에서 자동으로 정해집니다.' })
+    ]);
+
+    var layer = ui.modal({
+      title: '새 영업기회', body: body,
+      actions: [
+        { label: '취소' },
+        { label: '저장', kind: 'primary', onClick: function () { return save(); } }
+      ]
+    });
+
+    function mark(control, bad) {
+      var f = control.closest('.field');
+      if (f) f.classList.toggle('is-invalid', bad);
+      return !bad;
+    }
+
+    function save() {
+      var name = nameIn.value.trim();
+      var amount = Math.round(Number(amtIn.value));
+      var ok = mark(nameIn, !name);
+      ok = mark(amtIn, amtIn.value === '' || isNaN(amount) || amount < 0) && ok;
+      ok = mark(dateIn, !dateIn.value || isNaN(new Date(dateIn.value).getTime())) && ok;
+      ok = mark(accSel, !accSel.value) && ok;
+      if (!ok) {
+        ui.toast('입력을 확인해 주세요. 표시된 항목이 비어 있거나 형식이 맞지 않습니다.', { kind: 'neg' });
+        return false;
+      }
+      var st = D.stage(stageSel.value);
+      var now = new Date(C.today).toISOString();
+      var firstContact = db.first('contacts', function (c) { return c.accountId === accSel.value; });
+      var rec = db.insert('opportunities', {
+        name: name,
+        accountId: accSel.value,
+        ownerId: ownerSel.value,
+        stage: st.key,
+        amount: amount,
+        probability: st.prob,
+        forecastCategory: st.cast,
+        closeDate: U.iso(dateIn.value),
+        createdAt: now,
+        stageEnteredAt: now,
+        type: typeSel.value,
+        source: null,
+        competitorId: null,
+        nextStep: '',
+        lossReason: null,
+        contactId: firstContact ? firstContact.id : null,
+        campaignId: null,
+        teamIds: []
+      });
+      layer.close();
+      revealRecord(rec);
+      ui.toast('“' + rec.name + '” 영업기회를 목록에 추가했습니다.', { undo: function () {
+        db.remove('opportunities', rec.id);
+        render();
+      } });
+    }
+  }
+
+  /** 새로 만든 레코드가 현재 뷰에서 안 보이면 보이는 뷰로 옮기고 그 페이지로 이동. */
+  function revealRecord(rec) {
+    state.q = ''; $('#q').value = '';
+    state.stage = ''; $('#fStage').value = '';
+    state.type = ''; $('#fType').value = '';
+    state.owner = ''; $('#fOwner').value = '';
+    if (!passView(rec, state.filter)) {
+      state.filter = passView(rec, 'mine-open') ? 'mine-open' : 'all';
+      syncURL();
+    }
+    var rows = filtered();
+    var idx = rows.map(function (o) { return o.id; }).indexOf(rec.id);
+    state.page = idx > -1 ? Math.floor(idx / PER) + 1 : 1;
+    render();
+  }
+
+  /* ── 필터바 · 리스트뷰 이벤트 ───────────────────────────────────── */
+  U.live($('#views'), 'click', '[data-view]', function (e, b) {
+    state.filter = b.dataset.view;
+    state.page = 1;
+    state.sel = {};
+    syncURL();
+    render();
+  });
+
+  U.on($('#q'), 'input', U.debounce(function () {
+    state.q = $('#q').value;
+    state.page = 1;
+    render();
+  }, 200));
+
+  ['fStage', 'fType', 'fOwner'].forEach(function (id) {
+    U.on($('#' + id), 'change', function () {
+      state[id === 'fStage' ? 'stage' : id === 'fType' ? 'type' : 'owner'] = this.value;
+      state.page = 1;
+      render();
+    });
+  });
+
+  U.on($('#clearBtn'), 'click', function () {
+    state.q = ''; state.stage = ''; state.type = ''; state.owner = '';
+    $('#q').value = ''; $('#fStage').value = ''; $('#fType').value = ''; $('#fOwner').value = '';
+    state.page = 1;
+    render();
+  });
+
+  U.live($('#pager'), 'click', '[data-page]', function (e, b) {
+    if (b.disabled) return;
+    var p = Number(b.dataset.page);
+    if (!p || p === state.page) return;
+    state.page = p;
+    render();
+    var top = $('#tableHost');
+    if (top && top.scrollIntoView) top.scrollIntoView({ block: 'start' });
+  });
+
+  function syncURL() {
+    try {
+      window.history.replaceState(null, '', 'opportunities.html?filter=' + encodeURIComponent(state.filter));
+    } catch (err) { /* file:// 에서는 주소를 못 바꿀 수 있습니다 — 화면 상태는 그대로 유지됩니다. */ }
+  }
+
+  /* ── 시작 ───────────────────────────────────────────────────────── */
+  $('#q').value = state.q;
+  render();
+  if (U.param('new') === '1' && canC) openNew();
+  U.revealAll();
+})();
+</script>
+</body>
+</html>

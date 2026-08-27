@@ -1,0 +1,972 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>타임시트 · CLOSER</title>
+<meta name="description" content="CLOSER 타임시트. 주 단위 그리드에 배정된 제작 건의 투입 시간을 0.5시간 단위로 기록하고, 제출·승인 과정을 거쳐 가동률과 티켓 실투입에 반영합니다." />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=IBM+Plex+Sans+KR:wght@400;500;600&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="../tokens.css" />
+<link rel="stylesheet" href="../assets/css/base.css" />
+<link rel="stylesheet" href="../assets/css/components.css" />
+<link rel="stylesheet" href="../assets/css/app.css" />
+<style>
+  /* 이 화면에만 필요한 조각. 색·간격·반경·이징은 모두 토큰만 사용합니다. */
+  .list-card {
+    border: var(--rule-hair) solid var(--color-rule);
+    border-top: none;
+    border-radius: 0 0 var(--radius-md) var(--radius-md);
+    background: var(--color-surface);
+  }
+  .pagerbar {
+    display: flex; align-items: center; justify-content: space-between;
+    gap: var(--space-sm); flex-wrap: wrap;
+    padding: var(--space-xs) var(--space-md);
+    border-top: var(--rule-hair) solid var(--color-rule);
+  }
+  .filterbar .select { min-height: 28px; height: 28px; font-size: var(--text-xs); max-width: 190px; }
+
+  /* 주 선택기 — 라벨은 절대 줄바꿈되지 않습니다. */
+  .weekpick { display: flex; align-items: center; gap: var(--space-2xs); }
+  .weekpick__label {
+    font-family: var(--font-mono); font-size: var(--text-xs); color: var(--color-ink);
+    white-space: nowrap; padding-inline: var(--space-2xs); font-variant-numeric: tabular-nums;
+  }
+
+  /* 그리드 — 좁은 화면에서는 표가 제 안에서만 가로로 흐릅니다. */
+  #gridHost .table th, #gridHost .table td { white-space: nowrap; }
+  #gridHost .table th:first-child, #gridHost .table td:first-child {
+    position: sticky; left: 0; z-index: var(--z-sticky);
+    background: var(--color-surface); min-width: 176px;
+    box-shadow: inset -1px 0 0 var(--color-rule);
+  }
+  #gridHost .table th:last-child, #gridHost .table td:last-child {
+    position: sticky; right: 0; z-index: var(--z-sticky);
+    background: var(--color-surface);
+    box-shadow: inset 1px 0 0 var(--color-rule);
+  }
+  #gridHost .table thead th { background: var(--color-paper-2); }
+  #gridHost .table tfoot td {
+    background: var(--color-paper-2);
+    border-top: var(--rule-hair) solid var(--color-rule-2);
+    border-bottom: none;
+    font-family: var(--font-mono); font-variant-numeric: tabular-nums;
+  }
+  .ts-wknd { background: var(--color-paper-2); }
+  .ts-job { display: block; max-width: 240px; overflow: hidden; text-overflow: ellipsis; }
+  .ts-cell {
+    width: 58px; height: 28px; padding: 0 var(--space-2xs);
+    font-family: var(--font-mono); font-variant-numeric: tabular-nums; text-align: right;
+  }
+  .ts-cell::-webkit-outer-spin-button, .ts-cell::-webkit-inner-spin-button { margin: 0; }
+  .ts-sum { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+  .ts-day { display: flex; flex-direction: column; gap: 1px; align-items: flex-end; }
+  .ts-day__dow { font-size: var(--text-2xs); letter-spacing: var(--track-mono); color: var(--color-ink-4); }
+  .ts-note { padding: var(--space-xs) var(--space-md); border-top: var(--rule-hair) solid var(--color-rule); }
+
+  .chart-duo { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: var(--space-lg); align-items: start; }
+  @media (max-width: 900px) { .chart-duo { grid-template-columns: minmax(0, 1fr); } }
+  @media (max-width: 640px) {
+    .filterbar { padding-inline: var(--space-sm); }
+    .filterbar .select { max-width: 44vw; }
+    .pagerbar, .ts-note { padding-inline: var(--space-sm); }
+    /* 320~640px에서는 고정 열을 풀어 첫 칸이 화면을 다 먹지 않게 합니다. */
+    #gridHost .table th:first-child, #gridHost .table td:first-child { position: static; min-width: 140px; }
+    #gridHost .table th:last-child, #gridHost .table td:last-child { position: static; }
+    .ts-job { max-width: 150px; }
+  }
+</style>
+</head>
+<body class="app">
+<a class="skip-link" href="#main">본문으로 건너뛰기</a>
+
+<div class="app-main">
+  <main class="app-page" id="main">
+
+    <div class="page-head">
+      <div>
+        <h1 class="page-head__title">타임시트</h1>
+        <p class="page-head__sub" id="subline"></p>
+      </div>
+      <div class="page-head__acts" id="headActs"></div>
+    </div>
+
+    <section class="grid grid--4" id="tiles" data-verify aria-label="이번 주 투입 요약"></section>
+
+    <section class="mt-lg" aria-label="주간 타임시트 그리드">
+      <div class="filterbar" id="toolbar">
+        <div class="weekpick">
+          <button class="btn btn--sm" type="button" id="prevWeek">이전 주</button>
+          <span class="weekpick__label" id="weekLabel"></span>
+          <button class="btn btn--sm" type="button" id="nextWeek">다음 주</button>
+          <button class="btn btn--sm btn--ghost" type="button" id="thisWeek">이번 주</button>
+        </div>
+
+        <label class="field" style="flex:0 0 auto">
+          <span class="sr-only">대상자</span>
+          <select class="select" id="fUser"></select>
+        </label>
+
+        <span id="statusChip"></span>
+        <span class="grow"></span>
+        <span class="filterbar__count" id="saveNote" role="status" aria-live="polite"></span>
+        <span class="row gap-xs" id="acts"></span>
+      </div>
+
+      <div class="list-card">
+        <div id="gridHost" data-verify></div>
+        <div class="ts-note" id="gridNote"></div>
+        <div class="pagerbar" id="pagerHost"></div>
+      </div>
+    </section>
+
+    <section class="mt-lg panel reveal" aria-label="최근 8주 주간 투입">
+      <div class="panel__head">
+        <h2 class="panel__title">최근 8주 주간 투입</h2>
+        <span class="t-mono" id="stackNote"></span>
+      </div>
+      <div class="panel__body" id="weekChart"></div>
+    </section>
+
+    <section class="mt-lg chart-duo" aria-label="투입 시간 분석">
+      <div class="panel reveal">
+        <div class="panel__head">
+          <h2 class="panel__title">티켓 유형별 투입 시간</h2>
+          <span class="t-mono" id="typeNote"></span>
+        </div>
+        <div class="panel__body" id="typeChart"></div>
+      </div>
+      <div class="panel reveal">
+        <div class="panel__head">
+          <h2 class="panel__title">개인 가동률 추이</h2>
+          <span class="t-mono" id="utilNote"></span>
+        </div>
+        <div class="panel__body" id="utilChart"></div>
+      </div>
+    </section>
+
+    <footer class="hairline mt-2xl" style="padding-block:var(--space-md)">
+      <p class="t-mono t-faint">CLOSER · 데모 데이터 · 모든 회사·인물·연락처는 가상입니다</p>
+    </footer>
+  </main>
+</div>
+
+<script src="../assets/js/seed.js"></script>
+<script src="../assets/js/util.js"></script>
+<script src="../assets/js/store.js"></script>
+<script src="../assets/js/domain.js"></script>
+<script src="../assets/js/metrics.js"></script>
+<script src="../assets/js/insights.js"></script>
+<script src="../assets/js/ui.js"></script>
+<script src="../assets/js/charts.js"></script>
+<script src="../assets/js/shell.js"></script>
+<script>
+(function () {
+  'use strict';
+  var C = window.CLOSER, U = C.util, db = C.db, D = C.domain, ui = C.ui, ch = C.charts;
+  C.shell.mount('timesheet');
+
+  var $ = U.qs, esc = U.esc, el = U.el;
+  var me = db.me();
+
+  var PAGE_SIZE = 20;                 // 한 번에 그리는 행의 상한 (SPEC §12.4)
+  var DAY_MAX = 12;                   // 하루 12시간을 넘는 기록은 저장하지 않습니다 (SPEC §9.8)
+  var STEP = 0.5;
+  var DOW = ['월', '화', '수', '목', '금', '토', '일'];
+  var APPROVER_ROLES = ['리소스매니저', '관리자'];
+  var canApproveRole = APPROVER_ROLES.indexOf(me.role) > -1;
+
+  /** 저장소를 못 쓰는 브라우저에서도 역할 전환이 유지되도록 링크를 감쌉니다. */
+  function href(h) { return db.linkAs ? db.linkAs(h) : h; }
+
+  /* ── 날짜 도구 — 주는 월요일에 시작합니다 ────────────────────────── */
+  function parseISO(s) {
+    var m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(s || ''));
+    if (!m) return null;
+    var d = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
+    return isNaN(d.getTime()) ? null : d;
+  }
+  function mondayOf(v) {
+    var d = U.date(v); d.setHours(0, 0, 0, 0);
+    return U.addDays(d, -((d.getDay() + 6) % 7));
+  }
+  function round5(n) { return Math.round(n / STEP) * STEP; }
+  function hrs(n) {
+    if (!n) return '0';
+    return (Math.round(n * 10) / 10).toLocaleString('ko-KR', { maximumFractionDigits: 1 });
+  }
+
+  /* ── 대상자 — 제작인력은 본인만, 리소스매니저·관리자는 전원 ──────── */
+  var makers = U.sortBy(db.where('users', function (u) {
+    return u.role === '제작인력' && u.active !== false;
+  }), 'name');
+  var people = me.role === '제작인력' ? [me] : makers;
+  if (!people.length) people = [me];
+
+  function pickUser(id) {
+    for (var i = 0; i < people.length; i++) if (people[i].id === id) return people[i];
+    return null;
+  }
+  var target = pickUser(U.param('user', '')) || pickUser(me.id) || people[0];
+
+  var weekStart = mondayOf(parseISO(U.param('week', '')) || C.today);
+  var focusTicket = U.param('ticket', '') || '';
+
+  var state = { page: 1 };
+  var days = [], rows = [], pageRows = [], entryIdx = {};
+
+  /* ── 파생 값 ─────────────────────────────────────────────────────── */
+  function buildDays() {
+    days = [];
+    for (var i = 0; i < 7; i++) {
+      var d = U.addDays(weekStart, i);
+      days.push({ iso: U.iso(d), date: d, dow: DOW[i], weekend: i >= 5, label: (d.getMonth() + 1) + '/' + d.getDate() });
+    }
+  }
+
+  function weekEntries(userId, monday) {
+    var a = U.iso(monday), b = U.iso(U.addDays(monday, 6));
+    return db.where('timesheets', function (t) {
+      return t.resourceId === userId && t.date >= a && t.date <= b;
+    });
+  }
+
+  /** ticketId → { date → 기록 } — 셀 하나가 정확히 레코드 하나에 대응합니다. */
+  function indexEntries() {
+    entryIdx = {};
+    weekEntries(target.id, weekStart).forEach(function (t) {
+      (entryIdx[t.ticketId] = entryIdx[t.ticketId] || {})[t.date] = t;
+    });
+  }
+
+  function buildRows() {
+    indexEntries();
+    var a = days[0].iso, b = days[6].iso;
+    var open = db.where('assignments', function (x) {
+      return x.resourceId === target.id && x.status !== '취소' &&
+        !(x.endDate < a || x.startDate > b);
+    });
+    var by = {};
+    open.forEach(function (x) {
+      var t = db.get('tickets', x.ticketId);
+      if (!t) return;
+      if (!by[t.id]) by[t.id] = { id: t.id, ticket: t, asg: x };
+      else if ((x.hours || 0) > (by[t.id].asg.hours || 0)) by[t.id].asg = x;
+    });
+    /* 이미 시간을 적어 둔 티켓은 배정이 끝났어도 그 주의 행으로 남습니다. */
+    Object.keys(entryIdx).forEach(function (tid) {
+      if (by[tid]) return;
+      var t = db.get('tickets', tid);
+      if (t) by[tid] = { id: t.id, ticket: t, asg: null };
+    });
+
+    var list = Object.keys(by).map(function (k) {
+      var r = by[k];
+      var recs = entryIdx[r.id] || {};
+      var first = null;
+      days.forEach(function (d) { if (!first && recs[d.iso]) first = recs[d.iso]; });
+      r.acc = db.get('accounts', r.ticket.accountId);
+      r.billable = first ? first.billable !== false : true;
+      r.planned = plannedFor(r.asg);
+      return r;
+    });
+    return U.sortBy(list, function (r) { return r.ticket.key || r.ticket.id; });
+  }
+
+  /** 배정 공수를 배정 기간의 평일에 균등 배분한 계획값. */
+  function plannedFor(asg) {
+    var out = {};
+    if (!asg || !asg.startDate || !asg.endDate) return out;
+    var s = parseISO(asg.startDate), e = parseISO(asg.endDate);
+    if (!s || !e || U.days(s, e) < 0 || U.days(s, e) > 400) return out;
+    var wd = [];
+    for (var d = s; U.days(d, e) >= 0; d = U.addDays(d, 1)) {
+      var g = d.getDay();
+      if (g !== 0 && g !== 6) wd.push(U.iso(d));
+    }
+    if (!wd.length) return out;
+    var per = round5((asg.hours || 0) / wd.length);
+    if (per <= 0) per = STEP;
+    wd.forEach(function (iso) { out[iso] = per; });
+    return out;
+  }
+
+  function cellHours(ticketId, iso) {
+    var r = entryIdx[ticketId] && entryIdx[ticketId][iso];
+    return r ? Number(r.hours) || 0 : 0;
+  }
+  function rowTotal(r) { return U.sum(days, function (d) { return cellHours(r.id, d.iso); }); }
+  function dayTotal(iso) { return U.sum(rows, function (r) { return cellHours(r.id, iso); }); }
+  function weekTotal() { return U.sum(rows, rowTotal); }
+  function billableTotal() {
+    return U.sum(rows, function (r) { return r.billable ? rowTotal(r) : 0; });
+  }
+  function plannedWeek() {
+    return U.sum(rows, function (r) {
+      return U.sum(days, function (d) { return r.planned[d.iso] || 0; });
+    });
+  }
+
+  var capacity = 0, dailyCap = 0;
+  function readCapacity() {
+    capacity = D.capacityOf(target);
+    dailyCap = Math.round((capacity / 5) * 10) / 10;
+  }
+
+  /* ── 주 상태 ─────────────────────────────────────────────────────── */
+  function weekStatus() {
+    var list = weekEntries(target.id, weekStart);
+    if (!list.length) return '작성중';
+    var rejected = list.some(function (t) { return t.status === '반려'; });
+    if (rejected) return '반려';
+    if (list.every(function (t) { return t.status === '승인'; })) return '승인';
+    if (list.every(function (t) { return t.status === '제출' || t.status === '승인'; })) return '제출';
+    return '작성중';
+  }
+  function rejectNote() {
+    var found = null;
+    weekEntries(target.id, weekStart).forEach(function (t) {
+      if (!found && t.status === '반려' && t.rejectNote) found = t;
+    });
+    return found;
+  }
+
+  var isMine = target.id === me.id;
+  function locked() { var s = weekStatus(); return s === '제출' || s === '승인'; }
+  function canEdit() { return isMine && !locked(); }
+  function canApprove() { return canApproveRole && !isMine && weekStatus() === '제출'; }
+
+  /* ── 쓰기 ────────────────────────────────────────────────────────── */
+  function upsert(row, iso, hours, opts) {
+    var rec = entryIdx[row.id] && entryIdx[row.id][iso];
+    var v = round5(Math.max(0, Number(hours) || 0));
+    if (v > 0) {
+      if (rec) {
+        db.update('timesheets', rec.id, {
+          hours: v, billable: row.billable,
+          status: rec.status === '반려' ? '작성중' : rec.status
+        }, opts);
+      } else {
+        rec = db.insert('timesheets', {
+          resourceId: target.id, ticketId: row.id,
+          assignmentId: row.asg ? row.asg.id : null,
+          date: iso, weekOf: days[0].iso, hours: v, billable: row.billable,
+          status: '작성중', approverId: null, note: ''
+        }, opts);
+        (entryIdx[row.id] = entryIdx[row.id] || {})[iso] = rec;
+      }
+    } else if (rec) {
+      db.remove('timesheets', rec.id);
+      delete entryIdx[row.id][iso];
+    }
+    return v;
+  }
+
+  function stamp() {
+    var t = C.today;
+    $('#saveNote').textContent = '저장됨 · ' +
+      ('0' + t.getHours()).slice(-2) + ':' + ('0' + t.getMinutes()).slice(-2);
+  }
+
+  /* ── 머리말 ──────────────────────────────────────────────────────── */
+  function renderHead() {
+    var s = weekStatus();
+    $('#weekLabel').textContent = U.fmtDate(days[0].date) + ' ~ ' + U.fmtDate(days[6].date, 'md');
+    $('#statusChip').innerHTML = ui.chip(
+      s, s === '승인' ? 'pos' : s === '제출' ? 'accent' : s === '반려' ? 'neg' : 'idle');
+
+    var util = capacity > 0 ? Math.round((weekTotal() / capacity) * 100) : null;
+    $('#subline').innerHTML =
+      esc(target.name) + ' · ' + esc(target.craft || target.title || target.role) +
+      ' · 주간 캐파 <strong>' + hrs(capacity) + '시간</strong>(일 ' + hrs(dailyCap) + '시간)' +
+      ' · 이 주 기록 <strong>' + hrs(weekTotal()) + '시간</strong>' +
+      (util === null ? '' : ' · 가동률 <strong>' + util + '%</strong>') +
+      (isMine ? '' : ' · <span class="t-muted">본인 시트가 아니므로 읽기 전용입니다</span>');
+
+    $('#headActs').innerHTML =
+      '<button class="btn btn--sm" type="button" id="csv">CSV 내보내기</button>' +
+      '<a class="btn btn--sm" href="' + href('resources.html') + '">공수 관리</a>' +
+      '<a class="btn btn--sm" href="' + href('tickets.html') + '">제작 의뢰</a>';
+    U.on($('#csv'), 'click', function () {
+      ui.tableToCSV($('#gridHost table'), 'closer-timesheet-' + days[0].iso + '.csv');
+    });
+
+    var acts = [];
+    if (canEdit()) {
+      acts.push('<button class="btn btn--sm" type="button" id="prefill">배정 계획값으로 채우기</button>');
+      acts.push('<button class="btn btn--sm btn--primary" type="button" id="submit">제출</button>');
+    }
+    if (canApprove()) {
+      acts.push('<button class="btn btn--sm btn--primary" type="button" id="approve">승인</button>');
+      acts.push('<button class="btn btn--sm btn--danger" type="button" id="reject">반려</button>');
+    }
+    $('#acts').innerHTML = acts.join('');
+    if ($('#prefill')) U.on($('#prefill'), 'click', doPrefill);
+    if ($('#submit')) U.on($('#submit'), 'click', doSubmit);
+    if ($('#approve')) U.on($('#approve'), 'click', doApprove);
+    if ($('#reject')) U.on($('#reject'), 'click', rejectModal);
+  }
+
+  /** 배너는 필요할 때만 DOM에 존재합니다 — 빈 섹션을 남기지 않습니다. */
+  function renderBanner() {
+    var old = $('#bannerSec');
+    if (old) old.parentNode.removeChild(old);
+
+    var s = weekStatus(), rj = rejectNote(), card = '';
+    if (s === '반려' && rj) {
+      card = ui.insight({
+        kind: 'risk', label: '반려',
+        say: esc(db.userName(rj.approverId)) + '님이 ' + esc(U.fmtDate(days[0].date)) +
+             ' 주 타임시트를 반려했습니다. 수정한 뒤 다시 제출해 주세요.',
+        why: '반려 사유 — ' + esc(rj.rejectNote)
+      });
+    } else if (s === '제출') {
+      card = ui.insight({
+        kind: 'act', label: '승인 대기',
+        say: '제출이 끝나 이 주의 기록은 잠겼습니다. 리소스매니저가 승인하면 티켓 실투입과 가동률에 반영됩니다.',
+        why: '승인 전까지는 티켓의 실투입 공수에 더해지지 않습니다.'
+      });
+    } else if (s === '승인') {
+      card = ui.insight({
+        kind: 'good', label: '승인 완료',
+        say: '이 주의 기록은 승인되어 티켓 실투입 공수와 가동률에 반영되었습니다.',
+        why: '승인된 시간만 집계에 들어갑니다.'
+      });
+    }
+    if (!card) return;
+    var sec = el('section', { id: 'bannerSec', class: 'mb-lg', 'aria-label': '타임시트 상태 알림', html: card });
+    var tiles = $('#tiles');
+    tiles.parentNode.insertBefore(sec, tiles);
+  }
+
+  /* ── 지표 타일 ───────────────────────────────────────────────────── */
+  function renderTiles() {
+    var total = weekTotal(), bill = billableTotal(), plan = plannedWeek();
+    var util = capacity > 0 ? Math.round((total / capacity) * 100) : null;
+    var over = days.filter(function (d) { return dayTotal(d.iso) > dailyCap; });
+    var tiles = [
+      { label: '주 합계', value: hrs(total) + '<small>시간</small>',
+        foot: capacity > 0 ? '주간 캐파 ' + hrs(capacity) + '시간 · 가동률 ' + util + '%' : '캐파가 설정되지 않았습니다' },
+      { label: '청구 가능', value: hrs(bill) + '<small>시간</small>',
+        foot: total > 0 ? '전체의 ' + Math.round((bill / total) * 100) + '% · 청구 불가 ' + hrs(total - bill) + '시간'
+                        : '아직 기록한 시간이 없습니다' },
+      { label: '배정 계획 대비', value: plan > 0 ? Math.round((total / plan) * 100) + '%' : '—',
+        foot: plan > 0 ? '계획 ' + hrs(plan) + '시간 · 차이 ' + (total >= plan ? '+' : '−') + hrs(Math.abs(total - plan)) + '시간'
+                       : '이번 주에 걸쳐 있는 배정이 없습니다' },
+      { label: '일 캐파 초과', value: over.length + '<small>일</small>',
+        foot: over.length ? over.map(function (d) { return d.dow + ' ' + hrs(dayTotal(d.iso)) + '시간'; }).join(' · ')
+                          : '하루 ' + hrs(dailyCap) + '시간 기준으로 초과한 날이 없습니다' }
+    ];
+    $('#tiles').innerHTML = tiles.map(function (t) {
+      return '<article class="stat reveal"><p class="stat__label">' + esc(t.label) + '</p>' +
+        '<p class="stat__value">' + t.value + '</p>' +
+        '<p class="stat__foot">' + t.foot + '</p></article>';
+    }).join('');
+  }
+
+  /* ── 그리드 ──────────────────────────────────────────────────────── */
+  function jobCell(r) {
+    var t = r.ticket;
+    return '<a class="link--quiet ts-job t-nowrap" href="' + href('ticket.html?id=' + encodeURIComponent(t.id)) + '" title="' + esc(t.title) + '">' +
+        esc(t.title) + '</a>' +
+      '<span class="tkt-key">' + esc(t.key || t.id) + ' · ' + esc(t.type) + ' · ' +
+        esc(r.acc ? r.acc.name : '광고주 미지정') + '</span>';
+  }
+
+  function dayCell(r, d) {
+    var v = cellHours(r.id, d.iso);
+    var plan = r.planned[d.iso] || 0;
+    var editable = canEdit();
+    return '<input class="input ts-cell" type="number" inputmode="decimal" min="0" max="' + DAY_MAX + '" step="' + STEP + '"' +
+      ' value="' + (v ? v : '') + '" data-ticket="' + esc(r.id) + '" data-date="' + d.iso + '"' +
+      (editable ? '' : ' readonly') +
+      ' aria-label="' + esc((r.ticket.key || r.ticket.id) + ' ' + d.dow + '요일 ' + d.label + ' 투입 시간') + '"' +
+      ' title="' + esc(plan ? '배정 계획 ' + hrs(plan) + '시간' : '이 날짜에 걸린 배정 계획이 없습니다') + '" />';
+  }
+
+  function renderGrid() {
+    var host = $('#gridHost');
+    host.innerHTML = '';
+    if (!rows.length) {
+      host.innerHTML = ui.empty(
+        '이번 주에 배정된 작업이 없습니다',
+        '공수 배정을 받으면 여기에 표시됩니다.',
+        '<a class="btn btn--sm btn--primary" href="' + href('resources.html') + '">공수 관리로 가기</a>');
+      $('#gridNote').innerHTML = '<p class="t-micro">' + esc(U.fmtDate(days[0].date)) +
+        ' 주에 겹치는 배정과 기록이 모두 없습니다.</p>';
+      $('#pagerHost').innerHTML = '';
+      return;
+    }
+
+    var pages = Math.max(1, Math.ceil(rows.length / PAGE_SIZE));
+    if (state.page > pages) state.page = pages;
+    if (state.page < 1) state.page = 1;
+    var from = (state.page - 1) * PAGE_SIZE;
+    pageRows = rows.slice(from, from + PAGE_SIZE);
+
+    var cols = [
+      { key: 'job', label: '작업', sortable: false, cell: jobCell },
+      { key: 'billable', label: '청구', sortable: false, tight: true, cell: function (r) {
+          return '<label class="switch"><input type="checkbox" data-bill="' + esc(r.id) + '"' +
+            (r.billable ? ' checked' : '') + (canEdit() ? '' : ' disabled') +
+            ' aria-label="' + esc((r.ticket.key || r.ticket.id) + ' 청구 가능 여부') + '" /></label>';
+        } }
+    ];
+    days.forEach(function (d) {
+      cols.push({
+        key: d.iso, label: d.dow + ' ' + d.label, align: 'right', sortable: false,
+        cell: function (r) { return dayCell(r, d); }
+      });
+    });
+    cols.push({ key: 'sum', label: '행 합계', align: 'right', sortable: false, cell: function (r) {
+      return '<span class="ts-sum" data-total="' + esc(r.id) + '">' + hrs(rowTotal(r)) + '</span>';
+    } });
+
+    host.appendChild(ui.table(cols, pageRows, {
+      compact: true,
+      empty: { title: '이번 주에 배정된 작업이 없습니다', body: '공수 배정을 받으면 여기에 표시됩니다.' }
+    }));
+
+    var table = $('table', host);
+    table.appendChild(buildFoot(cols.length));
+    paintWeekend(table);
+    if (focusTicket) {
+      var hit = U.qsa('[data-total]', table).filter(function (n) { return n.dataset.total === focusTicket; })[0];
+      if (hit) hit.closest('tr').classList.add('is-selected');
+    }
+
+    $('#gridNote').innerHTML =
+      '<p class="t-micro">셀은 0.5시간 단위이며 값을 바꾸면 바로 저장됩니다. ' +
+      '하루 합계가 <strong>' + hrs(dailyCap) + '시간</strong>(일 캐파)을 넘으면 주황으로, ' +
+      '<strong>' + DAY_MAX + '시간</strong>을 넘으면 저장하지 않습니다. ' +
+      '아래 합계는 이 주 전체 ' + rows.length + '개 행 기준입니다.' +
+      (canEdit() ? ' Enter를 누르면 아래 칸으로, 위·아래 화살표는 0.5시간씩 움직입니다.' : '') + '</p>';
+
+    renderPager(pages, from);
+  }
+
+  function buildFoot(colCount) {
+    var tf = el('tfoot');
+    var tr = el('tr');
+    tr.appendChild(el('td', { html: '<span class="t-mono">일 합계</span>' }));
+    tr.appendChild(el('td', { class: 'cell-tight', html: '<span class="t-faint">—</span>' }));
+    days.forEach(function (d) {
+      tr.appendChild(el('td', {
+        class: 'cell-num',
+        html: '<span data-daytotal="' + d.iso + '">' + dayFootHTML(d) + '</span>'
+      }));
+    });
+    tr.appendChild(el('td', { class: 'cell-num', html: '<span data-weektotal>' + hrs(weekTotal()) + '</span>' }));
+    tf.appendChild(tr);
+    if (colCount !== tr.children.length) tr.appendChild(el('td'));
+    return tf;
+  }
+  function dayFootHTML(d) {
+    var v = dayTotal(d.iso);
+    var over = v > dailyCap;
+    return '<span class="' + (over ? 't-warn' : v ? '' : 't-faint') + '"' +
+      (over ? ' title="일 캐파 ' + hrs(dailyCap) + '시간을 ' + hrs(v - dailyCap) + '시간 넘겼습니다"' : '') +
+      '>' + hrs(v) + '</span>';
+  }
+
+  /** 주말 열에 음영. ui.table은 열 단위 클래스를 모르므로 렌더 뒤에 칠합니다. */
+  function paintWeekend(table) {
+    U.qsa('tr', table).forEach(function (tr) {
+      var cells = tr.children;
+      [7, 8].forEach(function (i) { if (cells[i]) cells[i].classList.add('ts-wknd'); });
+    });
+  }
+
+  function renderPager(pages, from) {
+    if (pages <= 1) {
+      $('#pagerHost').innerHTML = '<span class="t-mono">' + rows.length + '개 행 · ' +
+        hrs(weekTotal()) + '시간</span><span class="t-micro">' + esc(U.fmtDate(days[0].date)) + ' 주</span>';
+      return;
+    }
+    var to = Math.min(rows.length, from + PAGE_SIZE);
+    var nums = '';
+    for (var i = 1; i <= pages; i++) {
+      nums += '<button class="pager__btn" type="button" data-page="' + i + '"' +
+        (i === state.page ? ' aria-current="page"' : '') + '>' + i + '</button>';
+    }
+    $('#pagerHost').innerHTML =
+      '<span class="t-mono">' + (from + 1) + '–' + to + ' / ' + rows.length + '개 행</span>' +
+      '<span class="pager">' +
+        '<button class="btn btn--sm btn--ghost" type="button" data-page="' + (state.page - 1) + '"' +
+          (state.page <= 1 ? ' disabled' : '') + '>이전</button>' + nums +
+        '<button class="btn btn--sm btn--ghost" type="button" data-page="' + (state.page + 1) + '"' +
+          (state.page >= pages ? ' disabled' : '') + '>다음</button>' +
+      '</span>';
+  }
+
+  /** 셀 하나가 바뀌었을 때 — 표 전체를 다시 그리지 않고 합계만 고칩니다. */
+  function refreshTotals() {
+    indexEntries();
+    var host = $('#gridHost');
+    rows.forEach(function (r) {
+      var n = U.qsa('[data-total="' + r.id + '"]', host)[0];
+      if (n) n.textContent = hrs(rowTotal(r));
+    });
+    days.forEach(function (d) {
+      var n = U.qsa('[data-daytotal="' + d.iso + '"]', host)[0];
+      if (n) n.innerHTML = dayFootHTML(d);
+    });
+    var w = U.qs('[data-weektotal]', host);
+    if (w) w.textContent = hrs(weekTotal());
+    renderTiles();
+    renderHead();
+    renderSummary();
+    U.revealAll();
+  }
+
+  /* ── 요약 차트 — 표시 중인 주로 끝나는 최근 8주 ──────────────────── */
+  function lastWeeks(n) {
+    var out = [];
+    for (var i = n - 1; i >= 0; i--) {
+      var mon = U.addDays(weekStart, -7 * i);
+      var list = weekEntries(target.id, mon);
+      out.push({
+        monday: mon,
+        label: (mon.getMonth() + 1) + '/' + mon.getDate(),
+        entries: list,
+        billable: U.sum(list.filter(function (t) { return t.billable !== false; }), 'hours'),
+        nonBillable: U.sum(list.filter(function (t) { return t.billable === false; }), 'hours')
+      });
+    }
+    return out;
+  }
+
+  function renderSummary() {
+    var ws = lastWeeks(8);
+    var totalAll = U.sum(ws, function (w) { return w.billable + w.nonBillable; });
+
+    if (!totalAll) {
+      $('#weekChart').innerHTML = ui.empty('최근 8주 기록이 없습니다',
+        esc(target.name) + '님의 최근 8주 타임시트에 저장된 시간이 아직 없습니다.');
+      $('#stackNote').textContent = '';
+    } else {
+      $('#weekChart').innerHTML = ch.stacked(ws.map(function (w) {
+        return { label: w.label, parts: [
+          { name: '청구 가능', value: w.billable, series: 1 },
+          { name: '청구 불가', value: w.nonBillable, series: 3 }
+        ] };
+      }), { h: 200, fmt: function (v) { return hrs(v) + 'h'; }, label: '최근 8주 주간 투입 시간을 청구 가능 여부로 나눈 누적 막대' }) +
+        ch.legend([{ label: '청구 가능', series: 1 }, { label: '청구 불가', series: 3 }]) +
+        '<p class="t-micro mt-xs">막대 한 칸은 그 주에 저장된 시간입니다. 합계 ' + hrs(totalAll) +
+        '시간 · 청구 가능 ' + Math.round((U.sum(ws, 'billable') / totalAll) * 100) + '%.</p>';
+      $('#stackNote').textContent = ws[0].label + ' ~ ' + ws[ws.length - 1].label;
+    }
+
+    var byType = {};
+    ws.forEach(function (w) {
+      w.entries.forEach(function (t) {
+        var tk = db.get('tickets', t.ticketId);
+        var k = tk ? tk.type : '기타';
+        byType[k] = (byType[k] || 0) + (Number(t.hours) || 0);
+      });
+    });
+    var typeData = D.TICKET_TYPES.map(function (t) { return { label: t.key, value: byType[t.key] || 0 }; });
+    var typeSum = U.sum(typeData, 'value');
+    if (!typeSum) {
+      $('#typeChart').innerHTML = ui.empty('유형별로 나눌 기록이 없습니다',
+        '시간을 기록하면 어떤 제작 유형에 얼마나 들어갔는지 여기에 쌓입니다.');
+      $('#typeNote').textContent = '';
+    } else {
+      var top = U.sortBy(typeData, 'value', 'desc')[0];
+      $('#typeChart').innerHTML = ch.bars(typeData, {
+        h: 190, fmt: function (v) { return hrs(v) + 'h'; }, label: '티켓 유형별 투입 시간'
+      }) + '<p class="t-micro mt-xs">최근 8주 ' + hrs(typeSum) + '시간 중 <strong>' + esc(top.label) +
+        '</strong>이(가) ' + Math.round((top.value / typeSum) * 100) + '%로 가장 큽니다.</p>';
+      $('#typeNote').textContent = '최근 8주 · ' + hrs(typeSum) + '시간';
+    }
+
+    if (!capacity) {
+      $('#utilChart').innerHTML = ui.empty('가동률을 계산할 수 없습니다', '이 사용자의 주간 캐파가 설정되어 있지 않습니다.');
+      $('#utilNote').textContent = '';
+    } else {
+      var pts = ws.map(function (w) {
+        return { label: w.label, value: Math.round(((w.billable + w.nonBillable) / capacity) * 100) };
+      });
+      var avg = Math.round(U.avg(pts, 'value'));
+      $('#utilChart').innerHTML = ch.line([
+        { name: '가동률', points: pts },
+        { name: '캐파', ghost: true, points: pts.map(function (p) { return { label: p.label, value: 100 }; }) }
+      ], { h: 190, area: true, fmt: function (v) { return Math.round(v) + '%'; }, label: '주간 가동률 추이' }) +
+        ch.legend([{ label: '가동률', color: 'var(--color-accent)' }, { label: '캐파 100%', color: 'var(--color-rule-3)' }]) +
+        '<p class="t-micro mt-xs">주간 캐파 ' + hrs(capacity) + '시간 대비 저장된 시간의 비율입니다. 8주 평균 ' + avg + '%.</p>';
+      $('#utilNote').textContent = '8주 평균 ' + avg + '%';
+    }
+  }
+
+  /* ── 동작 ────────────────────────────────────────────────────────── */
+  function doPrefill() {
+    if (!canEdit()) return;
+    var before = [], filled = 0, skipped = 0;
+    rows.forEach(function (r) {
+      days.forEach(function (d) {
+        var plan = r.planned[d.iso] || 0;
+        if (!plan) return;
+        if (cellHours(r.id, d.iso) > 0) return;
+        if (dayTotal(d.iso) + plan > DAY_MAX) { skipped++; return; }
+        before.push({ row: r, iso: d.iso });
+        upsert(r, d.iso, plan, { silent: true });
+        filled++;
+      });
+    });
+    if (!filled) {
+      ui.toast(skipped ? '계획값을 넣으면 하루 ' + DAY_MAX + '시간을 넘어 채우지 못했습니다.'
+                       : '채울 계획값이 없습니다. 빈 칸에 걸린 배정이 없거나 이미 값이 있습니다.',
+        { kind: 'neg' });
+      return;
+    }
+    syncInputs();
+    refreshTotals();
+    stamp();
+    ui.toast(filled + '칸을 배정 계획값으로 채웠습니다.' + (skipped ? ' ' + skipped + '칸은 일 한도를 넘어 건너뛰었습니다.' : ''), {
+      undo: function () {
+        before.forEach(function (b) { upsert(b.row, b.iso, 0); });
+        syncInputs();
+        refreshTotals();
+      }
+    });
+  }
+
+  function syncInputs() {
+    U.qsa('.ts-cell', $('#gridHost')).forEach(function (n) {
+      var v = cellHours(n.dataset.ticket, n.dataset.date);
+      n.value = v ? v : '';
+    });
+  }
+
+  function doSubmit() {
+    var list = weekEntries(target.id, weekStart).filter(function (t) { return (Number(t.hours) || 0) > 0; });
+    if (!list.length) { ui.toast('제출할 시간이 없습니다. 먼저 셀에 시간을 적어 주세요.', { kind: 'neg' }); return; }
+    var before = list.map(function (t) { return { id: t.id, status: t.status, rejectNote: t.rejectNote || '' }; });
+    list.forEach(function (t) {
+      db.update('timesheets', t.id, { status: '제출', rejectNote: '', submittedAt: new Date().toISOString() });
+    });
+    var approver = db.first('users', function (u) { return u.role === '리소스매니저' && u.active !== false; });
+    if (approver) {
+      db.notify(approver.id, 'approval',
+        target.name + '님이 ' + U.fmtDate(days[0].date) + ' 주 타임시트를 제출했습니다.',
+        href('timesheet.html?user=' + encodeURIComponent(target.id) + '&week=' + days[0].iso));
+    }
+    renderAll();
+    ui.toast(U.fmtDate(days[0].date) + ' 주 타임시트 ' + list.length + '건을 제출했습니다.', {
+      undo: function () {
+        before.forEach(function (b) { db.update('timesheets', b.id, { status: b.status, rejectNote: b.rejectNote }); });
+        renderAll();
+      }
+    });
+  }
+
+  function doApprove() {
+    var list = weekEntries(target.id, weekStart).filter(function (t) { return t.status !== '승인'; });
+    if (!list.length) return;
+    var before = list.map(function (t) { return { id: t.id, status: t.status, approverId: t.approverId || null }; });
+    /* 승인된 시간만 티켓 실투입에 더해집니다 (SPEC §3.19). */
+    var addBy = {};
+    list.forEach(function (t) { addBy[t.ticketId] = (addBy[t.ticketId] || 0) + (Number(t.hours) || 0); });
+    var spentBefore = Object.keys(addBy).map(function (tid) {
+      var tk = db.get('tickets', tid);
+      return tk ? { id: tid, spent: Number(tk.spentHours) || 0 } : null;
+    }).filter(Boolean);
+
+    list.forEach(function (t) {
+      db.update('timesheets', t.id, { status: '승인', approverId: me.id, rejectNote: '', decidedAt: new Date().toISOString() });
+    });
+    spentBefore.forEach(function (b) {
+      db.update('tickets', b.id, { spentHours: Math.round((b.spent + addBy[b.id]) * 10) / 10 });
+    });
+    db.notify(target.id, 'approval',
+      U.fmtDate(days[0].date) + ' 주 타임시트가 승인되었습니다.',
+      href('timesheet.html?user=' + encodeURIComponent(target.id) + '&week=' + days[0].iso));
+
+    renderAll();
+    ui.toast(target.name + '님의 ' + U.fmtDate(days[0].date) + ' 주 타임시트 ' + list.length + '건을 승인했습니다.', {
+      undo: function () {
+        before.forEach(function (b) { db.update('timesheets', b.id, { status: b.status, approverId: b.approverId }); });
+        spentBefore.forEach(function (b) { db.update('tickets', b.id, { spentHours: b.spent }); });
+        renderAll();
+      }
+    });
+  }
+
+  function rejectModal() {
+    var why = el('textarea', { class: 'textarea', 'data-autofocus': '',
+      placeholder: '예: 화요일 6시간이 배정 범위를 벗어납니다. 해당 건은 별도 티켓으로 분리해 주세요.' });
+    var field = el('label', { class: 'field' }, [
+      el('span', { class: 'field__label', html: '반려 사유 <span class="req">*</span>' }), why,
+      el('span', { class: 'field__error', text: '반려 사유를 적어야 돌려보낼 수 있습니다.' })
+    ]);
+    ui.modal({
+      title: U.fmtDate(days[0].date) + ' 주 타임시트 반려',
+      body: el('div', { class: 'stack gap-sm' }, [
+        el('p', { class: 't-small', text: target.name + '님에게 이 주의 기록을 돌려보냅니다. 사유는 상대방 화면 상단 배너에 그대로 표시됩니다.' }),
+        field
+      ]),
+      actions: [
+        { label: '취소' },
+        { label: '반려', kind: 'danger', onClick: function () {
+            var text = why.value.trim();
+            if (!text) { field.classList.add('is-invalid'); why.focus(); return false; }
+            doReject(text);
+          } }
+      ]
+    });
+  }
+
+  function doReject(text) {
+    var list = weekEntries(target.id, weekStart);
+    if (!list.length) return;
+    var before = list.map(function (t) { return { id: t.id, status: t.status, approverId: t.approverId || null, rejectNote: t.rejectNote || '' }; });
+    list.forEach(function (t) {
+      db.update('timesheets', t.id, { status: '반려', approverId: me.id, rejectNote: text, decidedAt: new Date().toISOString() });
+    });
+    db.notify(target.id, 'approval',
+      U.fmtDate(days[0].date) + ' 주 타임시트가 반려되었습니다. 사유를 확인해 주세요.',
+      href('timesheet.html?user=' + encodeURIComponent(target.id) + '&week=' + days[0].iso));
+    renderAll();
+    ui.toast(target.name + '님의 ' + U.fmtDate(days[0].date) + ' 주 타임시트를 반려했습니다.', {
+      undo: function () {
+        before.forEach(function (b) {
+          db.update('timesheets', b.id, { status: b.status, approverId: b.approverId, rejectNote: b.rejectNote });
+        });
+        renderAll();
+      }
+    });
+  }
+
+  /* ── 렌더 전체 ───────────────────────────────────────────────────── */
+  function renderAll() {
+    buildDays();
+    readCapacity();
+    rows = buildRows();
+    renderHead();
+    renderBanner();
+    renderTiles();
+    renderGrid();
+    renderSummary();
+    U.revealAll();
+  }
+
+  function syncURL() {
+    try {
+      history.replaceState(null, '',
+        href('timesheet.html?user=' + encodeURIComponent(target.id) + '&week=' + days[0].iso));
+    } catch (e) { /* file:// 에서는 주소를 고쳐 쓸 수 없습니다. 화면 상태는 그대로 유지됩니다. */ }
+  }
+
+  function goWeek(monday) {
+    weekStart = mondayOf(monday);
+    state.page = 1;
+    focusTicket = '';
+    $('#saveNote').textContent = '';
+    renderAll();
+    syncURL();
+  }
+
+  /* ── 이벤트 배선 ─────────────────────────────────────────────────── */
+  $('#fUser').innerHTML = people.map(function (u) {
+    return '<option value="' + esc(u.id) + '"' + (u.id === target.id ? ' selected' : '') + '>' +
+      esc(u.name) + ' · ' + esc(u.craft || u.title || u.role) + '</option>';
+  }).join('');
+  $('#fUser').disabled = people.length < 2;
+
+  U.on($('#fUser'), 'change', function () {
+    var next = pickUser(this.value);
+    if (!next) return;
+    target = next;
+    isMine = target.id === me.id;
+    state.page = 1;
+    focusTicket = '';
+    $('#saveNote').textContent = '';
+    renderAll();
+    syncURL();
+  });
+
+  U.on($('#prevWeek'), 'click', function () { goWeek(U.addDays(weekStart, -7)); });
+  U.on($('#nextWeek'), 'click', function () { goWeek(U.addDays(weekStart, 7)); });
+  U.on($('#thisWeek'), 'click', function () { goWeek(C.today); });
+
+  U.live($('#gridHost'), 'change', '.ts-cell', function (e, t) {
+    if (!canEdit()) return;
+    var row = null;
+    rows.forEach(function (r) { if (r.id === t.dataset.ticket) row = r; });
+    if (!row) return;
+    var raw = t.value === '' ? 0 : Number(t.value);
+    if (isNaN(raw) || raw < 0) raw = 0;
+    var v = round5(Math.min(raw, DAY_MAX));
+    var others = dayTotal(t.dataset.date) - cellHours(row.id, t.dataset.date);
+    if (others + v > DAY_MAX) {
+      t.value = cellHours(row.id, t.dataset.date) || '';
+      t.classList.add('is-error');
+      setTimeout(function () { t.classList.remove('is-error'); }, 1200);
+      ui.toast('하루 합계는 ' + DAY_MAX + '시간을 넘길 수 없습니다. 남은 여유는 ' +
+        hrs(Math.max(0, DAY_MAX - others)) + '시간입니다.', { kind: 'neg' });
+      return;
+    }
+    upsert(row, t.dataset.date, v);
+    t.value = v ? v : '';
+    refreshTotals();
+    stamp();
+  });
+
+  U.live($('#gridHost'), 'change', '[data-bill]', function (e, t) {
+    if (!canEdit()) return;
+    var row = null;
+    rows.forEach(function (r) { if (r.id === t.dataset.bill) row = r; });
+    if (!row) return;
+    var prev = row.billable;
+    row.billable = t.checked;
+    var touched = [];
+    days.forEach(function (d) {
+      var rec = entryIdx[row.id] && entryIdx[row.id][d.iso];
+      if (rec) { touched.push(rec.id); db.update('timesheets', rec.id, { billable: row.billable }); }
+    });
+    refreshTotals();
+    stamp();
+    ui.toast('“' + row.ticket.key + '” 이 주 기록을 ' + (row.billable ? '청구 가능' : '청구 불가') + '으로 바꿨습니다.', {
+      undo: function () {
+        row.billable = prev;
+        touched.forEach(function (id) { db.update('timesheets', id, { billable: prev }); });
+        t.checked = prev;
+        refreshTotals();
+      }
+    });
+  });
+
+  /* 위·아래 화살표는 숫자 입력의 0.5 스텝을 그대로 씁니다.
+     Enter만 아래 칸으로 옮기고, Esc는 저장된 값으로 되돌립니다.
+     한글 조합 중에는 어떤 키도 가로채지 않습니다. */
+  U.live($('#gridHost'), 'keydown', '.ts-cell', function (e, t) {
+    if (e.isComposing || e.keyCode === 229) return;
+    if (e.key === 'Escape') {
+      var v = cellHours(t.dataset.ticket, t.dataset.date);
+      t.value = v ? v : '';
+      t.blur();
+      return;
+    }
+    if (e.key !== 'Enter') return;
+    e.preventDefault();
+    var cells = U.qsa('.ts-cell[data-date="' + t.dataset.date + '"]', $('#gridHost'));
+    var i = cells.indexOf(t);
+    t.dispatchEvent(new Event('change', { bubbles: true }));
+    var next = cells[i + 1];
+    if (next) { next.focus(); next.select(); }
+  });
+
+  U.live($('#pagerHost'), 'click', '[data-page]', function (e, t) {
+    var p = Number(t.dataset.page);
+    if (!p || p === state.page) return;
+    state.page = p;
+    renderGrid();
+  });
+
+  renderAll();
+})();
+</script>
+</body>
+</html>

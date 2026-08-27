@@ -1,0 +1,463 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>홈 · CLOSER</title>
+<meta name="description" content="광고 세일즈 오퍼레이션 플랫폼 CLOSER의 홈 화면. 목표 달성률, 파이프라인, 오늘의 분석 의견을 한 화면에서 확인합니다." />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=IBM+Plex+Sans+KR:wght@400;500;600&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="../tokens.css" />
+<link rel="stylesheet" href="../assets/css/base.css" />
+<link rel="stylesheet" href="../assets/css/components.css" />
+<link rel="stylesheet" href="../assets/css/app.css" />
+</head>
+<body class="app">
+<a class="skip-link" href="#main">본문으로 건너뛰기</a>
+
+<div class="app-main">
+  <main class="app-page" id="main">
+
+    <div class="page-head">
+      <div>
+        <h1 class="page-head__title" id="hello">홈</h1>
+        <p class="page-head__sub" id="subline"></p>
+      </div>
+      <div class="page-head__acts" id="headActs"></div>
+    </div>
+
+    <!-- 오늘의 브리핑 — 이 페이지의 단 하나의 다크 밴드 -->
+    <section class="code-card reveal on-graphite" id="briefing" aria-label="오늘의 브리핑">
+      <div class="code-card__bar">
+        <span>오늘의 브리핑 · <span id="briefDate"></span></span>
+        <span class="status--ok" id="briefCount"></span>
+      </div>
+      <div id="briefBody" style="padding:var(--space-md)"></div>
+    </section>
+
+    <section class="grid grid--4 mt-lg" id="tiles" aria-label="핵심 지표"></section>
+
+    <section class="mt-lg" style="display:grid;grid-template-columns:minmax(0,1.55fr) minmax(0,1fr);gap:var(--space-lg);align-items:start" id="midRow">
+      <div class="panel reveal">
+        <div class="panel__head">
+          <h2 class="panel__title">분석 의견</h2>
+          <a class="link" href="insights.html">전체 보기</a>
+        </div>
+        <div class="panel__body stack gap-xs" id="insightList"></div>
+      </div>
+
+      <div class="stack gap-lg">
+        <div class="panel reveal">
+          <div class="panel__head">
+            <h2 class="panel__title">어시스턴트</h2>
+            <a class="link" href="activities.html">활동</a>
+          </div>
+          <div class="panel__body panel__body--flush" id="todoList"></div>
+        </div>
+        <div class="panel reveal">
+          <div class="panel__head">
+            <h2 class="panel__title" id="titleQuota">목표 달성</h2>
+            <span class="t-mono" id="quotaPeriod"></span>
+          </div>
+          <div class="panel__body row gap-md" id="quotaRing"></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="mt-lg" style="display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:var(--space-lg)">
+      <div class="panel reveal">
+        <div class="panel__head">
+          <h2 class="panel__title" id="titleStage">단계별 파이프라인</h2>
+          <a class="link" href="pipeline.html">보드 열기</a>
+        </div>
+        <div class="panel__body" id="stageChart"></div>
+      </div>
+      <div class="panel reveal">
+        <div class="panel__head">
+          <h2 class="panel__title" id="titleTrend">월별 실적 대 목표</h2>
+          <a class="link" href="performance.html">실적</a>
+        </div>
+        <div class="panel__body" id="trendChart"></div>
+      </div>
+    </section>
+
+    <section class="mt-lg panel reveal">
+      <div class="panel__head">
+        <h2 class="panel__title" id="titleClosing">마감 임박 영업기회</h2>
+        <a class="link" href="opportunities.html">전체 목록</a>
+      </div>
+      <div id="closingTable"></div>
+    </section>
+
+    <section class="mt-lg" style="display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:var(--space-lg)">
+      <div class="panel reveal">
+        <div class="panel__head">
+          <h2 class="panel__title" id="titleTickets">내 제작 의뢰</h2>
+          <a class="link" href="tickets.html">의뢰 보드</a>
+        </div>
+        <div class="panel__body panel__body--flush" id="myTickets"></div>
+      </div>
+      <div class="panel reveal">
+        <div class="panel__head">
+          <h2 class="panel__title">최근 활동</h2>
+          <a class="link" href="activities.html">타임라인</a>
+        </div>
+        <div class="panel__body" id="recentActs"></div>
+      </div>
+    </section>
+
+    <footer class="hairline mt-2xl" style="padding-block:var(--space-md)">
+      <p class="t-mono t-faint">CLOSER · 데모 데이터 · 모든 회사·인물·연락처는 가상입니다</p>
+    </footer>
+  </main>
+</div>
+
+<script src="../assets/js/seed.js"></script>
+<script src="../assets/js/util.js"></script>
+<script src="../assets/js/store.js"></script>
+<script src="../assets/js/domain.js"></script>
+<script src="../assets/js/metrics.js"></script>
+<script src="../assets/js/insights.js"></script>
+<script src="../assets/js/ui.js"></script>
+<script src="../assets/js/charts.js"></script>
+<script src="../assets/js/shell.js"></script>
+<script>
+(function () {
+  'use strict';
+  var C = window.CLOSER, U = C.util, db = C.db, D = C.domain, M = C.metrics, ui = C.ui, ch = C.charts;
+  C.shell.mount('dashboard');
+
+  var me = db.me();
+  var s = M.scope();
+  var $ = U.qs;
+
+  /* ── 인사 ─────────────────────────────────────────────────────── */
+  var h = C.today.getHours();
+  $('#hello').textContent = (h < 12 ? '좋은 아침입니다' : h < 18 ? '안녕하세요' : '수고 많으셨습니다') + ', ' + me.name + '님';
+  $('#subline').innerHTML = U.fmtDate(C.today, 'long') + ' · ' + U.esc(me.role) + ' · ' +
+    '이번 분기 ' + s.label + ' 기준 · 남은 기간 <strong>' + U.days(C.today, s.to) + '일</strong>';
+
+  /* 상단 액션도 역할을 따른다 — 제작 인력에게 "새 영업기회"는 누를 일 없는 버튼이다. */
+  var ACTS = {
+    제작인력: [['타임시트 입력', 'timesheet.html', 1], ['내 작업 보기', 'tickets.html?filter=assigned-me', 0]],
+    리소스매니저: [['공수 승인', 'resources.html?tab=requests', 1], ['캐파 히트맵', 'resources.html', 0], ['미배정 의뢰', 'tickets.html?filter=unassigned', 0]]
+  };
+
+  /* ── 브리핑(다크 밴드) ────────────────────────────────────────── */
+  var all = C.insights.run(s);
+  var urgent = all.filter(function (x) { return x.kind === 'risk' || x.kind === 'warn'; });
+  $('#briefDate').textContent = U.fmtDate(C.today);
+  $('#briefCount').textContent = urgent.length ? '주의 ' + urgent.length + '건' : '이상 없음';
+  $('#briefBody').innerHTML = all.slice(0, 3).map(function (x) {
+    return '<p style="margin-bottom:var(--space-sm);line-height:1.6">' +
+      '<span class="t-mono" style="color:var(--color-graphite-ink-3);margin-right:var(--space-xs)">' + U.esc(x.label) + '</span>' +
+      '<span style="color:var(--color-graphite-ink)">' + x.say + '</span>' +
+      '<br><span style="color:var(--color-graphite-ink-3);font-size:var(--text-xs)">' + x.why + '</span></p>';
+  }).join('') || '<p style="color:var(--color-graphite-ink-3)">지금 조치가 필요한 항목이 없습니다.</p>';
+
+  /* ── 역할에 따라 홈이 달라진다 ────────────────────────────────────
+     제작 인력에게 파이프라인 커버리지를 보여주는 홈은 홈이 아니다.
+     같은 레이아웃을 쓰되 각 자리에 그 역할이 매일 보는 숫자를 넣는다. */
+  var isSales = me.role === '영업사원' || me.role === '영업관리자' || me.role === '관리자';
+  var isMaker = me.role === '제작인력';
+  var isResMgr = me.role === '리소스매니저';
+
+  var monday = U.addDays(C.today, -((C.today.getDay() + 6) % 7));
+  function myWeekHours() {
+    return U.sum(db.where('timesheets', function (t) {
+      return t.resourceId === me.id && U.iso(monday) === t.weekOf;
+    }), 'hours');
+  }
+  var myOpenTickets = db.where('tickets', function (t) {
+    return t.assigneeId === me.id && D.TICKET_OPEN.indexOf(t.status) > -1;
+  });
+  var tstat = M.ticketStats(M.scope({ userIds: null }));
+
+  /* ── 지표 타일 ───────────────────────────────────────────────── */
+  var att = M.attainment(s), cov = M.coverage(s), wr = M.winRate(s);
+  var tiles;
+  if (isMaker) {
+    var myDone = db.where('tickets', function (t) { return t.assigneeId === me.id && t.status === '완료'; });
+    var cyc = myDone.filter(function (t) { return t.doneAt; }).map(function (t) { return U.days(t.createdAt, t.doneAt); });
+    tiles = [
+      { label: '내 담당 진행 건', value: myOpenTickets.length + '<small>건</small>',
+        foot: '예상 공수 합계 ' + U.num(U.sum(myOpenTickets, 'estimateHours')) + '시간' },
+      { label: '이번 주 투입', value: U.num(myWeekHours(), 1) + '<small>시간</small>',
+        foot: '주간 캐파 ' + D.capacityOf(me) + '시간 · ' + Math.round(myWeekHours() / D.capacityOf(me) * 100) + '%' },
+      { label: '납기 위험', value: myOpenTickets.filter(function (t) { return D.slaState(t) !== 'ok'; }).length + '<small>건</small>',
+        foot: '초과 ' + myOpenTickets.filter(function (t) { return D.slaState(t) === 'breach'; }).length + '건 · 임박 ' +
+              myOpenTickets.filter(function (t) { return D.slaState(t) === 'risk'; }).length + '건' },
+      { label: '평균 리드타임', value: cyc.length ? Math.round(U.avg(cyc)) + '<small>일</small>' : '—',
+        foot: '완료 ' + myDone.length + '건 · 재작업 ' + myDone.filter(function (t) { return (t.reworkCount || 0) > 0; }).length + '건' }
+    ];
+  } else if (isResMgr) {
+    var load = M.resourceLoad();
+    tiles = [
+      { label: '미배정 의뢰', value: tstat.unassigned + '<small>건</small>', foot: '배정 전 대기도 납기에 포함됩니다' },
+      { label: '공수 승인 대기', value: M.pendingRequests().length + '<small>건</small>',
+        foot: '합계 ' + U.num(U.sum(M.pendingRequests(), 'hours')) + '시간' },
+      { label: '과부하 인원', value: load.filter(function (r) { return r.rate > 100; }).length + '<small>명</small>',
+        foot: '전체 ' + load.length + '명 · 평균 가동률 ' + Math.round(U.avg(load, 'rate')) + '%' },
+      { label: 'SLA 초과', value: tstat.breach + '<small>건</small>',
+        foot: '준수율 ' + (tstat.slaRate === null ? '—' : Math.round(tstat.slaRate) + '%') + ' · 진행 ' + tstat.open + '건' }
+    ];
+  } else {
+    tiles = [
+      { label: '분기 목표 달성', value: att === null ? '—' : Math.round(att) + '%',
+        foot: U.won(M.wonAmount(s)) + ' / ' + U.won(M.quota(s)) },
+      { label: '진행 파이프라인', value: U.won(M.pipelineValue(s)),
+        foot: '가중 ' + U.won(M.weightedPipeline(s)) + ' · 커버리지 ' + (cov === Infinity ? '충분' : cov.toFixed(1) + '배') },
+      { label: '이번 분기 성사', value: M.won(s).length + '<small>건</small>',
+        foot: '평균 ' + (M.avgDealSize(s) ? U.won(M.avgDealSize(s)) : '—') + ' · 사이클 ' + (M.salesCycle(s) ? Math.round(M.salesCycle(s)) + '일' : '—') },
+      { label: '성사율', value: wr === null ? '—' : Math.round(wr) + '%',
+        foot: '금액 기준 ' + (M.winRateByAmount(s) === null ? '—' : Math.round(M.winRateByAmount(s)) + '%') + ' · 실주 ' + M.lost(s).length + '건' }
+    ];
+  }
+  var acts = ACTS[me.role] || [['실적 입력', 'performance.html', 0], ['제작 의뢰', 'tickets.html?new=1', 0], ['새 영업기회', 'opportunities.html?new=1', 1]];
+  $('#headActs').innerHTML = acts.map(function (a) {
+    return '<a class="btn btn--sm' + (a[2] ? ' btn--primary' : '') + '" href="' + a[1] + '">' + U.esc(a[0]) + '</a>';
+  }).join('');
+
+  $('#tiles').innerHTML = tiles.map(function (t) {
+    return '<article class="stat reveal"><p class="stat__label">' + U.esc(t.label) + '</p>' +
+      '<p class="stat__value">' + t.value + '</p>' +
+      '<p class="stat__foot">' + t.foot + '</p></article>';
+  }).join('');
+
+  /* ── 분석 의견 ───────────────────────────────────────────────── */
+  $('#insightList').innerHTML = all.slice(0, 6).map(function (x) {
+    return ui.insight({ kind: x.kind, label: x.label, say: x.say, why: x.why, actions: x.actions });
+  }).join('') || ui.empty('의견 없음', '데이터가 쌓이면 여기에 분석 결과가 문장으로 표시됩니다.');
+
+  /* ── 어시스턴트 ───────────────────────────────────────────────────
+     CRM이 입력 창고가 되지 않으려면 시스템이 사용자에게 일을 밀어줘야 한다.
+     기한 초과 할 일 · 방치된 리드 · 조용해진 딜 · 마감이 지난 딜을 하나의
+     우선순위 목록으로 합친다. 각 항목은 곧바로 처리할 화면으로 연결된다. */
+  function assistantItems() {
+    var out = [];
+    db.where('activities', function (a) {
+      return a.ownerId === me.id && a.status !== '완료' && U.days(a.dueDate, C.today) >= -10;
+    }).forEach(function (a) {
+      var late = U.days(a.dueDate, C.today);
+      var rel = a.relatedType === 'opportunity' ? db.get('opportunities', a.relatedId) : db.get('accounts', a.relatedId);
+      out.push({
+        rank: late > 0 ? 0 : late === 0 ? 1 : 3,
+        tone: late > 0 ? 'neg' : a.priority === '높음' ? 'warn' : 'accent',
+        title: a.subject,
+        meta: (rel ? rel.name + ' · ' : '') + (late > 0 ? '기한 ' + late + '일 초과' : late === 0 ? '오늘 마감' : U.fmtDate(a.dueDate, 'md')),
+        href: a.relatedType === 'opportunity' && rel ? 'opportunity.html?id=' + encodeURIComponent(rel.id) : 'activities.html'
+      });
+    });
+    db.where('leads', function (l) {
+      return l.ownerId === me.id && (l.status === '신규' || l.status === '접촉 시도') && U.days(l.createdAt, C.today) > 3;
+    }).forEach(function (l) {
+      out.push({
+        rank: 1, tone: 'warn', title: '리드 미접촉 — ' + l.company,
+        meta: U.days(l.createdAt, C.today) + '일 경과 · ' + l.source,
+        href: 'leads.html?filter=new'
+      });
+    });
+    M.open(M.scope({ userIds: [me.id] })).forEach(function (o) {
+      var acts = db.activitiesOf('opportunity', o.id);
+      var last = acts.length ? acts[0].dueDate : o.createdAt;
+      var quiet = U.days(last, C.today);
+      if (D.isOverdue(o)) {
+        out.push({ rank: 0, tone: 'neg', title: '마감일 경과 — ' + o.name,
+          meta: U.fmtDate(o.closeDate) + ' 마감 · ' + U.won(o.amount),
+          href: 'opportunity.html?id=' + encodeURIComponent(o.id) });
+      } else if (quiet > 30) {
+        out.push({ rank: 2, tone: 'warn', title: '조용해진 딜 — ' + o.name,
+          meta: quiet + '일째 활동 없음 · ' + o.stage,
+          href: 'opportunity.html?id=' + encodeURIComponent(o.id) });
+      }
+    });
+    db.where('approvals', function (a) { return a.status === '대기' && a.approverId === me.id; }).forEach(function (a) {
+      out.push({ rank: 1, tone: 'accent', title: a.kind + ' 결재 대기',
+        meta: db.userName(a.requesterId) + ' 상신 · ' + U.days(a.submittedAt, C.today) + '일 경과', href: 'approvals.html' });
+    });
+    db.where('tickets', function (t) {
+      return t.assigneeId === me.id && D.TICKET_OPEN.indexOf(t.status) > -1 && D.slaState(t) !== 'ok';
+    }).forEach(function (t) {
+      out.push({ rank: D.slaState(t) === 'breach' ? 0 : 2, tone: D.slaState(t) === 'breach' ? 'neg' : 'warn',
+        title: t.key + ' ' + t.title, meta: (D.slaState(t) === 'breach' ? '납기 초과' : '납기 임박') + ' · ' + U.fmtDate(t.dueDate),
+        href: 'ticket.html?id=' + encodeURIComponent(t.id) });
+    });
+    return U.sortBy(out, 'rank').slice(0, 8);
+  }
+  var items = assistantItems();
+  $('#todoList').innerHTML = items.length ? items.map(function (it) {
+    return '<a class="menu__item" style="align-items:flex-start;border-radius:0;padding:var(--space-xs) var(--space-md);border-bottom:1px solid var(--color-rule)" href="' + it.href + '">' +
+      '<span class="dot dot--' + it.tone + '" style="margin-top:6px"></span>' +
+      '<span class="grow" style="min-width:0"><span style="display:block" class="t-clamp-2">' + U.esc(it.title) + '</span>' +
+      '<span class="t-mono" style="font-size:10px">' + U.esc(it.meta) + '</span></span></a>';
+  }).join('') : ui.empty('밀린 일이 없습니다', '기한 초과 활동, 방치된 리드, 조용해진 딜이 생기면 여기로 밀어 드립니다.');
+
+  /* ── 달성 링 ─────────────────────────────────────────────────── */
+  var period = U.ymOf(C.today);
+  $('#quotaPeriod').textContent = period;
+  if (!isSales) {
+    /* 제작 인력·리소스 매니저에게 매출 목표 링은 남의 숫자다. 가동률로 바꾼다. */
+    var capHours = isMaker ? myWeekHours() : U.sum(M.resourceLoad(), 'hours');
+    var capMax = isMaker ? D.capacityOf(me) : U.sum(M.resourceLoad(), 'capacity');
+    $('#titleQuota').textContent = isMaker ? '이번 주 가동률' : '제작본부 가동률';
+    $('#quotaPeriod').textContent = U.fmtDate(monday, 'md') + '~';
+    $('#quotaRing').innerHTML = ch.ring(capHours, capMax, { caption: '주간', label: '가동률' }) +
+      '<div class="grow stack gap-2xs">' +
+        '<p class="t-mono">투입 시간</p><p class="t-h4 t-num t-ink">' + U.num(capHours, 1) + '시간</p>' +
+        '<p class="t-mono mt-xs">가용 캐파</p><p class="t-body t-num">' + U.num(capMax) + '시간</p>' +
+        '<a class="btn btn--sm" href="' + (isMaker ? 'timesheet.html' : 'resources.html') + '">' + (isMaker ? '타임시트 입력' : '캐파 보기') + '</a>' +
+      '</div>';
+  }
+  if (isSales) { renderSalesHome(); } else { renderProductionHome(); }
+
+  function renderSalesHome() {
+  var mTarget = M.targetFor(me.id, period), mActual = M.actualTotal(me.id, period);
+  var drafts = M.draftsFor(me.id, period), draftAmt = M.draftTotal(me.id, period);
+  var afterSubmit = mTarget > 0 ? Math.round(((mActual + draftAmt) / mTarget) * 100) : 0;
+  $('#quotaRing').innerHTML =
+    ch.ring(mActual, mTarget, { caption: period + ' 월간', label: '월간 목표 달성률' }) +
+    '<div class="grow stack gap-xs">' +
+      '<div><p class="t-mono">확정 실적</p><p class="t-h4 t-num t-ink">' + U.won(mActual) + '</p></div>' +
+      '<div><p class="t-mono">이번 달 목표</p><p class="t-body t-num">' + U.won(mTarget) + '</p></div>' +
+      (drafts.length
+        ? '<p class="t-micro">임시저장 <strong>' + drafts.length + '건 · ' + U.won(draftAmt) + '</strong>. ' +
+          '제출하면 달성률이 <strong class="t-accent">' + afterSubmit + '%</strong>가 됩니다.</p>' +
+          '<a class="btn btn--sm btn--primary" href="performance.html?filter=draft">실적 제출하기</a>'
+        : '<a class="btn btn--sm" href="performance.html">실적 입력하기</a>') +
+    '</div>';
+
+  /* ── 차트 ────────────────────────────────────────────────────── */
+  var byStage = D.OPEN_STAGES.map(function (st) {
+    var here = M.open(s).filter(function (o) { return o.stage === st.key; });
+    return { label: st.key, value: U.sum(here, 'amount'), kind: st.cast === 'Commit' ? 'pos' : null };
+  });
+  $('#stageChart').innerHTML = ch.bars(byStage, { h: 190, fmt: function (v) { return U.won(v, { unit: false }); }, label: '단계별 파이프라인 금액' }) +
+    '<p class="t-micro mt-xs">막대는 각 단계에 열려 있는 금액 합계입니다. 초록은 커밋 예측 구간입니다.</p>';
+
+  var series = M.monthlySeries(me.id, 6);
+  $('#trendChart').innerHTML = ch.line([
+    { name: '실적', points: series.map(function (x) { return { label: x.label, value: x.actual }; }) },
+    { name: '목표', ghost: true, points: series.map(function (x) { return { label: x.label, value: x.target }; }) }
+  ], { h: 190, area: true, fmt: function (v) { return U.won(v, { unit: false }); }, label: '월별 실적과 목표' }) +
+    ch.legend([{ label: '실적', color: 'var(--color-accent)' }, { label: '목표', color: 'var(--color-rule-3)' }]);
+
+  /* ── 마감 임박 ───────────────────────────────────────────────── */
+  var closing = U.sortBy(M.open(s).filter(function (o) { return U.days(o.closeDate, C.today) > -35; }), 'closeDate').slice(0, 8);
+  $('#closingTable').appendChild(ui.table([
+    { key: 'name', label: '영업기회', cell: function (o) {
+        return '<a class="link--quiet" href="opportunity.html?id=' + encodeURIComponent(o.id) + '">' + U.esc(o.name) + '</a>' +
+          (D.isStalled(o) ? ' <span class="chip chip--warn">정체 ' + D.daysInStage(o) + '일</span>' : '');
+      } },
+    { key: 'stage', label: '단계', cell: function (o) { return ui.chip(o.stage, D.stage(o.stage).cast === 'Commit' ? 'accent' : null); } },
+    { key: 'amount', label: '금액', align: 'right', cell: function (o) { return U.won(o.amount); } },
+    { key: 'weighted', label: '가중', align: 'right', cell: function (o) { return '<span class="t-muted">' + U.won(D.weighted(o)) + '</span>'; } },
+    { key: 'closeDate', label: '마감', align: 'right', cell: function (o) {
+        var d = U.days(C.today, o.closeDate);
+        return '<span class="' + (d < 0 ? 't-neg' : d < 8 ? 't-warn' : '') + '">' + U.fmtDate(o.closeDate) + '</span>';
+      } },
+    { key: 'next', label: '다음 액션', cell: function (o) { return '<span class="t-small">' + U.esc(o.nextStep || '—') + '</span>'; } }
+  ], closing, {
+    onRow: function (o) { window.location.href = 'opportunity.html?id=' + encodeURIComponent(o.id); },
+    empty: { title: '마감 임박 딜이 없습니다', body: '파이프라인 보드에서 새 영업기회를 만들어 보세요.' }
+  }));
+  }
+
+  /* 제작 인력과 리소스 매니저의 홈 — 같은 자리에 그들의 숫자를 넣는다. */
+  function renderProductionHome() {
+    var scopeTickets = isMaker
+      ? db.where('tickets', function (t) { return t.assigneeId === me.id; })
+      : db.all('tickets');
+    var openOnes = scopeTickets.filter(function (t) { return D.TICKET_OPEN.indexOf(t.status) > -1; });
+
+    $('#titleStage').textContent = isMaker ? '내 담당 의뢰 — 상태별' : '제작본부 의뢰 — 상태별';
+    var byStatus = D.TICKET_OPEN.map(function (st) {
+      var here = openOnes.filter(function (t) { return t.status === st; });
+      var over = D.WIP_LIMITS[st];
+      return { label: st, value: here.length, kind: over && here.length > over ? 'warn' : null };
+    });
+    $('#stageChart').innerHTML = ch.bars(byStatus, { h: 190, fmt: function (v) { return U.num(v); }, label: '상태별 의뢰 건수' }) +
+      '<p class="t-micro mt-xs">주황 막대는 WIP 한도를 넘긴 상태입니다. 동시에 붙잡고 있는 일이 많아질수록 리드타임은 길어집니다.</p>';
+
+    $('#titleTrend').textContent = isMaker ? '최근 8주 투입 시간' : '제작본부 주간 투입';
+    var weeks = [];
+    for (var w = 7; w >= 0; w--) {
+      var wStart = U.addDays(monday, -7 * w);
+      var key = U.iso(wStart);
+      var rows = db.where('timesheets', function (t) {
+        return t.weekOf === key && (!isMaker || t.resourceId === me.id);
+      });
+      weeks.push({
+        label: U.fmtDate(wStart, 'md'),
+        parts: [
+          { name: '청구 가능', series: 1, value: U.sum(rows.filter(function (r) { return r.billable; }), 'hours') },
+          { name: '청구 불가', series: 8, value: U.sum(rows.filter(function (r) { return !r.billable; }), 'hours') }
+        ]
+      });
+    }
+    $('#trendChart').innerHTML = ch.stacked(weeks, { h: 190, fmt: function (v) { return U.num(v) + 'h'; }, label: '주간 투입 시간' }) +
+      ch.legend([{ label: '청구 가능', series: 1 }, { label: '청구 불가', series: 8 }]);
+
+    $('#titleClosing').textContent = isMaker ? '납기 임박 내 담당 의뢰' : '납기 임박 · 미배정 의뢰';
+    var watch = U.sortBy(openOnes.filter(function (t) {
+      return isMaker ? true : (!t.assigneeId || D.slaState(t) !== 'ok');
+    }), 'dueDate').slice(0, 10);
+    $('#closingTable').appendChild(ui.table([
+      { key: 'key', label: '번호', tight: true, cell: function (t) { return '<span class="tkt-key">' + U.esc(t.key) + '</span>'; } },
+      { key: 'title', label: '제목', cell: function (t) {
+          return '<a class="link--quiet" href="ticket.html?id=' + encodeURIComponent(t.id) + '">' + U.esc(t.title) + '</a>';
+        } },
+      { key: 'type', label: '유형', cell: function (t) { return ui.chip(t.type); } },
+      { key: 'account', label: '광고주', cell: function (t) {
+          var a = db.get('accounts', t.accountId); return a ? U.esc(a.name) : '—';
+        } },
+      { key: 'assignee', label: '담당', cell: function (t) { return ui.personCell(db.get('users', t.assigneeId)); } },
+      { key: 'status', label: '상태', cell: function (t) { return ui.chip(t.status, 'idle'); } },
+      { key: 'dueDate', label: '납기', align: 'right', cell: function (t) {
+          var st = D.slaState(t);
+          return '<span class="' + (st === 'breach' ? 't-neg' : st === 'risk' ? 't-warn' : '') + '">' + U.fmtDate(t.dueDate) + '</span>';
+        } },
+      { key: 'hours', label: '예상/실투입', align: 'right', cell: function (t) {
+          return U.num(t.spentHours || 0) + ' / ' + U.num(t.estimateHours) + 'h';
+        } }
+    ], watch, {
+      onRow: function (t) { window.location.href = 'ticket.html?id=' + encodeURIComponent(t.id); },
+      empty: { title: '지켜볼 의뢰가 없습니다', body: '납기가 임박하거나 미배정인 건이 생기면 여기에 모입니다.' }
+    }));
+  }
+
+  /* ── 제작 의뢰 요약 — 의뢰자에게는 진행 건, 작업자에게는 최근 완료 건 ─ */
+  var myT;
+  if (isMaker) {
+    $('#titleTickets').textContent = '최근 완료한 의뢰';
+    myT = U.sortBy(db.where('tickets', function (t) { return t.assigneeId === me.id && t.status === '완료'; }), 'doneAt', 'desc').slice(0, 6);
+  } else {
+    myT = U.sortBy(db.where('tickets', function (t) {
+      return t.requesterId === me.id && D.TICKET_OPEN.indexOf(t.status) > -1;
+    }), 'dueDate').slice(0, 6);
+  }
+  $('#myTickets').innerHTML = myT.length ? myT.map(function (t) {
+    var sla = D.slaState(t);
+    return '<a class="menu__item" style="border-radius:0;padding:var(--space-xs) var(--space-md);border-bottom:1px solid var(--color-rule)" href="ticket.html?id=' + encodeURIComponent(t.id) + '">' +
+      '<span class="tkt-key">' + U.esc(t.key) + '</span>' +
+      '<span class="grow" style="min-width:0"><span style="display:block" class="t-clamp-2">' + U.esc(t.title) + '</span>' +
+      '<span class="t-mono" style="font-size:10px">' + U.esc(t.type) + ' · ' + U.esc(t.status) + ' · 마감 ' + U.fmtDate(t.dueDate, 'md') + '</span></span>' +
+      '<span class="chip ' + (sla === 'breach' ? 'chip--neg' : sla === 'risk' ? 'chip--warn' : 'chip--idle') + '">' +
+      (sla === 'breach' ? 'SLA 초과' : sla === 'risk' ? '임박' : '정상') + '</span></a>';
+  }).join('') : ui.empty('의뢰한 제작 건이 없습니다', '영상·디자인·랜딩페이지 제작을 티켓으로 의뢰할 수 있습니다.',
+      '<a class="btn btn--sm btn--primary" href="tickets.html?new=1">제작 의뢰하기</a>');
+
+  /* ── 최근 활동 ───────────────────────────────────────────────── */
+  var recent = U.sortBy(db.where('activities', function (a) { return a.ownerId === me.id && a.status === '완료'; }), 'dueDate', 'desc').slice(0, 7);
+  $('#recentActs').innerHTML = recent.length ? '<ol class="tl">' + recent.map(function (a) {
+    var rel = a.relatedType === 'opportunity' ? db.get('opportunities', a.relatedId) : db.get('accounts', a.relatedId);
+    return '<li class="tl__item' + (a.type === 'meeting' ? ' is-accent' : '') + '">' +
+      '<p class="tl__when">' + U.fmtDate(a.dueDate) + ' · ' + ({ call: '통화', email: '메일', meeting: '미팅', task: '업무' }[a.type] || a.type) + '</p>' +
+      '<p class="tl__what">' + U.esc(a.subject) + ' — <span class="t-muted">' + U.esc(rel ? rel.name : '—') + '</span></p></li>';
+  }).join('') + '</ol>' : ui.empty('기록된 활동이 없습니다', '통화·미팅·메일을 남기면 딜의 온도를 알 수 있습니다.');
+
+  U.revealAll();
+})();
+</script>
+</body>
+</html>

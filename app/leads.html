@@ -1,0 +1,964 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>리드 · CLOSER</title>
+<meta name="description" content="CLOSER 리드 목록. 유입된 리드를 상태·소스·담당자별로 살펴보고, 광고주·담당자·영업기회를 한 번에 만드는 리드 전환을 실행합니다." />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=IBM+Plex+Sans+KR:wght@400;500;600&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="../tokens.css" />
+<link rel="stylesheet" href="../assets/css/base.css" />
+<link rel="stylesheet" href="../assets/css/components.css" />
+<link rel="stylesheet" href="../assets/css/app.css" />
+<style>
+  /* 이 화면에만 필요한 조각. 색·간격·반경·이징은 모두 토큰만 사용합니다. */
+  .list-card {
+    border: var(--rule-hair) solid var(--color-rule);
+    border-top: none;
+    border-radius: 0 0 var(--radius-md) var(--radius-md);
+    background: var(--color-surface);
+  }
+  .pagerbar {
+    display: flex; align-items: center; justify-content: space-between;
+    gap: var(--space-sm); flex-wrap: wrap;
+    padding: var(--space-xs) var(--space-md);
+    border-top: var(--rule-hair) solid var(--color-rule);
+  }
+  .filterbar .input, .filterbar .select { min-height: 28px; height: 28px; font-size: var(--text-xs); }
+  .filterbar .select { max-width: 150px; }
+  .filterbar__q { width: min(220px, 46vw); }
+  .seg__item { white-space: nowrap; }
+  /* 좁은 화면에서 뷰 전환은 잘리는 대신 제 안에서 가로로 스크롤합니다. */
+  #views { max-width: 100%; overflow-x: auto; }
+
+  .score { display: flex; align-items: center; gap: var(--space-xs); min-width: 104px; }
+  .score__num { font-family: var(--font-mono); font-variant-numeric: tabular-nums; font-size: var(--text-xs); color: var(--color-ink-2); width: 22px; text-align: right; }
+  .score .meter { flex: 1 1 auto; min-width: 44px; }
+
+  .rowact { display: flex; align-items: center; gap: var(--space-2xs); white-space: nowrap; }
+  .rowact .select { height: 26px; min-height: 26px; font-size: var(--text-xs); max-width: 106px; }
+
+  .chart-duo { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: var(--space-lg); align-items: start; }
+  @media (max-width: 900px) { .chart-duo { grid-template-columns: minmax(0, 1fr); } }
+  @media (max-width: 640px) {
+    .filterbar { padding-inline: var(--space-sm); }
+    .filterbar .select { max-width: 44vw; }
+    .pagerbar { padding-inline: var(--space-sm); }
+  }
+
+  /* 전환 모달 — 세 개의 선택을 시각적으로 분리합니다. */
+  .conv-step { border: var(--rule-hair) solid var(--color-rule); border-radius: var(--radius-sm); padding: var(--space-sm); }
+  .conv-step[data-off="1"] { background: var(--color-paper-2); }
+  .conv-step__head { display: flex; align-items: center; justify-content: space-between; gap: var(--space-sm); }
+  .conv-step__no { font-family: var(--font-mono); font-size: var(--text-2xs); letter-spacing: var(--track-mono); text-transform: uppercase; color: var(--color-ink-4); }
+  .conv-step__title { font-size: var(--text-sm); font-weight: 600; color: var(--color-ink); }
+  .conv-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: var(--space-sm); }
+  @media (max-width: 620px) { .conv-grid { grid-template-columns: minmax(0, 1fr); } }
+</style>
+</head>
+<body class="app">
+<a class="skip-link" href="#main">본문으로 건너뛰기</a>
+
+<div class="app-main">
+  <main class="app-page" id="main">
+
+    <div class="page-head">
+      <div>
+        <h1 class="page-head__title">리드</h1>
+        <p class="page-head__sub" id="subline"></p>
+      </div>
+      <div class="page-head__acts" id="headActs"></div>
+    </div>
+
+    <section class="grid grid--4" id="tiles" data-verify aria-label="리드 요약 지표"></section>
+
+    <section class="mt-lg" id="opinionSec" aria-label="리드 분석 의견">
+      <div class="stack gap-xs" id="opinionList"></div>
+    </section>
+
+    <section class="mt-lg" aria-label="리드 목록">
+      <div id="convertResult" class="stack gap-xs" hidden></div>
+
+      <div class="filterbar" id="filterbar">
+        <div class="seg" id="views" role="group" aria-label="리드 뷰"></div>
+
+        <label class="field" style="flex:0 0 auto">
+          <span class="sr-only">리드 검색</span>
+          <input class="input filterbar__q" type="search" id="q" placeholder="이름 · 회사 · 산업 · 담당자" autocomplete="off" />
+        </label>
+
+        <label class="field" style="flex:0 0 auto">
+          <span class="sr-only">상태</span>
+          <select class="select" id="fStatus"></select>
+        </label>
+        <label class="field" style="flex:0 0 auto">
+          <span class="sr-only">유입 소스</span>
+          <select class="select" id="fSource"></select>
+        </label>
+        <label class="field" style="flex:0 0 auto">
+          <span class="sr-only">담당자</span>
+          <select class="select" id="fOwner"></select>
+        </label>
+
+        <button class="btn btn--sm btn--ghost t-nowrap" type="button" id="reset">필터 초기화</button>
+        <span class="grow"></span>
+        <span class="filterbar__count" id="count"></span>
+      </div>
+
+      <div class="list-card">
+        <div id="tableHost" data-verify></div>
+        <div class="pagerbar" id="pagerHost"></div>
+      </div>
+    </section>
+
+    <section class="mt-lg chart-duo" aria-label="유입 경로 분석">
+      <div class="panel reveal">
+        <div class="panel__head">
+          <h2 class="panel__title">소스별 리드 수</h2>
+          <span class="t-mono" id="srcCountNote"></span>
+        </div>
+        <div class="panel__body" id="srcCountChart"></div>
+      </div>
+      <div class="panel reveal">
+        <div class="panel__head">
+          <h2 class="panel__title">소스별 전환율</h2>
+          <span class="t-mono">전환됨 ÷ 리드 수</span>
+        </div>
+        <div class="panel__body" id="srcRateChart"></div>
+      </div>
+    </section>
+
+    <section class="mt-lg panel reveal" aria-label="유입 경로별 성과 표">
+      <div class="panel__head">
+        <h2 class="panel__title">어느 유입 경로가 실제로 계약이 되는가</h2>
+        <a class="link" href="opportunities.html">영업기회 목록</a>
+      </div>
+      <div class="panel__body panel__body--flush" id="srcTable"></div>
+      <div class="panel__foot"><p class="t-micro" id="srcFoot"></p></div>
+    </section>
+
+    <footer class="hairline mt-2xl" style="padding-block:var(--space-md)">
+      <p class="t-mono t-faint">CLOSER · 데모 데이터 · 모든 회사·인물·연락처는 가상입니다</p>
+    </footer>
+  </main>
+</div>
+
+<script src="../assets/js/seed.js"></script>
+<script src="../assets/js/util.js"></script>
+<script src="../assets/js/store.js"></script>
+<script src="../assets/js/domain.js"></script>
+<script src="../assets/js/metrics.js"></script>
+<script src="../assets/js/insights.js"></script>
+<script src="../assets/js/ui.js"></script>
+<script src="../assets/js/charts.js"></script>
+<script src="../assets/js/shell.js"></script>
+<script>
+(function () {
+  'use strict';
+  var C = window.CLOSER, U = C.util, db = C.db, D = C.domain, M = C.metrics, ui = C.ui, ch = C.charts;
+  C.shell.mount('leads');
+
+  var me = db.me();
+  var $ = U.qs, esc = U.esc, el = U.el;
+  var PAGE_SIZE = 20;
+
+  /* 리드는 권한 매트릭스에 별도 객체가 없습니다. 리드를 만들고 고치는 일은
+     영업기회를 만드는 일과 같은 권한으로, 전환은 광고주 생성 권한까지 함께 봅니다. */
+  var canEdit = D.can('opportunities', 'U');
+  var canCreate = D.can('opportunities', 'C');
+  var canConvert = canCreate && D.can('accounts', 'C');
+
+  /* 상태 표기 — 한 곳에서만 정의합니다. */
+  var STATUS_KIND = {
+    '신규': 'accent', '접촉 시도': null, '접촉 완료': null,
+    '적격': 'pos', '부적격': 'idle', '전환됨': 'solid'
+  };
+  /* 아직 전환되지 않은 리드가 고를 수 있는 상태. 전환은 모달을 통해서만 일어납니다. */
+  var EDITABLE_STATUS = D.LEAD_STATUS.filter(function (s) { return s !== '전환됨'; });
+  var UNTOUCHED = '신규';
+  var STALE_DAYS = 3;   /* insights.js 의 '리드 응답 지연'과 같은 기준 */
+
+  /* ── 상태 — URL 파라미터가 초기값을 결정합니다 ───────────────────── */
+  var VIEWS = [
+    { key: 'all', label: '전체' },
+    { key: 'new', label: '미처리' },
+    { key: 'qualified', label: '적격' },
+    { key: 'converted', label: '전환됨' },
+    { key: 'disqualified', label: '부적격' }
+  ];
+  var initView = U.param('filter', '') || 'all';
+  if (!VIEWS.some(function (v) { return v.key === initView; })) initView = 'all';
+
+  var state = {
+    view: initView,
+    q: U.param('q', '') || '',
+    status: '', source: U.param('source', '') || '', owner: U.param('owner', '') || '',
+    sort: { key: 'created', dir: 'desc' },
+    page: 1
+  };
+
+  /* ── 정렬 정의 — 헤더 키 하나당 값 하나 ──────────────────────────── */
+  var SORTS = {
+    name:    { get: function (r) { return r.lead.name; }, dir: 'asc' },
+    company: { get: function (r) { return r.lead.company; }, dir: 'asc' },
+    title:   { get: function (r) { return r.lead.title || ''; }, dir: 'asc' },
+    source:  { get: function (r) { return r.lead.source; }, dir: 'asc' },
+    status:  { get: function (r) { return D.LEAD_STATUS.indexOf(r.lead.status); }, dir: 'asc' },
+    score:   { get: function (r) { return r.lead.score || 0; }, dir: 'desc' },
+    industry:{ get: function (r) { return r.lead.industry || ''; }, dir: 'asc' },
+    budget:  { get: function (r) { return r.lead.estBudget || 0; }, dir: 'desc' },
+    owner:   { get: function (r) { return r.ownerName; }, dir: 'asc' },
+    created: { get: function (r) { return r.lead.createdAt || ''; }, dir: 'desc' },
+    aged:    { get: function (r) { return r.aged; }, dir: 'desc' }
+  };
+
+  /* ── 파생 행 — 표·타일·차트가 모두 이 배열 하나를 봅니다 ─────────── */
+  function build() {
+    return U.sortBy(db.all('leads'), 'createdAt', 'desc').map(function (l) {
+      var opp = l.convertedOppId ? db.get('opportunities', l.convertedOppId) : null;
+      return {
+        id: l.id, lead: l,
+        ownerName: db.userName(l.ownerId),
+        aged: Math.max(0, U.days(l.createdAt, C.today)),
+        opp: opp,
+        oppWon: !!(opp && D.isWon(opp))
+      };
+    });
+  }
+
+  function matches(r) {
+    var l = r.lead;
+    if (state.view === 'new' && l.status !== UNTOUCHED) return false;
+    if (state.view === 'qualified' && l.status !== '적격') return false;
+    if (state.view === 'converted' && l.status !== '전환됨') return false;
+    if (state.view === 'disqualified' && l.status !== '부적격') return false;
+    if (state.status && l.status !== state.status) return false;
+    if (state.source && l.source !== state.source) return false;
+    if (state.owner && l.ownerId !== state.owner) return false;
+    if (state.q) {
+      var t = state.q.trim().toLowerCase();
+      if (t && (l.name + ' ' + l.company + ' ' + (l.title || '') + ' ' + (l.industry || '') + ' ' +
+        l.source + ' ' + r.ownerName).toLowerCase().indexOf(t) === -1) return false;
+    }
+    return true;
+  }
+
+  /* ── 리드 지표 — 정의는 여기 한 곳뿐입니다 ───────────────────────── */
+  function leadStats(rows) {
+    var untouched = rows.filter(function (r) { return r.lead.status === UNTOUCHED; });
+    var stale = untouched.filter(function (r) { return r.aged > STALE_DAYS; });
+    var reached = rows.filter(function (r) { return r.lead.status === '적격' || r.lead.status === '전환됨'; });
+    var converted = rows.filter(function (r) { return r.lead.status === '전환됨'; });
+    return {
+      total: rows.length,
+      untouched: untouched.length,
+      stale: stale.length,
+      oldest: stale.length ? Math.max.apply(null, stale.map(function (r) { return r.aged; })) : null,
+      reached: reached.length,
+      converted: converted.length,
+      qualRate: rows.length ? (reached.length / rows.length) * 100 : null,
+      waitDays: untouched.length ? U.avg(untouched, 'aged') : null
+    };
+  }
+
+  /* 소스 한 줄의 정의. 차트와 표가 같은 함수를 봅니다. */
+  function bySource(rows) {
+    var sources = U.uniq(D.LEAD_SOURCES.concat(rows.map(function (r) { return r.lead.source; })));
+    return sources.map(function (src) {
+      var here = rows.filter(function (r) { return r.lead.source === src; });
+      var conv = here.filter(function (r) { return r.lead.status === '전환됨'; });
+      var wonRows = conv.filter(function (r) { return r.oppWon; });
+      return {
+        source: src,
+        count: here.length,
+        reached: here.filter(function (r) { return r.lead.status === '적격' || r.lead.status === '전환됨'; }).length,
+        disq: here.filter(function (r) { return r.lead.status === '부적격'; }).length,
+        converted: conv.length,
+        rate: here.length ? (conv.length / here.length) * 100 : 0,
+        wonCount: wonRows.length,
+        wonAmount: U.sum(wonRows, function (r) { return r.opp.amount || 0; })
+      };
+    });
+  }
+
+  /* ── 필터바 채우기 ───────────────────────────────────────────────── */
+  $('#views').innerHTML = VIEWS.map(function (v) {
+    return '<button class="seg__item" type="button" data-view="' + esc(v.key) + '" aria-pressed="' +
+      (state.view === v.key) + '">' + esc(v.label) + '</button>';
+  }).join('');
+
+  function fillSelect(node, placeholder, values, current) {
+    node.innerHTML = '<option value="">' + esc(placeholder) + '</option>' + values.map(function (v) {
+      return '<option value="' + esc(v.value) + '"' + (current === v.value ? ' selected' : '') + '>' + esc(v.label) + '</option>';
+    }).join('');
+  }
+
+  var allRows = build();
+  var ownerIds = U.uniq(allRows.map(function (r) { return r.lead.ownerId; }));
+  fillSelect($('#fStatus'), '상태 전체', D.LEAD_STATUS.map(function (s) { return { value: s, label: s }; }), state.status);
+  fillSelect($('#fSource'), '소스 전체', D.LEAD_SOURCES.map(function (s) { return { value: s, label: s }; }), state.source);
+  fillSelect($('#fOwner'), '담당자 전체', U.sortBy(ownerIds.map(function (id) {
+    return { value: id, label: db.userName(id) };
+  }), 'label'), state.owner);
+  $('#q').value = state.q;
+
+  /* ── 머리말 ──────────────────────────────────────────────────────── */
+  var headStats = leadStats(allRows);
+  $('#subline').innerHTML = '전체 <strong>' + headStats.total + '건</strong> · 미처리 ' + headStats.untouched +
+    '건 · 전환됨 ' + headStats.converted + '건 · 예상 예산 합계 ' +
+    U.won(U.sum(allRows, function (r) { return r.lead.estBudget || 0; })) +
+    (canConvert ? '' : ' · <span class="t-muted">지금 계정은 읽기 전용입니다</span>');
+
+  $('#headActs').innerHTML =
+    '<a class="btn btn--sm" href="accounts.html">광고주</a>' +
+    '<a class="btn btn--sm" href="opportunities.html">영업기회</a>' +
+    (canCreate ? '<button class="btn btn--primary btn--sm" type="button" id="newLead">새 리드</button>' : '');
+
+  /* ── 리드 관련 분석 의견 ─────────────────────────────────────────── */
+  var opinions = C.insights.run(M.scope()).filter(function (x) {
+    return x.id === 'cold-leads' || x.id === 'new-mix';
+  }).slice(0, 2);
+  if (opinions.length) {
+    $('#opinionList').innerHTML = opinions.map(function (x) {
+      return ui.insight({ kind: x.kind, label: x.label, say: x.say, why: x.why, actions: x.actions });
+    }).join('');
+  } else {
+    $('#opinionSec').parentNode.removeChild($('#opinionSec'));
+  }
+
+  /* ── 렌더 ────────────────────────────────────────────────────────── */
+  var pageRows = [];
+
+  function render() {
+    allRows = build();
+    var rows = allRows.filter(matches);
+    var s = SORTS[state.sort.key] || SORTS.created;
+    rows = U.sortBy(rows, s.get, state.sort.dir);
+
+    var pages = Math.max(1, Math.ceil(rows.length / PAGE_SIZE));
+    if (state.page > pages) state.page = pages;
+    if (state.page < 1) state.page = 1;
+    var from = (state.page - 1) * PAGE_SIZE;
+    pageRows = rows.slice(from, from + PAGE_SIZE);
+
+    renderTiles(rows);
+    renderTable(rows);
+    renderPager(rows, from, pages);
+    renderSource(rows);
+    $('#count').textContent = rows.length + '건 / 전체 ' + allRows.length + '건';
+    U.revealAll();
+  }
+
+  function renderTiles(rows) {
+    var st = leadStats(rows);
+    var tiles = [
+      { label: '총 리드', value: U.num(st.total) + '<small>건</small>',
+        foot: st.total
+          ? '적격 이상 ' + st.reached + '건 · 전환됨 ' + st.converted + '건'
+          : '조건에 맞는 리드가 없습니다' },
+      { label: '미처리 리드', value: U.num(st.untouched) + '<small>건</small>',
+        foot: st.untouched
+          ? (st.stale
+              ? STALE_DAYS + '일 초과 <strong class="t-neg">' + st.stale + '건</strong> · 가장 오래된 건 ' + st.oldest + '일 경과'
+              : STALE_DAYS + '일 초과 0건 · 아직 모두 대응 가능한 시간 안입니다')
+          : '“' + UNTOUCHED + '” 상태로 남은 리드가 없습니다' },
+      { label: '적격 전환율', value: st.qualRate === null ? '—' : Math.round(st.qualRate) + '%',
+        foot: st.total ? '적격·전환됨 ' + st.reached + '건 ÷ 전체 ' + st.total + '건' : '계산할 리드가 없습니다' },
+      { label: '평균 응답 지연일', value: st.waitDays === null ? '—' : U.num(st.waitDays, 1) + '<small>일</small>',
+        foot: st.untouched
+          ? '“' + UNTOUCHED + '” 상태로 남아 있는 ' + st.untouched + '건이 접수 후 기다린 평균 일수'
+          : '대기 중인 리드가 없어 지연이 발생하지 않았습니다' }
+    ];
+    $('#tiles').innerHTML = tiles.map(function (t) {
+      return '<article class="stat reveal"><p class="stat__label">' + esc(t.label) + '</p>' +
+        '<p class="stat__value">' + t.value + '</p>' +
+        '<p class="stat__foot">' + t.foot + '</p></article>';
+    }).join('');
+  }
+
+  function scoreCell(r) {
+    var sc = Number(r.lead.score) || 0;
+    var kind = sc >= 70 ? 'pos' : sc >= 45 ? null : 'warn';
+    return '<span class="score" title="리드 점수 ' + sc + '점 / 100점">' +
+      '<span class="score__num">' + sc + '</span>' + ui.meter(sc, 100, kind) + '</span>';
+  }
+
+  function statusCell(r) {
+    var l = r.lead;
+    var out = ui.chip(l.status, STATUS_KIND[l.status]);
+    if (l.status === '전환됨' && r.opp) {
+      out += ' <a class="link" href="opportunity.html?id=' + encodeURIComponent(r.opp.id) + '">영업기회</a>';
+    }
+    if (l.status === '부적격' && l.memo) {
+      out += ' <span class="t-faint t-small">' + esc(l.memo) + '</span>';
+    }
+    return out;
+  }
+
+  function actCell(r) {
+    var l = r.lead;
+    var out = '<span class="rowact">';
+    if (canEdit && l.status !== '전환됨') {
+      out += '<label class="field" style="flex:0 0 auto">' +
+        '<span class="sr-only">' + esc(l.name) + ' 상태 변경</span>' +
+        '<select class="select" data-status-for="' + esc(l.id) + '">' +
+        EDITABLE_STATUS.map(function (s) {
+          return '<option value="' + esc(s) + '"' + (s === l.status ? ' selected' : '') + '>' + esc(s) + '</option>';
+        }).join('') + '</select></label>';
+    }
+    if (canConvert && l.status !== '전환됨') {
+      out += '<button class="btn btn--sm" type="button" data-convert="' + esc(l.id) + '">전환</button>';
+    }
+    if (l.status === '전환됨') out += '<span class="t-faint t-small">전환 완료</span>';
+    return out + '</span>';
+  }
+
+  function renderTable(rows) {
+    var cols = [
+      { key: 'name', label: '이름', cell: function (r) {
+          return '<button class="link--quiet" type="button" data-peek="' + esc(r.id) + '">' + esc(r.lead.name) + '</button>';
+        } },
+      { key: 'company', label: '회사', cell: function (r) { return esc(r.lead.company); } },
+      { key: 'title', label: '직함', cell: function (r) { return '<span class="t-small">' + esc(r.lead.title || '—') + '</span>'; } },
+      { key: 'source', label: '소스', cell: function (r) { return '<span class="t-small t-nowrap">' + esc(r.lead.source) + '</span>'; } },
+      { key: 'status', label: '상태', cell: statusCell },
+      { key: 'score', label: '점수', cell: scoreCell },
+      { key: 'industry', label: '산업', cell: function (r) { return '<span class="t-small">' + esc(r.lead.industry || '—') + '</span>'; } },
+      { key: 'budget', label: '예상 예산', align: 'right', cell: function (r) {
+          return r.lead.estBudget ? U.won(r.lead.estBudget) : '<span class="t-faint">미확인</span>';
+        } },
+      { key: 'owner', label: '담당자', cell: function (r) { return ui.personCell(db.get('users', r.lead.ownerId)); } },
+      { key: 'created', label: '생성일', align: 'right', cell: function (r) {
+          return '<span title="' + esc(U.fmtDate(r.lead.createdAt)) + '">' + esc(U.ago(r.lead.createdAt)) + '</span>';
+        } },
+      { key: 'aged', label: '경과일', align: 'right', cell: function (r) {
+          var risky = r.lead.status === UNTOUCHED && r.aged > STALE_DAYS;
+          return '<span class="' + (risky ? 't-neg' : '') + '">' + r.aged + '일</span>';
+        } },
+    ];
+    /* 읽기 전용 사용자에게는 아무것도 못 하는 칸을 보여 주지 않습니다. */
+    if (canEdit || canConvert) cols.push({ key: 'act', label: '작업', sortable: false, tight: true, cell: actCell });
+
+    var host = $('#tableHost');
+    host.innerHTML = '';
+    host.appendChild(ui.table(cols, pageRows, {
+      sort: state.sort,
+      onSort: function (key) {
+        if (!SORTS[key]) return;
+        if (state.sort.key === key) state.sort = { key: key, dir: state.sort.dir === 'asc' ? 'desc' : 'asc' };
+        else state.sort = { key: key, dir: SORTS[key].dir };
+        state.page = 1;
+        render();
+      },
+      onRow: function (r) { peek(r.id); },
+      empty: {
+        title: '조건에 맞는 리드가 없습니다',
+        body: '검색어를 줄이거나 뷰를 전체로 바꿔 보세요.'
+      }
+    }));
+  }
+
+  function renderPager(rows, from, pages) {
+    var to = Math.min(rows.length, from + PAGE_SIZE);
+    var nums = '';
+    var lo = Math.max(1, state.page - 2), hi = Math.min(pages, lo + 4);
+    lo = Math.max(1, hi - 4);
+    if (lo > 1) nums += '<button class="pager__btn" type="button" data-page="1">1</button><span class="pager__btn t-faint">…</span>';
+    for (var i = lo; i <= hi; i++) {
+      nums += '<button class="pager__btn" type="button" data-page="' + i + '"' +
+        (i === state.page ? ' aria-current="page"' : '') + '>' + i + '</button>';
+    }
+    if (hi < pages) nums += '<span class="pager__btn t-faint">…</span><button class="pager__btn" type="button" data-page="' + pages + '">' + pages + '</button>';
+
+    $('#pagerHost').innerHTML =
+      '<span class="t-mono">' + (rows.length ? (from + 1) + '–' + to : 0) + ' / ' + rows.length + '건</span>' +
+      '<span class="pager">' +
+        '<button class="btn btn--sm btn--ghost" type="button" data-page="' + (state.page - 1) + '"' +
+          (state.page <= 1 ? ' disabled' : '') + '>이전</button>' +
+        nums +
+        '<button class="btn btn--sm btn--ghost" type="button" data-page="' + (state.page + 1) + '"' +
+          (state.page >= pages ? ' disabled' : '') + '>다음</button>' +
+      '</span>';
+  }
+
+  /* ── 유입 경로 ───────────────────────────────────────────────────── */
+  function renderSource(rows) {
+    var src = bySource(rows);
+    var live = src.filter(function (x) { return x.count > 0; });
+    $('#srcCountNote').textContent = '현재 필터 ' + rows.length + '건';
+
+    if (!live.length) {
+      $('#srcCountChart').innerHTML = ui.empty('표시할 리드가 없습니다', '필터를 넓히면 소스별 분포가 다시 그려집니다.');
+      $('#srcRateChart').innerHTML = ui.empty('전환율을 계산할 리드가 없습니다', '리드가 한 건이라도 포함되면 소스별 전환율이 표시됩니다.');
+    } else {
+      var ordered = U.sortBy(live, 'count', 'desc');
+      $('#srcCountChart').innerHTML =
+        ch.bars(ordered.map(function (x) {
+          return { label: shortSrc(x.source), value: x.count, kind: x.converted ? 'pos' : null };
+        }), { h: 200, fmt: function (v) { return U.num(v) + '건'; }, label: '소스별 리드 수' }) +
+        '<p class="t-micro mt-xs">막대는 현재 필터에 포함된 리드 수입니다. 초록은 전환된 리드가 한 건 이상 나온 경로입니다.</p>';
+
+      var best = Math.max.apply(null, ordered.map(function (x) { return x.rate; }));
+      $('#srcRateChart').innerHTML =
+        ch.bars(ordered.map(function (x) {
+          return { label: shortSrc(x.source), value: Math.round(x.rate * 10) / 10, kind: best > 0 && x.rate === best ? 'pos' : null };
+        }), { h: 200, fmt: function (v) { return U.pct(v); }, label: '소스별 전환율' }) +
+        '<p class="t-micro mt-xs">' + (best > 0
+          ? '전환율은 “전환됨” 상태가 된 리드의 비율입니다. 리드 수가 적은 경로는 비율이 크게 흔들립니다.'
+          : '현재 필터에는 전환된 리드가 없어 모든 경로의 전환율이 0%입니다.') + '</p>';
+    }
+
+    var tbl = U.sortBy(live, 'count', 'desc');
+    var host = $('#srcTable');
+    host.innerHTML = '';
+    host.appendChild(ui.table([
+      { key: 'source', label: '유입 소스', sortable: false, cell: function (x) { return esc(x.source); } },
+      { key: 'count', label: '리드', align: 'right', sortable: false, cell: function (x) { return U.num(x.count) + '건'; } },
+      { key: 'reached', label: '적격 이상', align: 'right', sortable: false, cell: function (x) { return U.num(x.reached) + '건'; } },
+      { key: 'disq', label: '부적격', align: 'right', sortable: false, cell: function (x) {
+          return x.disq ? '<span class="t-muted">' + U.num(x.disq) + '건</span>' : '<span class="t-faint">0건</span>';
+        } },
+      { key: 'converted', label: '전환', align: 'right', sortable: false, cell: function (x) { return U.num(x.converted) + '건'; } },
+      { key: 'rate', label: '전환율', align: 'right', sortable: false, cell: function (x) {
+          return x.converted ? '<span class="t-pos">' + U.pct(x.rate) + '</span>' : '<span class="t-faint">0%</span>';
+        } },
+      { key: 'wonCount', label: '전환 후 성사', align: 'right', sortable: false, cell: function (x) {
+          return x.wonCount ? U.num(x.wonCount) + '건' : '<span class="t-faint">0건</span>';
+        } },
+      { key: 'wonAmount', label: '성사 금액', align: 'right', sortable: false, cell: function (x) {
+          return x.wonAmount ? U.won(x.wonAmount) : '<span class="t-faint">—</span>';
+        } }
+    ], tbl, {
+      empty: { title: '집계할 리드가 없습니다', body: '위 필터를 넓히면 유입 경로별 성과가 채워집니다.' }
+    }));
+
+    var totalConv = U.sum(tbl, 'converted');
+    var totalWon = U.sum(tbl, 'wonCount');
+    $('#srcFoot').innerHTML = totalConv
+      ? '전환 ' + totalConv + '건 중 <strong>' + totalWon + '건</strong>이 계약체결까지 갔습니다. ' +
+        '“전환 후 성사”는 리드에 연결된 영업기회가 계약체결 단계에 있는 건수이며, 성사 금액은 그 영업기회의 금액 합계입니다.'
+      : '현재 필터에는 전환된 리드가 없습니다. 전환을 실행하면 그 리드가 만든 영업기회의 결과가 이 표에 쌓입니다.';
+  }
+
+  function shortSrc(s) {
+    return String(s).replace('인바운드 문의', '인바운드').replace('기존 광고주 소개', '광고주 소개')
+      .replace('콜드 아웃바운드', '아웃바운드').replace('리타게팅 캠페인', '리타게팅');
+  }
+
+  /* ── 리드 미리보기 ───────────────────────────────────────────────── */
+  function peek(id) {
+    var r = build().filter(function (x) { return x.id === id; })[0];
+    if (!r) return;
+    var l = r.lead;
+    var rows = [
+      ['회사', esc(l.company)],
+      ['직함', esc(l.title || '—')],
+      ['이메일', esc(l.email || '—')],
+      ['전화', esc(l.phone || '—')],
+      ['유입 소스', esc(l.source)],
+      ['상태', ui.chip(l.status, STATUS_KIND[l.status])],
+      ['점수', scoreCell(r)],
+      ['산업', esc(l.industry || '—')],
+      ['예상 예산', l.estBudget ? U.won(l.estBudget) : '<span class="t-faint">미확인</span>'],
+      ['담당자', ui.personCell(db.get('users', l.ownerId))],
+      ['생성일', esc(U.fmtDate(l.createdAt)) + ' <span class="t-faint">(' + esc(U.ago(l.createdAt)) + ')</span>'],
+      ['경과일', r.aged + '일'],
+      ['메모', l.memo ? esc(l.memo) : '<span class="t-faint">남긴 메모 없음</span>']
+    ];
+    var body = el('div', { class: 'panel__body stack gap-md' }, [
+      el('div', { class: 'kv', html: rows.map(function (kv) {
+        return '<div class="kv__row"><div class="kv__k">' + esc(kv[0]) + '</div><div class="kv__v">' + kv[1] + '</div></div>';
+      }).join('') })
+    ]);
+
+    var acts = el('div', { class: 'row row--wrap gap-xs' });
+    if (l.status === '전환됨' && r.opp) {
+      acts.appendChild(el('a', { class: 'btn btn--sm btn--primary', href: 'opportunity.html?id=' + encodeURIComponent(r.opp.id), text: '전환된 영업기회 열기' }));
+      acts.appendChild(el('a', { class: 'btn btn--sm', href: 'account.html?id=' + encodeURIComponent(r.opp.accountId), text: '광고주 열기' }));
+    } else if (canConvert) {
+      var b = el('button', { class: 'btn btn--sm btn--primary', type: 'button', text: '리드 전환' });
+      b.addEventListener('click', function () { dr.close(); convertModal(l.id); });
+      acts.appendChild(b);
+    } else {
+      acts.appendChild(el('p', { class: 't-micro', text: '전환을 실행하려면 광고주와 영업기회를 만들 권한이 필요합니다.' }));
+    }
+    body.appendChild(acts);
+
+    var dr = ui.drawer({ kicker: '리드', title: l.name + ' · ' + l.company, body: body });
+  }
+
+  /* ── 상태 변경 — 즉시 반영하고 되돌리기를 남깁니다 ───────────────── */
+  function changeStatus(id, next) {
+    var l = db.get('leads', id);
+    if (!l || l.status === next) return;
+    var prev = l.status;
+    db.update('leads', id, { status: next });
+    render();
+    ui.toast('“' + l.name + '” 리드를 ' + prev + ' → ' + next + ' 로 바꿨습니다.', {
+      undo: function () { db.update('leads', id, { status: prev }); render(); }
+    });
+  }
+
+  /* ── 리드 전환 ───────────────────────────────────────────────────── */
+  var ownerOptions = U.sortBy(db.where('users', function (u) {
+    return u.active !== false && ['영업사원', '영업관리자', '관리자'].indexOf(u.role) > -1;
+  }), 'name');
+
+  function step(no, title, control, bodyNodes) {
+    var box = el('section', { class: 'conv-step' }, [
+      el('div', { class: 'conv-step__head' }, [
+        el('div', {}, [
+          el('p', { class: 'conv-step__no', text: 'STEP ' + no }),
+          el('p', { class: 'conv-step__title', text: title })
+        ]),
+        control || null
+      ])
+    ]);
+    (bodyNodes || []).forEach(function (n) { box.appendChild(n); });
+    return box;
+  }
+  function field(label, node, req) {
+    return el('label', { class: 'field' }, [
+      el('span', { class: 'field__label', html: esc(label) + (req ? ' <span class="req">*</span>' : '') }), node
+    ]);
+  }
+
+  function convertModal(id) {
+    var l = db.get('leads', id);
+    if (!l || !canConvert) return;
+
+    /* STEP 1 — 광고주 */
+    var accounts = U.sortBy(db.all('accounts'), 'name');
+    var modeNew = el('input', { type: 'radio', name: 'convAccMode', value: 'new', checked: true });
+    var modeOld = el('input', { type: 'radio', name: 'convAccMode', value: 'existing' });
+    var accName = el('input', { class: 'input', 'data-autofocus': '', value: l.company, autocomplete: 'off' });
+    var accIndustry = el('select', { class: 'select', 'aria-label': '산업' });
+    D.INDUSTRIES.forEach(function (i) { accIndustry.appendChild(el('option', { value: i, text: i })); });
+    if (l.industry && D.INDUSTRIES.indexOf(l.industry) > -1) accIndustry.value = l.industry;
+    var accTier = el('select', { class: 'select', 'aria-label': '등급' });
+    D.ACCOUNT_TIERS.forEach(function (t) { accTier.appendChild(el('option', { value: t, text: t })); });
+    accTier.value = 'Growth';
+    var accPick = el('select', { class: 'select', 'aria-label': '기존 광고주' });
+    accounts.forEach(function (a) { accPick.appendChild(el('option', { value: a.id, text: a.name + ' · ' + a.industry })); });
+    var sameName = accounts.filter(function (a) { return a.name === l.company; })[0];
+    if (sameName) accPick.value = sameName.id;
+
+    var accNewBox = el('div', { class: 'conv-grid mt-sm' }, [
+      field('광고주명', accName, true),
+      field('산업', accIndustry),
+      field('등급', accTier)
+    ]);
+    var accOldBox = el('div', { class: 'mt-sm' }, [field('기존 광고주', accPick)]);
+    accOldBox.hidden = true;
+    var accNameErr = el('p', { class: 't-micro t-neg mt-2xs', text: '광고주명을 입력해야 전환할 수 있습니다.' });
+    accNameErr.hidden = true;
+
+    var s1 = step('1', '광고주', el('div', { class: 'row gap-md' }, [
+      el('label', { class: 'check' }, [modeNew, el('span', { text: '새로 생성' })]),
+      el('label', { class: 'check' }, [modeOld, el('span', { text: '기존 선택' })])
+    ]), [accNewBox, accOldBox, accNameErr]);
+
+    function syncAccMode() {
+      var isNew = modeNew.checked;
+      accNewBox.hidden = !isNew;
+      accOldBox.hidden = isNew;
+      if (!accounts.length) { modeOld.disabled = true; modeNew.checked = true; }
+    }
+    modeNew.addEventListener('change', syncAccMode);
+    modeOld.addEventListener('change', syncAccMode);
+    syncAccMode();
+
+    /* STEP 2 — 담당자 */
+    var wantContact = el('input', { type: 'checkbox', checked: true });
+    var cName = el('input', { class: 'input', value: l.name, autocomplete: 'off' });
+    var cTitle = el('input', { class: 'input', value: l.title || '', autocomplete: 'off' });
+    var cRole = el('select', { class: 'select', 'aria-label': '의사결정 역할' });
+    ['의사결정자', '실무 담당', '영향력자', '예산 승인자'].forEach(function (v) {
+      cRole.appendChild(el('option', { value: v, text: v }));
+    });
+    cRole.value = '실무 담당';
+    var contactBox = el('div', { class: 'conv-grid mt-sm' }, [
+      field('이름', cName, true), field('직함', cTitle), field('의사결정 역할', cRole)
+    ]);
+    var s2 = step('2', '담당자(Contact)', el('label', { class: 'switch' }, [
+      wantContact, el('span', { text: '생성' })
+    ]), [contactBox]);
+
+    /* STEP 3 — 영업기회 */
+    var wantOpp = el('input', { type: 'checkbox', checked: true });
+    var oName = el('input', { class: 'input', value: l.company + ' · 신규 캠페인', autocomplete: 'off' });
+    var oAmount = el('input', { class: 'input input--num', type: 'number', min: '0', step: '1000000', value: String(l.estBudget || 0), 'aria-label': '금액(원)' });
+    var oClose = el('input', { class: 'input', type: 'date', value: U.iso(U.addDays(C.today, 30)), 'aria-label': '마감 예정일' });
+    var oStage = el('select', { class: 'select', 'aria-label': '단계' });
+    D.OPEN_STAGES.forEach(function (s) { oStage.appendChild(el('option', { value: s.key, text: s.key + ' · ' + s.prob + '%' })); });
+    oStage.value = D.OPEN_STAGES[0].key;
+    var oppBox = el('div', { class: 'stack gap-sm mt-sm' }, [
+      field('딜명', oName, true),
+      el('div', { class: 'conv-grid' }, [field('금액 (원)', oAmount), field('마감 예정일', oClose), field('단계', oStage)])
+    ]);
+    var s3 = step('3', '영업기회', el('label', { class: 'switch' }, [
+      wantOpp, el('span', { text: '생성' })
+    ]), [oppBox]);
+
+    function syncToggle(box, cb, host) {
+      box.hidden = !cb.checked;
+      host.dataset.off = cb.checked ? '0' : '1';
+    }
+    wantContact.addEventListener('change', function () { syncToggle(contactBox, wantContact, s2); });
+    wantOpp.addEventListener('change', function () { syncToggle(oppBox, wantOpp, s3); });
+    syncToggle(contactBox, wantContact, s2);
+    syncToggle(oppBox, wantOpp, s3);
+
+    var convNote = el('p', { class: 't-micro', html: '전환하면 이 리드는 <strong>전환됨</strong> 상태로 잠기고, 만들어진 영업기회가 리드에 연결됩니다. 되돌리기는 실행 직후 토스트에서 가능합니다.' });
+
+    ui.modal({
+      title: '리드 전환 · ' + l.name,
+      size: 'wide',
+      body: el('div', { class: 'stack gap-sm' }, [s1, s2, s3, convNote]),
+      actions: [
+        { label: '취소' },
+        { label: '전환 실행', kind: 'primary', onClick: function () {
+            if (modeNew.checked && !accName.value.trim()) {
+              accNameErr.hidden = false;
+              accName.closest('.field').classList.add('is-invalid');
+              accName.focus();
+              return false;
+            }
+            if (wantContact.checked && !cName.value.trim()) {
+              cName.closest('.field').classList.add('is-invalid');
+              cName.focus();
+              return false;
+            }
+            if (wantOpp.checked && !oName.value.trim()) {
+              oName.closest('.field').classList.add('is-invalid');
+              oName.focus();
+              return false;
+            }
+            runConvert(l, {
+              newAccount: modeNew.checked,
+              accountId: accPick.value,
+              accName: accName.value.trim(),
+              accIndustry: accIndustry.value,
+              accTier: accTier.value,
+              contact: wantContact.checked,
+              cName: cName.value.trim(), cTitle: cTitle.value.trim(), cRole: cRole.value,
+              opp: wantOpp.checked,
+              oName: oName.value.trim(),
+              oAmount: Number(oAmount.value) || 0,
+              oClose: oClose.value || U.iso(U.addDays(C.today, 30)),
+              oStage: oStage.value
+            });
+          } }
+      ]
+    });
+  }
+
+  function runConvert(lead, form) {
+    var stamp = new Date(C.today).toISOString();
+    var made = { account: null, contact: null, opp: null };
+    var prev = { status: lead.status, convertedOppId: lead.convertedOppId || null, convertedAt: lead.convertedAt || null };
+
+    var account;
+    if (form.newAccount) {
+      account = db.insert('accounts', {
+        name: form.accName, industry: form.accIndustry, tier: form.accTier,
+        ownerId: lead.ownerId, annualBudget: lead.estBudget || 0, status: '거래중',
+        firstDealDate: U.iso(C.today), lastActivityDate: U.iso(C.today),
+        website: '', phone: lead.phone || '', address: '', employees: null, parentId: null,
+        memo: '리드 전환으로 생성', createdAt: stamp
+      });
+      made.account = account;
+    } else {
+      account = db.get('accounts', form.accountId);
+    }
+    if (!account) { ui.toast('광고주를 찾지 못해 전환을 중단했습니다.', { kind: 'neg' }); return; }
+
+    var contact = null;
+    if (form.contact) {
+      contact = db.insert('contacts', {
+        accountId: account.id, name: form.cName, title: form.cTitle || '',
+        dept: '', email: lead.email || '', phone: lead.phone || '',
+        ownerId: lead.ownerId, isPrimary: !db.first('contacts', function (c) { return c.accountId === account.id && c.isPrimary; }),
+        decisionRole: form.cRole, lastActivityDate: U.iso(C.today), createdAt: stamp
+      });
+      made.contact = contact;
+    }
+
+    var opp = null;
+    if (form.opp) {
+      var st = D.stage(form.oStage);
+      opp = db.insert('opportunities', {
+        name: form.oName, accountId: account.id, ownerId: lead.ownerId,
+        stage: st.key, amount: form.oAmount, probability: st.prob, forecastCategory: st.cast,
+        closeDate: form.oClose, createdAt: stamp, stageEnteredAt: stamp,
+        type: '신규', source: lead.source, competitorId: null,
+        nextStep: '전환 직후 첫 미팅 일정 잡기', lossReason: null,
+        contactId: contact ? contact.id : null, campaignId: null, teamIds: []
+      });
+      made.opp = opp;
+    }
+
+    db.update('leads', lead.id, {
+      status: '전환됨',
+      convertedOppId: opp ? opp.id : null,
+      convertedAccountId: account.id,
+      convertedContactId: contact ? contact.id : null,
+      convertedAt: stamp
+    });
+    if (lead.ownerId !== me.id) {
+      db.notify(lead.ownerId, 'assign', '담당 리드 “' + lead.name + '”가 전환되었습니다.', 'leads.html?filter=converted');
+    }
+
+    showResult(lead, account, contact, opp);
+    render();
+
+    ui.toast('“' + lead.name + '” 리드를 전환했습니다. 아래에서 새 영업기회로 이동할 수 있습니다.', {
+      undo: function () {
+        if (made.opp) db.remove('opportunities', made.opp.id);
+        if (made.contact) db.remove('contacts', made.contact.id);
+        if (made.account) db.remove('accounts', made.account.id);
+        db.update('leads', lead.id, {
+          status: prev.status, convertedOppId: prev.convertedOppId,
+          convertedAccountId: null, convertedContactId: null, convertedAt: prev.convertedAt
+        });
+        hideResult();
+        render();
+      }
+    });
+  }
+
+  function showResult(lead, account, contact, opp) {
+    var made = [];
+    made.push('광고주 “' + esc(account.name) + '”');
+    if (contact) made.push('담당자 “' + esc(contact.name) + '”');
+    if (opp) made.push('영업기회 “' + esc(opp.name) + '” ' + U.won(opp.amount));
+    var acts =
+      (opp ? '<a class="btn btn--sm btn--primary" href="opportunity.html?id=' + encodeURIComponent(opp.id) + '">새 영업기회 열기</a>' : '') +
+      '<a class="btn btn--sm" href="account.html?id=' + encodeURIComponent(account.id) + '">광고주 열기</a>' +
+      '<button class="btn btn--sm btn--ghost" type="button" id="resultClose">닫기</button>';
+
+    var host = $('#convertResult');
+    host.hidden = false;
+    host.innerHTML = ui.insight({
+      kind: 'good', label: '전환 완료',
+      say: '리드 “' + esc(lead.name) + '”에서 ' + made.join(', ') + ' 을(를) 만들었습니다.',
+      why: opp
+        ? '영업기회는 ' + esc(opp.stage) + ' 단계 · 마감 ' + U.fmtDate(opp.closeDate) + '로 시작합니다. 리드는 전환됨 상태로 잠겼습니다.'
+        : '이번 전환에서는 영업기회를 만들지 않았습니다. 필요해지면 영업기회 화면에서 직접 추가하세요.',
+      actions: acts
+    });
+  }
+  function hideResult() {
+    var host = $('#convertResult');
+    host.hidden = true;
+    host.innerHTML = '';
+  }
+
+  /* ── 새 리드 ─────────────────────────────────────────────────────── */
+  function newLeadModal() {
+    var name = el('input', { class: 'input', 'data-autofocus': '', placeholder: '담당자 이름', autocomplete: 'off' });
+    var nameField = el('label', { class: 'field' }, [
+      el('span', { class: 'field__label', html: '이름 <span class="req">*</span>' }), name,
+      el('span', { class: 'field__error', text: '이름을 입력해 주세요.' })
+    ]);
+    var company = el('input', { class: 'input', placeholder: '회사명', autocomplete: 'off' });
+    var companyField = el('label', { class: 'field' }, [
+      el('span', { class: 'field__label', html: '회사 <span class="req">*</span>' }), company,
+      el('span', { class: 'field__error', text: '회사명을 입력해 주세요.' })
+    ]);
+    var title = el('input', { class: 'input', placeholder: '예: 마케팅팀장', autocomplete: 'off' });
+    var source = el('select', { class: 'select', 'aria-label': '유입 소스' });
+    D.LEAD_SOURCES.forEach(function (s) { source.appendChild(el('option', { value: s, text: s })); });
+    var industry = el('select', { class: 'select', 'aria-label': '산업' });
+    D.INDUSTRIES.forEach(function (i) { industry.appendChild(el('option', { value: i, text: i })); });
+    var budget = el('input', { class: 'input input--num', type: 'number', min: '0', step: '5000000', value: '50000000', 'aria-label': '예상 예산(원)' });
+    var score = el('input', { class: 'input input--num', type: 'number', min: '0', max: '100', step: '1', value: '50', 'aria-label': '리드 점수' });
+    var owner = el('select', { class: 'select', 'aria-label': '담당자' });
+    ownerOptions.forEach(function (u) { owner.appendChild(el('option', { value: u.id, text: u.name + ' · ' + (u.title || u.role) })); });
+    if (ownerOptions.some(function (u) { return u.id === me.id; })) owner.value = me.id;
+
+    ui.modal({
+      title: '새 리드',
+      body: el('div', { class: 'stack gap-sm' }, [
+        el('div', { class: 'conv-grid' }, [nameField, companyField]),
+        el('div', { class: 'conv-grid' }, [
+          field('직함', title), field('유입 소스', source), field('산업', industry)
+        ]),
+        el('div', { class: 'conv-grid' }, [
+          field('예상 예산 (원)', budget), field('점수 (0–100)', score), field('담당자', owner)
+        ]),
+        el('p', { class: 't-micro', text: '새 리드는 “' + UNTOUCHED + '” 상태로 등록됩니다. 연락처는 리드 전환 때 담당자 레코드로 넘어갑니다.' })
+      ]),
+      actions: [
+        { label: '취소' },
+        { label: '만들기', kind: 'primary', onClick: function () {
+            var nm = name.value.trim(), co = company.value.trim();
+            if (!nm) { nameField.classList.add('is-invalid'); name.focus(); return false; }
+            if (!co) { companyField.classList.add('is-invalid'); company.focus(); return false; }
+            var rec = db.insert('leads', {
+              name: nm, company: co, title: title.value.trim(), email: '', phone: '',
+              source: source.value, status: UNTOUCHED,
+              score: U.clamp(Number(score.value) || 0, 0, 100),
+              industry: industry.value, estBudget: Number(budget.value) || 0,
+              ownerId: owner.value, createdAt: new Date(C.today).toISOString(),
+              convertedOppId: null, memo: ''
+            });
+            state.view = 'all'; state.page = 1; state.q = ''; $('#q').value = '';
+            U.qsa('[data-view]', $('#views')).forEach(function (b) { b.setAttribute('aria-pressed', String(b.dataset.view === 'all')); });
+            render();
+            ui.toast('“' + rec.name + ' · ' + rec.company + '” 리드를 추가했습니다.', {
+              undo: function () { db.remove('leads', rec.id); render(); }
+            });
+          } }
+      ]
+    });
+  }
+
+  /* ── 이벤트 배선 ─────────────────────────────────────────────────── */
+  U.live($('#views'), 'click', '[data-view]', function (e, t) {
+    state.view = t.dataset.view; state.page = 1;
+    U.qsa('[data-view]', $('#views')).forEach(function (b) { b.setAttribute('aria-pressed', String(b === t)); });
+    render();
+  });
+  U.on($('#q'), 'input', U.debounce(function () { state.q = $('#q').value; state.page = 1; render(); }, 180));
+  U.on($('#fStatus'), 'change', function () { state.status = this.value; state.page = 1; render(); });
+  U.on($('#fSource'), 'change', function () { state.source = this.value; state.page = 1; render(); });
+  U.on($('#fOwner'), 'change', function () { state.owner = this.value; state.page = 1; render(); });
+  U.on($('#reset'), 'click', function () {
+    state.view = 'all'; state.q = ''; state.status = ''; state.source = ''; state.owner = ''; state.page = 1;
+    $('#q').value = ''; $('#fStatus').value = ''; $('#fSource').value = ''; $('#fOwner').value = '';
+    U.qsa('[data-view]', $('#views')).forEach(function (b) { b.setAttribute('aria-pressed', String(b.dataset.view === 'all')); });
+    render();
+  });
+
+  U.live($('#tableHost'), 'change', 'select[data-status-for]', function (e, t) {
+    changeStatus(t.dataset.statusFor, t.value);
+  });
+  U.live($('#tableHost'), 'click', '[data-convert]', function (e, t) {
+    e.stopPropagation();
+    convertModal(t.dataset.convert);
+  });
+  U.live($('#tableHost'), 'click', '[data-peek]', function (e, t) {
+    e.stopPropagation();
+    peek(t.dataset.peek);
+  });
+
+  U.live($('#convertResult'), 'click', '#resultClose', hideResult);
+
+  U.live($('#pagerHost'), 'click', '[data-page]', function (e, t) {
+    var p = Number(t.dataset.page);
+    if (!p || p === state.page) return;
+    state.page = p;
+    render();
+    $('#tableHost').scrollIntoView({ block: 'start' });
+  });
+
+  if (canCreate) U.on($('#newLead'), 'click', newLeadModal);
+
+  render();
+})();
+</script>
+</body>
+</html>

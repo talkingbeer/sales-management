@@ -1,0 +1,733 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>담당자 · CLOSER</title>
+<meta name="description" content="광고주 담당자 목록. 의사결정 역할, 최근 접촉 시점, 연결된 영업기회를 한 화면에서 확인하고 활동을 기록합니다." />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=IBM+Plex+Sans+KR:wght@400;500;600&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="../tokens.css" />
+<link rel="stylesheet" href="../assets/css/base.css" />
+<link rel="stylesheet" href="../assets/css/components.css" />
+<link rel="stylesheet" href="../assets/css/app.css" />
+<style>
+  /* 이 화면에만 필요한 세 가지. 값은 전부 토큰입니다. */
+  .filterbar .field { gap: var(--space-3xs); }
+  .filterbar .field__label { white-space: nowrap; }
+  .filterbar .input, .filterbar .select { min-width: 0; }
+
+  /* ?focus= 로 들어왔거나 방금 만든 담당자를 표시하는 행 */
+  #listSection .table tbody tr.is-flagged,
+  #listSection .table tbody tr.is-flagged:hover {
+    background: var(--color-accent-soft);
+    box-shadow: inset 3px 0 0 0 var(--color-accent);
+  }
+
+  /* 드로어 안의 구획 */
+  .dsec + .dsec { border-top: var(--rule-hair) solid var(--color-rule); padding-top: var(--space-md); }
+  .dsec__title {
+    font-family: var(--font-display); font-size: var(--text-sm); font-weight: 600;
+    color: var(--color-ink); letter-spacing: var(--track-tight);
+  }
+  .dsec__head { display: flex; align-items: center; justify-content: space-between; gap: var(--space-xs); }
+  .gap-list > * + * { border-top: var(--rule-hair) solid var(--color-rule); }
+
+  /* 하단 두 패널 — 좁아지면 한 줄로 */
+  #bottomRow {
+    display: grid;
+    grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr);
+    gap: var(--space-lg);
+    align-items: start;
+  }
+  @media (max-width: 1024px) { #bottomRow { grid-template-columns: minmax(0, 1fr); } }
+  @media (max-width: 900px)  { #stats { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+  @media (max-width: 520px)  { #stats { grid-template-columns: minmax(0, 1fr); } }
+</style>
+</head>
+<body class="app">
+<a class="skip-link" href="#main">본문으로 건너뛰기</a>
+
+<div class="app-main">
+  <main class="app-page" id="main">
+
+    <div class="page-head">
+      <div>
+        <h1 class="page-head__title">담당자</h1>
+        <p class="page-head__sub" id="subline"></p>
+      </div>
+      <div class="page-head__acts" id="headActs"></div>
+    </div>
+
+    <section class="grid grid--4" id="stats" data-verify aria-label="담당자 지표"></section>
+
+    <section class="mt-lg" id="listSection" data-verify aria-label="담당자 목록">
+      <div class="filterbar">
+        <label class="field" style="flex:1 1 220px">
+          <span class="field__label">검색</span>
+          <input class="input" type="search" id="fq" placeholder="이름 · 광고주 · 직함 · 부서" autocomplete="off" />
+        </label>
+        <label class="field" style="flex:0 1 190px">
+          <span class="field__label">광고주</span>
+          <select class="select" id="fAccount"></select>
+        </label>
+        <label class="field" style="flex:0 1 160px">
+          <span class="field__label">의사결정 역할</span>
+          <select class="select" id="fRole"></select>
+        </label>
+        <label class="field" style="flex:0 1 170px">
+          <span class="field__label">담당자</span>
+          <select class="select" id="fOwner"></select>
+        </label>
+        <button class="btn btn--sm" type="button" id="fReset">필터 초기화</button>
+        <span class="grow"></span>
+        <span class="filterbar__count" id="count"></span>
+      </div>
+    </section>
+
+    <section class="mt-lg" id="bottomRow">
+      <div class="panel reveal">
+        <div class="panel__head">
+          <h2 class="panel__title">의사결정 역할 분포</h2>
+          <span class="t-mono" id="roleScope"></span>
+        </div>
+        <div class="panel__body" id="roleChart"></div>
+      </div>
+      <div class="panel reveal">
+        <div class="panel__head">
+          <h2 class="panel__title">접촉 공백이 긴 담당자</h2>
+          <span class="t-mono">상위 7명</span>
+        </div>
+        <div class="panel__body panel__body--flush" id="staleList"></div>
+      </div>
+    </section>
+
+    <footer class="hairline mt-2xl" style="padding-block:var(--space-md)">
+      <p class="t-mono t-faint">CLOSER · 데모 데이터 · 모든 회사·인물·연락처는 가상이며 전화번호는 가운데 자리를 가려 표시합니다</p>
+    </footer>
+  </main>
+</div>
+
+<script src="../assets/js/seed.js"></script>
+<script src="../assets/js/util.js"></script>
+<script src="../assets/js/store.js"></script>
+<script src="../assets/js/domain.js"></script>
+<script src="../assets/js/metrics.js"></script>
+<script src="../assets/js/insights.js"></script>
+<script src="../assets/js/ui.js"></script>
+<script src="../assets/js/charts.js"></script>
+<script src="../assets/js/shell.js"></script>
+<script>
+(function () {
+  'use strict';
+  var C = window.CLOSER, U = C.util, db = C.db, D = C.domain, ui = C.ui, ch = C.charts;
+  C.shell.mount('contacts');
+
+  var me = db.me();
+  var $ = U.qs;
+
+  /* 담당자 레코드는 광고주에 딸린 하위 객체입니다 — 권한도 accounts를 따릅니다. */
+  var canCreate = D.can('accounts', 'C');
+  var canEdit   = D.can('accounts', 'U');
+  var canDelete = D.can('accounts', 'D');
+
+  var ROLES = ['의사결정자', '예산 승인자', '영향력자', '실무 담당'];
+  var ACT_LABEL = { call: '통화', email: '메일', meeting: '미팅', task: '업무' };
+  var STALE_DAYS = 90;
+
+  var state = {
+    q: U.param('q', '') || '',
+    account: U.param('account', '') || '',
+    role: U.param('role', '') || '',
+    owner: U.param('owner', '') || '',
+    sort: { key: 'name', dir: 'asc' },
+    flag: U.param('focus')
+  };
+
+  /* ── 작은 헬퍼 ───────────────────────────────────────────────────── */
+  function accName(id) { var a = db.get('accounts', id); return a ? a.name : ''; }
+  function contacts() { return db.all('contacts'); }
+  function contactsOf(accId) { return db.where('contacts', function (c) { return c.accountId === accId; }); }
+  function oppsOf(c) { return db.where('opportunities', function (o) { return o.contactId === c.id; }); }
+  function sinceDays(c) { return c.lastActivityDate ? U.days(c.lastActivityDate, C.today) : null; }
+
+  /** 개인정보 보호 — 저장 전에 가운데 자리를 가립니다. */
+  function maskPhone(raw) {
+    var s = String(raw == null ? '' : raw).trim();
+    if (!s) return '';
+    if (s.indexOf('*') > -1) return s;
+    var d = s.replace(/[^0-9]/g, '');
+    if (d.length < 7) return s;
+    return d.slice(0, Math.max(2, d.length - 8)) + '-****-' + d.slice(-4);
+  }
+
+  function roleChipKind(r) { return r === '의사결정자' ? 'accent' : 'idle'; }
+
+  /** 이 담당자의 활동: 직접 기록한 것 + 이 담당자가 걸린 영업기회의 활동. */
+  function timelineFor(c) {
+    var oppIds = oppsOf(c).map(function (o) { return o.id; });
+    var list = db.where('activities', function (a) {
+      if (a.contactId === c.id) return true;
+      return a.relatedType === 'opportunity' && oppIds.indexOf(a.relatedId) > -1;
+    });
+    return U.sortBy(list, 'dueDate', 'desc');
+  }
+
+  /* ── 상단 문장과 지표 ────────────────────────────────────────────── */
+  function renderHead() {
+    var all = contacts();
+    var accs = db.all('accounts');
+    $('#subline').innerHTML =
+      '광고주 ' + U.num(accs.length) + '곳에 등록된 담당자 <strong>' + U.num(all.length) + '명</strong>. ' +
+      '행을 열면 소속 광고주·연결된 영업기회·활동 기록을 함께 볼 수 있습니다.';
+
+    $('#headActs').innerHTML = canCreate
+      ? '<button class="btn btn--primary btn--sm" type="button" id="btnNew">새 담당자</button>'
+      : '<span class="t-micro">' + U.esc(me ? me.role : '') + ' 권한으로는 담당자를 읽기만 할 수 있습니다.</span>';
+    if (canCreate) U.on($('#btnNew'), 'click', openNewContact);
+  }
+
+  function renderStats() {
+    var all = contacts();
+    var accs = db.all('accounts');
+    var makers = all.filter(function (c) { return c.decisionRole === '의사결정자'; });
+    var touched = all.filter(function (c) { var d = sinceDays(c); return d !== null && d <= STALE_DAYS; });
+    var noPrimary = accs.filter(function (a) {
+      return !contactsOf(a.id).some(function (c) { return !!c.isPrimary; });
+    });
+    var touchPct = all.length ? (touched.length / all.length) * 100 : null;
+
+    var tiles = [
+      { label: '총 담당자', value: U.num(all.length) + '<small>명</small>',
+        foot: '광고주 ' + U.num(accs.length) + '곳 · 광고주당 평균 ' + (accs.length ? (all.length / accs.length).toFixed(1) : '—') + '명' },
+      { label: '의사결정자', value: U.num(makers.length) + '<small>명</small>',
+        foot: '전체의 ' + (all.length ? U.pct((makers.length / all.length) * 100) : '—') + ' · 나머지는 실무·영향력자' },
+      { label: STALE_DAYS + '일 내 접촉', value: touchPct === null ? '—' : U.pct(touchPct),
+        foot: U.num(touched.length) + '명 / ' + U.num(all.length) + '명 · 마지막 활동일 기준' },
+      { label: '주 담당자 없는 광고주', value: U.num(noPrimary.length) + '<small>곳</small>', warn: noPrimary.length > 0,
+        foot: noPrimary.length
+          ? '주 담당자가 없으면 제안·견적 수신자가 비어 있습니다: ' + U.esc(noPrimary.slice(0, 3).map(function (a) { return a.name; }).join(', ')) + (noPrimary.length > 3 ? ' 외 ' + (noPrimary.length - 3) + '곳' : '')
+          : '모든 광고주에 주 담당자가 한 명씩 지정돼 있습니다.' }
+    ];
+    $('#stats').innerHTML = tiles.map(function (t) {
+      return '<article class="stat reveal"><p class="stat__label">' + U.esc(t.label) + '</p>' +
+        '<p class="stat__value' + (t.warn ? ' t-warn' : '') + '">' + t.value + '</p>' +
+        '<p class="stat__foot">' + t.foot + '</p></article>';
+    }).join('');
+  }
+
+  /* ── 필터 ────────────────────────────────────────────────────────── */
+  function fillSelects() {
+    var accs = U.sortBy(db.all('accounts'), 'name');
+    $('#fAccount').innerHTML = '<option value="">전체 광고주</option>' + accs.map(function (a) {
+      return '<option value="' + U.esc(a.id) + '">' + U.esc(a.name) + '</option>';
+    }).join('');
+
+    $('#fRole').innerHTML = '<option value="">전체 역할</option>' + ROLES.map(function (r) {
+      return '<option value="' + U.esc(r) + '">' + U.esc(r) + '</option>';
+    }).join('');
+
+    var ownerIds = U.uniq(contacts().map(function (c) { return c.ownerId; }));
+    var owners = U.sortBy(ownerIds.map(function (id) { return db.get('users', id); }).filter(Boolean), 'name');
+    $('#fOwner').innerHTML = '<option value="">전체 담당자</option>' + owners.map(function (u) {
+      return '<option value="' + U.esc(u.id) + '">' + U.esc(u.name) + ' · ' + U.esc(u.role) + '</option>';
+    }).join('');
+  }
+
+  function syncControls() {
+    $('#fq').value = state.q;
+    $('#fAccount').value = state.account;
+    $('#fRole').value = state.role;
+    $('#fOwner').value = state.owner;
+    var dirty = !!(state.q || state.account || state.role || state.owner);
+    $('#fReset').disabled = !dirty;
+  }
+
+  function filtered() {
+    var term = state.q.trim().toLowerCase();
+    return contacts().filter(function (c) {
+      if (state.account && c.accountId !== state.account) return false;
+      if (state.role && c.decisionRole !== state.role) return false;
+      if (state.owner && c.ownerId !== state.owner) return false;
+      if (!term) return true;
+      return [c.name, accName(c.accountId), c.title, c.dept, c.email].join(' ').toLowerCase().indexOf(term) > -1;
+    });
+  }
+
+  function sortVal(c, key) {
+    if (key === 'account') return accName(c.accountId);
+    if (key === 'owner') return db.userName(c.ownerId);
+    if (key === 'lastActivityDate') return c.lastActivityDate || '';
+    return c[key] || '';
+  }
+  function sortRows(list) {
+    return U.sortBy(list, function (c) { return sortVal(c, state.sort.key); }, state.sort.dir);
+  }
+
+  /* ── 목록 ────────────────────────────────────────────────────────── */
+  var COLS = [
+    { key: 'name', label: '이름', cell: function (c) {
+        return '<span class="row gap-xs t-nowrap">' + ui.avatar({ name: c.name }, 'sm') +
+          '<span>' + U.esc(c.name) + '</span>' +
+          (c.isPrimary ? ' <span class="chip chip--accent">주 담당</span>' : '') + '</span>';
+      } },
+    { key: 'account', label: '광고주', cell: function (c) {
+        var a = db.get('accounts', c.accountId);
+        return a ? '<a class="link--quiet" href="account.html?id=' + encodeURIComponent(a.id) + '">' + U.esc(a.name) + '</a>' : '';
+      } },
+    { key: 'title', label: '직함', cell: function (c) { return U.esc(c.title); } },
+    { key: 'dept', label: '부서', cell: function (c) { return '<span class="t-muted">' + U.esc(c.dept) + '</span>'; } },
+    { key: 'decisionRole', label: '의사결정 역할', cell: function (c) { return ui.chip(c.decisionRole, roleChipKind(c.decisionRole)); } },
+    { key: 'phone', label: '연락처', cell: function (c) {
+        return c.phone ? '<span class="t-mono t-mono--plain">' + U.esc(c.phone) + '</span>' : '';
+      } },
+    { key: 'email', label: '이메일', cell: function (c) {
+        return c.email ? '<a class="link--quiet" href="mailto:' + U.esc(c.email) + '">' + U.esc(c.email) + '</a>' : '';
+      } },
+    { key: 'owner', label: '소유자', cell: function (c) { return ui.personCell(db.get('users', c.ownerId)); } },
+    { key: 'lastActivityDate', label: '최근 활동', align: 'right', cell: function (c) {
+        var d = sinceDays(c);
+        if (d === null) return '<span class="t-faint">기록 없음</span>';
+        var cls = d > STALE_DAYS ? 't-neg' : d > 45 ? 't-warn' : '';
+        return '<span class="' + cls + '">' + U.esc(U.ago(c.lastActivityDate)) + '</span>';
+      } }
+  ];
+
+  /* 목록은 청크로 끊어 그린다 — 106명을 한 번에 그리는 건 데모에서는
+     돌아가지만 실제 규모에서는 브라우저를 죽인다. (SPEC 12.4 교정 1) */
+  var PAGE_SIZE = 25;
+  var pageNo = 1;
+
+  function renderPager(total, host) {
+    var oldPager = host.querySelector('.pager-wrap');
+    if (oldPager) oldPager.remove();
+    var pages = Math.ceil(total / PAGE_SIZE);
+    if (pages <= 1) return;
+    var box = U.el('div', { class: 'pager-wrap row row--between gap-sm', style: 'padding:var(--space-xs) var(--space-md);border-top:1px solid var(--color-rule)' });
+    box.appendChild(U.el('span', { class: 'filterbar__count',
+      text: (Math.min((pageNo - 1) * PAGE_SIZE + 1, total)) + '–' + Math.min(pageNo * PAGE_SIZE, total) + ' / ' + U.num(total) + '명' }));
+    var pager = U.el('div', { class: 'pager' });
+    function btn(label, target, cur) {
+      var b = U.el('button', { class: 'pager__btn', type: 'button', text: label });
+      if (cur) b.setAttribute('aria-current', 'page');
+      if (target === null) { b.disabled = true; }
+      else b.addEventListener('click', function () { pageNo = target; renderList(); });
+      return b;
+    }
+    pager.appendChild(btn('‹', pageNo > 1 ? pageNo - 1 : null));
+    var from = Math.max(1, pageNo - 2), to = Math.min(pages, from + 4);
+    for (var i = from; i <= to; i++) pager.appendChild(btn(String(i), i, i === pageNo));
+    pager.appendChild(btn('›', pageNo < pages ? pageNo + 1 : null));
+    box.appendChild(pager);
+    host.appendChild(box);
+  }
+
+  function renderList() {
+    var rows = sortRows(filtered());
+    var host = $('#listSection');
+    var old = host.querySelector('.table-wrap');
+    /* 하이라이트 대상이 있으면 그 행이 있는 페이지로 먼저 넘어간다. */
+    if (state.flag) {
+      var fi = rows.map(function (c) { return c.id; }).indexOf(state.flag);
+      if (fi > -1) pageNo = Math.floor(fi / PAGE_SIZE) + 1;
+    }
+    var maxPage = Math.max(1, Math.ceil(rows.length / PAGE_SIZE));
+    if (pageNo > maxPage) pageNo = maxPage;
+    var pageRows = rows.slice((pageNo - 1) * PAGE_SIZE, pageNo * PAGE_SIZE);
+    var wrap = ui.table(COLS, pageRows, {
+      sort: state.sort,
+      onSort: function (key) {
+        state.sort = { key: key, dir: state.sort.key === key && state.sort.dir === 'asc' ? 'desc' : 'asc' };
+        renderList();
+      },
+      onRow: function (c) { openContact(c.id); },
+      empty: {
+        title: '조건에 맞는 담당자가 없습니다',
+        body: '검색어를 줄이거나 필터를 초기화해 보세요.'
+      }
+    });
+    if (old) host.replaceChild(wrap, old); else host.appendChild(wrap);
+    renderPager(rows.length, host);
+
+    $('#count').textContent = '담당자 ' + U.num(rows.length) + '명 · ' + pageNo + '/' + maxPage + ' 페이지';
+    renderBottom(rows);
+
+    if (state.flag) {
+      var i = pageRows.map(function (c) { return c.id; }).indexOf(state.flag);
+      if (i > -1) {
+        var tr = wrap.querySelectorAll('tbody tr')[i];
+        if (tr) {
+          tr.classList.add('is-flagged');
+          if (tr.scrollIntoView) tr.scrollIntoView({ block: 'center' });
+        }
+      }
+    }
+    return rows;
+  }
+
+  /* ── 하단: 역할 분포 + 접촉 공백 ─────────────────────────────────── */
+  function renderBottom(rows) {
+    $('#roleScope').textContent = rows.length === contacts().length ? '전체 기준' : '필터 결과 기준';
+    var data = ROLES.map(function (r) {
+      return { label: r, value: rows.filter(function (c) { return c.decisionRole === r; }).length, kind: r === '의사결정자' ? 'pos' : null };
+    });
+    $('#roleChart').innerHTML =
+      ch.bars(data, { h: 200, fmt: function (v) { return U.num(v); }, label: '의사결정 역할별 담당자 수' }) +
+      '<p class="t-micro mt-xs">현재 목록에 보이는 ' + U.num(rows.length) + '명을 역할별로 센 값입니다. ' +
+      '초록 막대는 최종 의사결정 권한을 가진 담당자입니다.</p>';
+
+    var stale = U.sortBy(rows.filter(function (c) { return sinceDays(c) !== null; }), function (c) { return sinceDays(c); }, 'desc').slice(0, 7);
+    $('#staleList').innerHTML = stale.length ? stale.map(function (c) {
+      var d = sinceDays(c);
+      return '<button class="menu__item" type="button" data-open="' + U.esc(c.id) + '" ' +
+        'style="width:100%;border-radius:0;padding:var(--space-xs) var(--space-md);border-bottom:1px solid var(--color-rule);text-align:left">' +
+        '<span class="dot ' + (d > STALE_DAYS ? 'dot--neg' : d > 45 ? 'dot--warn' : 'dot--accent') + '"></span>' +
+        '<span class="grow" style="min-width:0">' +
+        '<span style="display:block">' + U.esc(c.name) + ' <span class="t-muted">· ' + U.esc(c.title) + '</span></span>' +
+        '<span class="t-mono" style="font-size:10px">' + U.esc(accName(c.accountId)) + ' · ' + U.esc(c.decisionRole) + '</span></span>' +
+        '<span class="t-mono ' + (d > STALE_DAYS ? 't-neg' : '') + '" style="font-size:10px">' + U.esc(U.ago(c.lastActivityDate)) + '</span>' +
+        '</button>';
+    }).join('') : ui.empty('표시할 담당자가 없습니다', '필터를 넓히면 접촉이 오래된 담당자가 여기에 모입니다.');
+  }
+
+  /* ── 담당자 상세 드로어 ──────────────────────────────────────────── */
+  var drawerRef = null, drawerBody = null, drawerId = null;
+
+  function detailHTML(c) {
+    var acc = db.get('accounts', c.accountId);
+    var owner = db.get('users', c.ownerId);
+    var opps = U.sortBy(oppsOf(c), 'closeDate', 'desc');
+    var openOpps = opps.filter(D.isOpen);
+    var acts = timelineFor(c).slice(0, 10);
+    var health = acc ? D.accountHealth(acc) : null;
+    var d = sinceDays(c);
+
+    var kv = [
+      ['광고주', acc ? '<a class="link" href="account.html?id=' + encodeURIComponent(acc.id) + '">' + U.esc(acc.name) + '</a>' : '<span class="t-faint">미지정</span>'],
+      ['직함', U.esc(c.title || '') || '<span class="t-faint">—</span>'],
+      ['부서', U.esc(c.dept || '') || '<span class="t-faint">—</span>'],
+      ['의사결정 역할', ui.chip(c.decisionRole, roleChipKind(c.decisionRole))],
+      ['주 담당자', c.isPrimary ? '<span class="chip chip--accent">주 담당</span>' : '<span class="t-muted">아니오</span>'],
+      ['연락처', c.phone ? '<span class="t-mono t-mono--plain">' + U.esc(c.phone) + '</span>' : '<span class="t-faint">—</span>'],
+      ['이메일', c.email ? '<a class="link" href="mailto:' + U.esc(c.email) + '">' + U.esc(c.email) + '</a>' : '<span class="t-faint">—</span>'],
+      ['소유자', owner ? U.esc(owner.name) + ' <span class="t-muted">· ' + U.esc(owner.role) + '</span>' : '<span class="t-faint">미지정</span>'],
+      ['최근 활동', d === null ? '<span class="t-faint">기록 없음</span>'
+        : '<span class="' + (d > STALE_DAYS ? 't-neg' : '') + '">' + U.fmtDate(c.lastActivityDate) + ' · ' + U.esc(U.ago(c.lastActivityDate)) + '</span>']
+    ];
+
+    var acts_html = acts.length
+      ? '<ol class="tl">' + acts.map(function (a) {
+          var rel = a.relatedType === 'opportunity' ? db.get('opportunities', a.relatedId) : null;
+          return '<li class="tl__item' + (a.status === '완료' ? '' : ' is-accent') + '">' +
+            '<p class="tl__when">' + U.fmtDate(a.dueDate) + ' · ' + U.esc(ACT_LABEL[a.type] || a.type) + ' · ' + U.esc(a.status) + '</p>' +
+            '<p class="tl__what">' + U.esc(a.subject) +
+            (rel ? ' — <span class="t-muted">' + U.esc(rel.name) + '</span>' : '') + '</p>' +
+            (a.note ? '<p class="t-micro">' + U.esc(a.note) + '</p>' : '') +
+            '</li>';
+        }).join('') + '</ol>'
+      : ui.empty('기록된 활동이 없습니다', '통화·미팅·메일을 남기면 이 담당자와의 접촉 이력이 쌓입니다.');
+
+    var opps_html = opps.length
+      ? '<div class="stack gap-list">' + opps.map(function (o) {
+          return '<a class="menu__item" style="border-radius:0;padding:var(--space-xs) 0" href="opportunity.html?id=' + encodeURIComponent(o.id) + '">' +
+            '<span class="grow" style="min-width:0">' +
+            '<span style="display:block">' + U.esc(o.name) + '</span>' +
+            '<span class="t-mono" style="font-size:10px">' + U.won(o.amount) + ' · 마감 ' + U.fmtDate(o.closeDate) + '</span></span>' +
+            ui.chip(o.stage, D.isWon(o) ? 'pos' : D.isLost(o) ? 'neg' : D.stage(o.stage).cast === 'Commit' ? 'accent' : 'idle') +
+            '</a>';
+        }).join('') + '</div>'
+      : ui.empty('연결된 영업기회가 없습니다', '영업기회의 담당자 필드에 이 사람을 지정하면 여기에 모입니다.');
+
+    var accBox = acc
+      ? '<div class="rec-highlights">' +
+          '<div class="rec-top"><div>' +
+            '<p class="rec-type">소속 광고주</p>' +
+            '<p class="rec-name">' + U.esc(acc.name) + '</p>' +
+          '</div>' +
+          '<a class="btn btn--sm" href="account.html?id=' + encodeURIComponent(acc.id) + '">광고주 열기</a></div>' +
+          '<div class="rec-facts">' +
+            '<div><p class="rec-fact__k">등급</p><p class="rec-fact__v">' + U.esc(acc.tier) + '</p></div>' +
+            '<div><p class="rec-fact__k">업종</p><p class="rec-fact__v">' + U.esc(acc.industry) + '</p></div>' +
+            '<div><p class="rec-fact__k">담당자 수</p><p class="rec-fact__v">' + U.num(contactsOf(acc.id).length) + '명</p></div>' +
+            '<div><p class="rec-fact__k">진행 영업기회</p><p class="rec-fact__v">' + U.num(db.where('opportunities', function (o) { return o.accountId === acc.id && D.isOpen(o); }).length) + '건</p></div>' +
+          '</div>' +
+          '<div class="mt-sm">' + ui.meter(health.score, 100, health.score >= 70 ? 'pos' : health.score >= 55 ? null : 'neg') + '</div>' +
+          '<p class="t-micro mt-xs">건강도 ' + U.num(health.score) + '점' + (health.reasons.length ? ' · ' + U.esc(health.reasons.join(' · ')) : '') + '</p>' +
+        '</div>'
+      : '<div class="rec-highlights"><p class="t-small">소속 광고주가 지정되지 않았습니다.</p></div>';
+
+    var acts_bar = '<div class="row row--wrap gap-xs">' +
+      (canEdit ? '<button class="btn btn--primary btn--sm" type="button" data-act="log">활동 기록</button>' : '') +
+      (canEdit && !c.isPrimary && acc ? '<button class="btn btn--sm" type="button" data-act="primary">주 담당자로 지정</button>' : '') +
+      (canDelete ? '<button class="btn btn--danger btn--sm" type="button" data-act="delete">담당자 삭제</button>' : '') +
+      '</div>';
+
+    return '<div class="stack gap-md">' +
+      (canEdit || canDelete ? acts_bar : '<p class="t-micro">읽기 권한만 있어 이 담당자를 수정할 수 없습니다.</p>') +
+      accBox +
+      '<section class="dsec stack gap-xs"><h3 class="dsec__title">기본 정보</h3>' +
+        '<div class="kv">' + kv.map(function (r) {
+          return '<div class="kv__row"><span class="kv__k">' + U.esc(r[0]) + '</span><span class="kv__v">' + r[1] + '</span></div>';
+        }).join('') + '</div></section>' +
+      '<section class="dsec stack gap-xs"><div class="dsec__head">' +
+        '<h3 class="dsec__title">연결된 영업기회</h3>' +
+        '<span class="t-mono">전체 ' + U.num(opps.length) + '건 · 진행 ' + U.num(openOpps.length) + '건</span></div>' +
+        opps_html + '</section>' +
+      '<section class="dsec stack gap-xs"><div class="dsec__head">' +
+        '<h3 class="dsec__title">활동 타임라인</h3>' +
+        '<span class="t-mono">최근 ' + U.num(acts.length) + '건</span></div>' +
+        acts_html + '</section>' +
+      '</div>';
+  }
+
+  function paintDrawer() {
+    var c = db.get('contacts', drawerId);
+    if (!c || !drawerBody) return;
+    drawerBody.innerHTML = detailHTML(c);
+  }
+
+  function openContact(id) {
+    var c = db.get('contacts', id);
+    if (!c) { ui.toast('해당 담당자를 찾을 수 없습니다.', { kind: 'neg' }); return; }
+    drawerId = id;
+    drawerBody = U.el('div', { class: 'panel__body' });
+    drawerBody.innerHTML = detailHTML(c);
+    drawerRef = ui.drawer({ kicker: '담당자', title: c.name, body: drawerBody });
+
+    U.live(drawerBody, 'click', '[data-act]', function (e, btn) {
+      var act = btn.dataset.act;
+      var cur = db.get('contacts', drawerId);
+      if (!cur) return;
+      if (act === 'log') openLogActivity(cur);
+      else if (act === 'primary') makePrimary(cur);
+      else if (act === 'delete') removeContact(cur);
+    });
+  }
+
+  function closeDrawer() {
+    if (drawerRef) drawerRef.close();
+    drawerRef = null; drawerBody = null; drawerId = null;
+  }
+
+  /* ── 되돌릴 수 있는 변경: 확인 대화상자 없이 즉시 반영 + 되돌리기 ── */
+  function makePrimary(c) {
+    if (!canEdit) return;
+    var siblings = contactsOf(c.accountId).filter(function (x) { return x.isPrimary && x.id !== c.id; });
+    var before = siblings.map(function (x) { return x.id; });
+    siblings.forEach(function (x) { db.update('contacts', x.id, { isPrimary: false }); });
+    db.update('contacts', c.id, { isPrimary: true });
+    refresh();
+    paintDrawer();
+    ui.toast(c.name + ' 님을 ' + accName(c.accountId) + ' 주 담당자로 지정했습니다.', {
+      undo: function () {
+        db.update('contacts', c.id, { isPrimary: false });
+        before.forEach(function (id) { db.update('contacts', id, { isPrimary: true }); });
+        refresh(); paintDrawer();
+      }
+    });
+  }
+
+  function removeContact(c) {
+    if (!canDelete) return;
+    var list = db.all('contacts');
+    var idx = list.map(function (x) { return x.id; }).indexOf(c.id);
+    var copy = JSON.parse(JSON.stringify(c));
+    closeDrawer();
+    db.remove('contacts', c.id);
+    if (state.flag === c.id) state.flag = null;
+    refresh();
+    ui.toast(c.name + ' 님을 목록에서 삭제했습니다.', {
+      undo: function () {
+        db.restore('contacts', copy, idx);
+        state.flag = copy.id;
+        refresh();
+      }
+    });
+  }
+
+  /* ── 활동 기록 ───────────────────────────────────────────────────── */
+  function field(label, control, req, help) {
+    var kids = [
+      U.el('span', { class: 'field__label', html: U.esc(label) + (req ? ' <span class="req">*</span>' : '') }),
+      control
+    ];
+    if (help) kids.push(U.el('span', { class: 'field__help', text: help }));
+    kids.push(U.el('span', { class: 'field__error', text: '필수 항목입니다.' }));
+    return U.el('label', { class: 'field' }, kids);
+  }
+  function options(list, selected) {
+    return list.map(function (o) {
+      var v = typeof o === 'string' ? o : o.value, l = typeof o === 'string' ? o : o.label;
+      return '<option value="' + U.esc(v) + '"' + (v === selected ? ' selected' : '') + '>' + U.esc(l) + '</option>';
+    }).join('');
+  }
+  function flag(control, bad) {
+    var f = control.closest('.field');
+    if (f) f.classList[bad ? 'add' : 'remove']('is-invalid');
+    return !bad;
+  }
+
+  function openLogActivity(c) {
+    if (!canEdit) return;
+    var type = U.el('select', { class: 'select', html: options([
+      { value: 'call', label: '통화' }, { value: 'meeting', label: '미팅' },
+      { value: 'email', label: '메일' }, { value: 'task', label: '업무' }
+    ], 'call') });
+    var subject = U.el('input', { class: 'input', 'data-autofocus': '', autocomplete: 'off', maxlength: '60', placeholder: '예: 하반기 예산 확인 통화' });
+    var date = U.el('input', { class: 'input', type: 'date', value: U.iso(C.today) });
+    var note = U.el('textarea', { class: 'textarea', maxlength: '400', placeholder: '합의된 내용, 다음 약속, 반대 의견을 남겨 두면 다음 사람이 읽습니다.' });
+
+    ui.modal({
+      title: c.name + ' 님과의 활동 기록',
+      body: U.el('div', { class: 'stack gap-md' }, [
+        U.el('p', { class: 't-small', text: accName(c.accountId) + ' · ' + (c.title || '') + ' · ' + c.decisionRole }),
+        U.el('div', { class: 'grid grid--auto' }, [
+          field('활동 유형', type, true),
+          field('날짜', date, true)
+        ]),
+        field('제목', subject, true),
+        field('메모', note, false, '400자까지 저장됩니다.')
+      ]),
+      actions: [
+        { label: '취소' },
+        { label: '기록', kind: 'primary', onClick: function () {
+            var okSubject = flag(subject, !subject.value.trim());
+            var okDate = flag(date, !date.value);
+            if (!okSubject || !okDate) return false;
+            var when = date.value;
+            var past = U.days(when, C.today) >= 0;
+            db.insert('activities', {
+              type: type.value,
+              subject: subject.value.trim(),
+              relatedType: 'account', relatedId: c.accountId,
+              contactId: c.id,
+              ownerId: me.id,
+              dueDate: when,
+              doneAt: past ? U.date(when).toISOString() : null,
+              status: past ? '완료' : '예정',
+              priority: '보통',
+              note: note.value.trim()
+            });
+            if (past && (!c.lastActivityDate || U.days(c.lastActivityDate, when) > 0)) {
+              db.update('contacts', c.id, { lastActivityDate: when });
+            }
+            refresh();
+            paintDrawer();
+          } }
+      ]
+    });
+  }
+
+  /* ── 새 담당자 ───────────────────────────────────────────────────── */
+  function openNewContact() {
+    if (!canCreate) return;
+    var accs = U.sortBy(db.all('accounts'), 'name');
+    var owners = U.sortBy(db.where('users', function (u) {
+      return u.active !== false && ['영업사원', '영업관리자', '관리자'].indexOf(u.role) > -1;
+    }), 'name');
+
+    var name = U.el('input', { class: 'input', 'data-autofocus': '', autocomplete: 'off', maxlength: '20', placeholder: '예: 김서연' });
+    var account = U.el('select', { class: 'select', html: '<option value="">광고주를 선택하세요</option>' +
+      options(accs.map(function (a) { return { value: a.id, label: a.name }; }), state.account) });
+    var title = U.el('input', { class: 'input', autocomplete: 'off', maxlength: '30', placeholder: '예: 퍼포먼스 마케터' });
+    var dept = U.el('input', { class: 'input', autocomplete: 'off', maxlength: '30', placeholder: '예: 디지털마케팅팀' });
+    var email = U.el('input', { class: 'input', type: 'email', autocomplete: 'off', maxlength: '60', placeholder: 'name@company.co.kr' });
+    var phone = U.el('input', { class: 'input', autocomplete: 'off', maxlength: '20', placeholder: '010-1234-5678' });
+    var role = U.el('select', { class: 'select', html: options(ROLES, '실무 담당') });
+    var owner = U.el('select', { class: 'select', html: options(owners.map(function (u) {
+      return { value: u.id, label: u.name + ' · ' + u.role };
+    }), me && me.id) });
+    var primary = U.el('input', { type: 'checkbox' });
+
+    ui.modal({
+      title: '새 담당자',
+      size: 'wide',
+      body: U.el('div', { class: 'stack gap-md' }, [
+        U.el('div', { class: 'grid grid--auto' }, [
+          field('이름', name, true),
+          field('광고주', account, true),
+          field('직함', title),
+          field('부서', dept),
+          field('이메일', email),
+          field('연락처', phone, false, '저장할 때 가운데 자리는 자동으로 가려집니다.'),
+          field('의사결정 역할', role, true),
+          field('소유자', owner, true)
+        ]),
+        U.el('label', { class: 'check' }, [primary, U.el('span', { text: '이 광고주의 주 담당자로 지정' })])
+      ]),
+      actions: [
+        { label: '취소' },
+        { label: '저장', kind: 'primary', onClick: function () {
+            var okName = flag(name, !name.value.trim());
+            var okAcc = flag(account, !account.value);
+            if (!okName || !okAcc) return false;
+
+            var accId = account.value;
+            if (primary.checked) {
+              contactsOf(accId).forEach(function (x) {
+                if (x.isPrimary) db.update('contacts', x.id, { isPrimary: false });
+              });
+            }
+            var rec = db.insert('contacts', {
+              accountId: accId,
+              name: name.value.trim(),
+              title: title.value.trim(),
+              dept: dept.value.trim(),
+              email: email.value.trim(),
+              phone: maskPhone(phone.value),
+              ownerId: owner.value,
+              isPrimary: !!primary.checked,
+              decisionRole: role.value,
+              lastActivityDate: null
+            });
+
+            state.q = ''; state.role = ''; state.owner = ''; state.account = '';
+            state.flag = rec.id;
+            fillSelects();
+            syncControls();
+            refresh();
+          } }
+      ]
+    });
+  }
+
+  /* ── 다시 그리기 ─────────────────────────────────────────────────── */
+  function refresh() {
+    renderStats();
+    renderList();
+    U.revealAll();
+  }
+
+  /* ── 배선 ────────────────────────────────────────────────────────── */
+  renderHead();
+  fillSelects();
+  syncControls();
+  renderStats();
+  renderList();
+
+  U.on($('#fq'), 'input', U.debounce(function () {
+    state.q = this.value; state.flag = null; pageNo = 1; syncControls(); renderList();
+  }, 160));
+  U.on($('#fAccount'), 'change', function () { state.account = this.value; pageNo = 1; syncControls(); renderList(); });
+  U.on($('#fRole'), 'change', function () { state.role = this.value; pageNo = 1; syncControls(); renderList(); });
+  U.on($('#fOwner'), 'change', function () { state.owner = this.value; pageNo = 1; syncControls(); renderList(); });
+  U.on($('#fReset'), 'click', function () {
+    state.q = ''; state.account = ''; state.role = ''; state.owner = ''; state.flag = null;
+    pageNo = 1; syncControls(); renderList(); $('#fq').focus();
+  });
+
+  U.live($('#staleList'), 'click', '[data-open]', function (e, btn) { openContact(btn.dataset.open); });
+
+  /* ?focus=<contactId> — 다른 화면에서 넘어온 딥링크 */
+  if (state.flag) {
+    if (db.get('contacts', state.flag)) openContact(state.flag);
+    else ui.toast('링크로 요청한 담당자를 찾을 수 없습니다.', { kind: 'neg' });
+  }
+  if (U.param('new') && canCreate) openNewContact();
+
+  U.revealAll();
+})();
+</script>
+</body>
+</html>

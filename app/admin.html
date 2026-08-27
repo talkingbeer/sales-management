@@ -1,0 +1,1491 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>설정·관리 · CLOSER</title>
+<meta name="description" content="CLOSER 설정·관리 화면. 사용자와 팀, 기간별 목표, 역할별 권한 매트릭스, 감사 로그, 로컬 데이터를 한곳에서 관리합니다." />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=IBM+Plex+Sans+KR:wght@400;500;600&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="../tokens.css" />
+<link rel="stylesheet" href="../assets/css/base.css" />
+<link rel="stylesheet" href="../assets/css/components.css" />
+<link rel="stylesheet" href="../assets/css/app.css" />
+<style>
+  /* 이 화면에만 필요한 조각. 색·간격·반경·이징은 모두 토큰만 사용합니다. */
+  [data-pane][hidden] { display: none !important; }
+
+  .list-card {
+    border: var(--rule-hair) solid var(--color-rule);
+    border-top: none;
+    border-radius: 0 0 var(--radius-md) var(--radius-md);
+    background: var(--color-surface);
+  }
+  .pagerbar {
+    display: flex; align-items: center; justify-content: space-between;
+    gap: var(--space-sm); flex-wrap: wrap;
+    padding: var(--space-xs) var(--space-md);
+    border-top: var(--rule-hair) solid var(--color-rule);
+  }
+  .adm-bar {
+    display: flex; align-items: center; gap: var(--space-xs); flex-wrap: wrap;
+    padding: var(--space-xs) var(--space-md);
+    border-bottom: var(--rule-hair) solid var(--color-rule);
+  }
+  .adm-bar__label { font-family: var(--font-mono); font-size: var(--text-2xs); color: var(--color-ink-3); letter-spacing: var(--track-mono); }
+  .filterbar .input, .filterbar .select { min-height: 28px; height: 28px; font-size: var(--text-xs); }
+  .filterbar .select { max-width: 150px; }
+  .filterbar__q { width: min(210px, 46vw); }
+
+  /* 넓은 표는 페이지가 아니라 제 안에서 가로로 스크롤합니다. */
+  .adm-scroll { max-width: 100%; overflow-x: auto; }
+  .adm-scroll > table { min-width: 640px; }
+  #permTable > table { min-width: 760px; }
+  #tgtGrid > table { min-width: 720px; }
+
+  /* 인라인 편집 셀 — 표 안에서 바로 고치고 즉시 저장합니다. */
+  .cell-sel { min-height: 28px; height: 28px; font-size: var(--text-xs); padding-block: 0; min-width: 96px; }
+  .cell-num-in { min-height: 28px; height: 28px; width: 68px; font-size: var(--text-xs); text-align: right; }
+  .tgt-in { min-height: 28px; height: 28px; width: 88px; font-size: var(--text-xs); text-align: right; font-family: var(--font-mono); }
+  .tgt-now { background: var(--color-accent-soft); }
+  .skill-cell { display: flex; gap: var(--space-3xs); flex-wrap: wrap; max-width: 220px; }
+
+  /* 권한 매트릭스 배지 */
+  .perm { display: inline-flex; align-items: center; justify-content: center;
+    width: 20px; height: 18px; margin-right: 2px; border-radius: var(--radius-xs);
+    font-family: var(--font-mono); font-size: 10px; line-height: 1;
+    background: var(--color-paper-3); color: var(--color-ink-4); }
+  .perm[data-on="1"] { background: var(--color-accent-soft); color: var(--color-accent); }
+  .perm[data-on="1"][data-act="D"] { background: var(--color-neg-soft); color: var(--color-neg); }
+  .perm-none { font-family: var(--font-mono); font-size: var(--text-2xs); color: var(--color-ink-4); }
+
+  .answer {
+    border: var(--rule-hair) solid var(--color-rule);
+    border-left: var(--rule-thick) solid var(--color-accent);
+    border-radius: var(--radius-sm);
+    padding: var(--space-sm) var(--space-md);
+    background: var(--color-paper-2);
+  }
+  .adm-duo { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr); gap: var(--space-lg); align-items: start; }
+  .adm-acts { display: flex; gap: var(--space-xs); flex-wrap: wrap; }
+  .ent-scroll { max-height: 420px; overflow-y: auto; }
+
+  @media (max-width: 900px) { .adm-duo { grid-template-columns: minmax(0, 1fr); } }
+  @media (max-width: 640px) {
+    .filterbar { padding-inline: var(--space-sm); }
+    .filterbar .select { max-width: 44vw; }
+    .adm-bar, .pagerbar { padding-inline: var(--space-sm); }
+    .skill-cell { max-width: 150px; }
+  }
+</style>
+</head>
+<body class="app">
+<a class="skip-link" href="#main">본문으로 건너뛰기</a>
+
+<div class="app-main">
+  <main class="app-page" id="main">
+
+    <div class="page-head">
+      <div>
+        <h1 class="page-head__title">설정·관리</h1>
+        <p class="page-head__sub" id="subline"></p>
+      </div>
+      <div class="page-head__acts" id="headActs"></div>
+    </div>
+
+    <div id="adminHost" data-verify>
+      <section class="grid grid--4" id="tiles" aria-label="설정 요약 지표"></section>
+
+      <div class="tabs mt-lg" id="tabs" role="tablist" aria-label="설정 영역">
+        <button class="tab" type="button" role="tab" id="tab-users"   data-tab="users"   aria-selected="true"  aria-controls="paneUsers">사용자 <span class="tab__count" id="cntUsers"></span></button>
+        <button class="tab" type="button" role="tab" id="tab-teams"   data-tab="teams"   aria-selected="false" aria-controls="paneTeams">팀 <span class="tab__count" id="cntTeams"></span></button>
+        <button class="tab" type="button" role="tab" id="tab-targets" data-tab="targets" aria-selected="false" aria-controls="paneTargets">목표</button>
+        <button class="tab" type="button" role="tab" id="tab-perms"   data-tab="perms"   aria-selected="false" aria-controls="panePerms">권한</button>
+        <button class="tab" type="button" role="tab" id="tab-audit"   data-tab="audit"   aria-selected="false" aria-controls="paneAudit">감사 로그 <span class="tab__count" id="cntAudit"></span></button>
+        <button class="tab" type="button" role="tab" id="tab-data"    data-tab="data"    aria-selected="false" aria-controls="paneData">데이터</button>
+      </div>
+
+      <!-- ── 사용자 ─────────────────────────────────────────────────── -->
+      <section class="mt-md" data-pane="users" id="paneUsers" role="tabpanel" aria-labelledby="tab-users" tabindex="0">
+        <div class="filterbar" id="uFilter">
+          <div class="seg" id="uViews" role="group" aria-label="사용자 상태 보기"></div>
+
+          <label class="field" style="flex:0 0 auto">
+            <span class="sr-only">사용자 검색</span>
+            <input class="input filterbar__q" type="search" id="uq" placeholder="이름 · 직무 · 스킬" autocomplete="off" />
+          </label>
+          <label class="field" style="flex:0 0 auto">
+            <span class="sr-only">역할</span>
+            <select class="select" id="uRole"></select>
+          </label>
+          <label class="field" style="flex:0 0 auto">
+            <span class="sr-only">팀</span>
+            <select class="select" id="uTeam"></select>
+          </label>
+
+          <button class="btn btn--sm btn--ghost" type="button" id="uReset">필터 초기화</button>
+          <span class="grow"></span>
+          <button class="btn btn--sm btn--ghost" type="button" id="uCsv">CSV 내보내기</button>
+          <span class="filterbar__count" id="uCount"></span>
+        </div>
+
+        <div class="list-card">
+          <div id="uTable"></div>
+          <div class="pagerbar" id="uPager"></div>
+        </div>
+
+        <div class="panel mt-lg">
+          <div class="panel__head">
+            <h2 class="panel__title">역할별 인원</h2>
+            <span class="t-mono" id="roleNote"></span>
+          </div>
+          <div class="panel__body" id="roleChart"></div>
+        </div>
+      </section>
+
+      <!-- ── 팀 ─────────────────────────────────────────────────────── -->
+      <section class="mt-md" data-pane="teams" id="paneTeams" role="tabpanel" aria-labelledby="tab-teams" tabindex="0" hidden>
+        <div class="panel">
+          <div class="panel__head">
+            <h2 class="panel__title">팀</h2>
+            <span class="t-mono" id="teamPeriod"></span>
+          </div>
+          <div id="teamTable"></div>
+          <div class="panel__foot"><p class="t-micro" id="teamFoot"></p></div>
+        </div>
+
+        <div class="panel mt-lg">
+          <div class="panel__head">
+            <h2 class="panel__title">팀별 소속 인원</h2>
+            <span class="t-mono" id="teamHeadcount"></span>
+          </div>
+          <div class="panel__body" id="teamMembers"></div>
+        </div>
+      </section>
+
+      <!-- ── 목표 ───────────────────────────────────────────────────── -->
+      <section class="mt-md" data-pane="targets" id="paneTargets" role="tabpanel" aria-labelledby="tab-targets" tabindex="0" hidden>
+        <div class="panel">
+          <div class="panel__head">
+            <h2 class="panel__title">기간별 목표</h2>
+            <span class="t-mono" id="tgtUnit"></span>
+          </div>
+          <div class="adm-bar">
+            <span class="adm-bar__label">유형</span>
+            <div class="seg" id="segType" role="group" aria-label="목표 유형">
+              <button class="seg__item" type="button" data-ttype="매출" aria-pressed="true">매출</button>
+              <button class="seg__item" type="button" data-ttype="신규광고주" aria-pressed="false">신규광고주</button>
+            </div>
+            <span class="grow"></span>
+            <button class="btn btn--sm" type="button" id="copyNext">이번 달을 다음 달로 복사</button>
+            <button class="btn btn--sm btn--ghost" type="button" id="tgtCsv">CSV 내보내기</button>
+          </div>
+          <div class="panel__body panel__body--flush">
+            <div class="adm-scroll" id="tgtGrid"></div>
+          </div>
+          <div class="panel__foot"><p class="t-micro" id="tgtFoot"></p></div>
+        </div>
+      </section>
+
+      <!-- ── 권한 ───────────────────────────────────────────────────── -->
+      <section class="mt-md" data-pane="perms" id="panePerms" role="tabpanel" aria-labelledby="tab-perms" tabindex="0" hidden>
+        <div class="panel">
+          <div class="panel__head">
+            <h2 class="panel__title">역할 × 객체 권한</h2>
+            <span class="t-mono">C 생성 · R 조회 · U 수정 · D 삭제</span>
+          </div>
+          <div class="panel__body panel__body--flush">
+            <div class="adm-scroll" id="permTable"></div>
+          </div>
+          <div class="panel__foot"><p class="t-micro" id="permFoot"></p></div>
+        </div>
+
+        <div class="panel mt-lg">
+          <div class="panel__head">
+            <h2 class="panel__title">실효 권한 조회기</h2>
+            <span class="t-mono">사용자 + 객체</span>
+          </div>
+          <div class="panel__body stack gap-sm">
+            <div class="row gap-sm" style="flex-wrap:wrap">
+              <label class="field" style="flex:1 1 200px">
+                <span class="field__label">사용자</span>
+                <select class="select" id="pkUser"></select>
+              </label>
+              <label class="field" style="flex:1 1 200px">
+                <span class="field__label">객체</span>
+                <select class="select" id="pkObj"></select>
+              </label>
+            </div>
+            <div class="answer" id="permAnswer"></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ── 감사 로그 ──────────────────────────────────────────────── -->
+      <section class="mt-md" data-pane="audit" id="paneAudit" role="tabpanel" aria-labelledby="tab-audit" tabindex="0" hidden>
+        <div class="filterbar" id="aFilter">
+          <label class="field" style="flex:0 0 auto">
+            <span class="sr-only">행위자</span>
+            <select class="select" id="aActor"></select>
+          </label>
+          <label class="field" style="flex:0 0 auto">
+            <span class="sr-only">객체 타입</span>
+            <select class="select" id="aObj"></select>
+          </label>
+          <label class="field" style="flex:0 0 auto">
+            <span class="sr-only">행위</span>
+            <select class="select" id="aAction"></select>
+          </label>
+          <label class="field" style="flex:0 0 auto">
+            <span class="sr-only">시작일</span>
+            <input class="input" type="date" id="aFrom" />
+          </label>
+          <label class="field" style="flex:0 0 auto">
+            <span class="sr-only">종료일</span>
+            <input class="input" type="date" id="aTo" />
+          </label>
+          <button class="btn btn--sm btn--ghost" type="button" id="aReset">필터 초기화</button>
+          <span class="grow"></span>
+          <button class="btn btn--sm btn--ghost" type="button" id="aCsv">CSV 내보내기</button>
+          <span class="filterbar__count" id="aCount"></span>
+        </div>
+
+        <div class="list-card">
+          <div id="aTable"></div>
+          <div class="pagerbar" id="aPager"></div>
+        </div>
+        <p class="t-micro mt-xs">감사 로그는 추가 전용입니다. 이 화면에서 편집하거나 지울 수 없습니다.</p>
+      </section>
+
+      <!-- ── 데이터 ─────────────────────────────────────────────────── -->
+      <section class="mt-md" data-pane="data" id="paneData" role="tabpanel" aria-labelledby="tab-data" tabindex="0" hidden>
+        <div class="adm-duo">
+          <div class="panel">
+            <div class="panel__head">
+              <h2 class="panel__title">저장된 레코드</h2>
+              <span class="t-mono" id="entTotal"></span>
+            </div>
+            <div class="ent-scroll" id="entTable"></div>
+          </div>
+
+          <div class="stack gap-lg">
+            <div class="panel">
+              <div class="panel__head">
+                <h2 class="panel__title">데이터 관리</h2>
+                <span id="storeChip"></span>
+              </div>
+              <div class="panel__body stack gap-sm">
+                <p class="t-small" id="storeNote"></p>
+                <div class="adm-acts">
+                  <button class="btn btn--sm btn--primary" type="button" id="expJson">JSON 내보내기</button>
+                  <button class="btn btn--sm" type="button" id="expAudit">감사 로그 CSV</button>
+                  <button class="btn btn--sm btn--danger" type="button" id="doReset">로컬 데이터 초기화</button>
+                </div>
+                <p class="t-micro">초기화하면 이 브라우저에 저장된 변경 사항이 모두 사라지고 처음 배포된 데모 데이터로 되돌아갑니다. 되돌릴 수 없습니다.</p>
+              </div>
+            </div>
+
+            <div class="panel">
+              <div class="panel__head">
+                <h2 class="panel__title">개인정보 표기</h2>
+                <span id="piiChip"></span>
+              </div>
+              <div class="panel__body stack gap-sm" id="piiBody"></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="panel mt-lg">
+          <div class="panel__head">
+            <h2 class="panel__title">휴지통</h2>
+            <div class="row gap-xs">
+              <span class="t-mono" id="trashNote"></span>
+              <button class="btn btn--sm btn--ghost" type="button" id="trashEmpty">휴지통 비우기</button>
+            </div>
+          </div>
+          <div id="trashHost"></div>
+          <div class="pagerbar" id="trashPager"></div>
+        </div>
+      </section>
+    </div>
+
+    <footer class="hairline mt-2xl" style="padding-block:var(--space-md)">
+      <p class="t-mono t-faint">CLOSER · 데모 데이터 · 모든 회사·인물·연락처는 가상입니다</p>
+    </footer>
+  </main>
+</div>
+
+<script src="../assets/js/seed.js"></script>
+<script src="../assets/js/util.js"></script>
+<script src="../assets/js/store.js"></script>
+<script src="../assets/js/domain.js"></script>
+<script src="../assets/js/metrics.js"></script>
+<script src="../assets/js/insights.js"></script>
+<script src="../assets/js/ui.js"></script>
+<script src="../assets/js/charts.js"></script>
+<script src="../assets/js/shell.js"></script>
+<script>
+(function () {
+  'use strict';
+  var C = window.CLOSER, U = C.util, db = C.db, D = C.domain, M = C.metrics, ui = C.ui, ch = C.charts;
+  C.shell.mount('admin');
+
+  var me = db.me();
+  var $ = U.qs, esc = U.esc, el = U.el;
+
+  /* ── 한국어 조사 — 문장이 어색하면 화면이 남의 것처럼 읽힌다 ─────── */
+  function hasJong(w) {
+    if (!w) return false;
+    var c = String(w).charCodeAt(String(w).length - 1);
+    if (c < 0xAC00 || c > 0xD7A3) return false;
+    return (c - 0xAC00) % 28 !== 0;
+  }
+  function jEul(w) { return w + (hasJong(w) ? '을' : '를'); }
+  function jNeun(w) { return w + (hasJong(w) ? '은' : '는'); }
+  function jEuro(w) { return w + (hasJong(w) ? '으로' : '로'); }
+  function eul(w) { return esc(jEul(w)); }
+
+  /* ── 라벨 사전 ──────────────────────────────────────────────────── */
+  var ENT_LABEL = {
+    teams: '팀', users: '사용자', accounts: '광고주', contacts: '담당자', leads: '리드',
+    opportunities: '영업기회', opportunityLines: '영업기회 품목', products: '광고상품',
+    quotes: '견적', quoteLines: '견적 품목', contracts: '계약', campaigns: '캠페인',
+    activities: '활동', tickets: '제작 의뢰', ticketComments: '의뢰 댓글', ticketHistory: '의뢰 이력',
+    resourceRequests: '공수 신청', assignments: '배정', timesheets: '타임시트', targets: '목표',
+    actuals: '실적', approvals: '결재', notes: '메모', notifications: '알림',
+    auditLogs: '감사 로그', competitors: '경쟁사', mediaChannels: '매체', listViews: '저장된 뷰',
+    emailTemplates: '메일 템플릿', trash: '휴지통'
+  };
+  var OBJ_LABEL = {
+    accounts: '광고주', opportunities: '영업기회', quotes: '견적', contracts: '계약',
+    tickets: '제작 의뢰', resourceRequests: '공수 신청', actuals: '실적', targets: '목표',
+    users: '사용자', reports: '리포트', admin: '설정·관리'
+  };
+  var ACT_LABEL = { C: '생성', R: '조회', U: '수정', D: '삭제' };
+  var ACTION_KIND = {
+    생성: 'accent', 변경: null, 삭제: 'neg', 복원: 'pos', 비움: 'warn',
+    승인: 'pos', 반려: 'neg', 내보내기: 'idle', 로그인: 'idle'
+  };
+  var ROLE_KIND = { 관리자: 'solid', 영업관리자: 'accent', 리소스매니저: 'accent', 영업사원: null, 제작인력: 'idle' };
+  var PERIOD = U.ymOf(C.today);
+
+  /* ══ 접근 통제 — 권한이 없으면 레일은 그대로 두고 본문만 설명한다 ══ */
+  var canAdmin = D.can('admin', 'R');
+  $('#subline').innerHTML = canAdmin
+    ? '사용자 ' + db.count('users') + '명 · 팀 ' + db.count('teams') + '개 · ' +
+      '감사 로그 ' + db.count('auditLogs') + '건 · 기준일 ' + esc(U.fmtDate(C.today, 'long'))
+    : esc(me ? me.role : '현재 역할') + ' 역할에는 설정·관리 화면이 열리지 않습니다.';
+
+  if (!canAdmin) {
+    $('#headActs').innerHTML = '<a class="btn btn--sm" href="dashboard.html">홈으로</a>';
+    $('#adminHost').innerHTML = ui.empty(
+      '설정·관리 권한이 없습니다',
+      '사용자·팀·목표·권한·감사 로그·데이터 초기화는 관리자 역할에서만 열 수 있습니다. 계정 권한이 필요하면 시스템 관리자에게 요청해 주세요.',
+      '<a class="btn btn--sm btn--primary" href="dashboard.html">홈으로 돌아가기</a>' +
+      '<a class="btn btn--sm" href="insights.html">분석 의견 보기</a>'
+    );
+    U.revealAll();
+    return;
+  }
+
+  $('#headActs').innerHTML =
+    '<button class="btn btn--sm" type="button" id="headKeys">키보드 단축키</button>' +
+    '<button class="btn btn--sm btn--primary" type="button" id="headNewUser">새 사용자</button>';
+
+  /* ══ 상태 — URL이 초기값을 정한다 ═════════════════════════════════ */
+  var TABS = ['users', 'teams', 'targets', 'perms', 'audit', 'data'];
+  var initTab = U.param('tab', '');
+  if (TABS.indexOf(initTab) === -1) initTab = 'users';
+
+  var state = {
+    tab: initTab,
+    uView: 'active', uq: '', uRole: '', uTeam: '', uPage: 1,
+    tType: '매출',
+    aActor: '', aObj: '', aAction: '', aFrom: '', aTo: '', aPage: 1,
+    trashPage: 1
+  };
+  var U_SIZE = 12, A_SIZE = 20, T_SIZE = 10;
+
+  /* 이 화면의 표는 정렬을 제공하지 않는다 — 정렬할 수 없는 헤더가
+     정렬될 것처럼 보이면 그것도 거짓말이다. */
+  function noSort(list) {
+    return list.map(function (c) { if (c.sortable === undefined) c.sortable = false; return c; });
+  }
+
+  /* ══ 공통 페이저 ═══════════════════════════════════════════════════ */
+  function pagerHTML(total, page, size, unit) {
+    var pages = Math.max(1, Math.ceil(total / size));
+    var from = (page - 1) * size;
+    var to = Math.min(total, from + size);
+    var nums = '';
+    var lo = Math.max(1, page - 2), hi = Math.min(pages, lo + 4);
+    lo = Math.max(1, hi - 4);
+    if (lo > 1) nums += '<button class="pager__btn" type="button" data-page="1">1</button><span class="pager__btn t-faint">…</span>';
+    for (var i = lo; i <= hi; i++) {
+      nums += '<button class="pager__btn" type="button" data-page="' + i + '"' +
+        (i === page ? ' aria-current="page"' : '') + '>' + i + '</button>';
+    }
+    if (hi < pages) nums += '<span class="pager__btn t-faint">…</span><button class="pager__btn" type="button" data-page="' + pages + '">' + pages + '</button>';
+    return '<span class="t-mono">' + (total ? (from + 1) + '–' + to : 0) + ' / ' + total + unit + '</span>' +
+      '<span class="pager">' +
+        '<button class="btn btn--sm btn--ghost" type="button" data-page="' + (page - 1) + '"' + (page <= 1 ? ' disabled' : '') + '>이전</button>' +
+        nums +
+        '<button class="btn btn--sm btn--ghost" type="button" data-page="' + (page + 1) + '"' + (page >= pages ? ' disabled' : '') + '>다음</button>' +
+      '</span>';
+  }
+  function clampPage(total, page, size) {
+    var pages = Math.max(1, Math.ceil(total / size));
+    return Math.min(Math.max(1, page), pages);
+  }
+
+  /* ══ 파일 저장 — 로컬에서 여는 데모라 Blob과 data: URI를 모두 시도 ══ */
+  function downloadFile(name, text, mime) {
+    var url;
+    try { url = URL.createObjectURL(new Blob([text], { type: mime })); }
+    catch (e) { url = 'data:' + mime + ',' + encodeURIComponent(text); }
+    var a = el('a', { href: url, download: name });
+    document.body.appendChild(a); a.click();
+    setTimeout(function () {
+      if (a.parentNode) a.parentNode.removeChild(a);
+      if (url.slice(0, 5) === 'blob:') URL.revokeObjectURL(url);
+    }, 400);
+  }
+
+  /* ══ 개인정보 마스킹 — 화면에서도, 내보내기에서도 같은 규칙 ════════ */
+  function maskPhone(s) {
+    var d = String(s).replace(/[^0-9]/g, '');
+    if (d.length < 7) return '010-****-0000';
+    return d.slice(0, 3) + '-****-' + d.slice(-4);
+  }
+  function maskEmail(s) {
+    var p = String(s).split('@');
+    if (p.length < 2) return '***';
+    return p[0].slice(0, 1) + '***@' + p[1];
+  }
+  function isMasked(s) { return /\*{2,}/.test(String(s)); }
+  function maskDeep(v) {
+    if (Array.isArray(v)) return v.map(maskDeep);
+    if (v && typeof v === 'object') {
+      var o = {};
+      Object.keys(v).forEach(function (k) {
+        var x = v[k];
+        if (typeof x === 'string' && /^(phone|mobile|tel)$/i.test(k)) o[k] = maskPhone(x);
+        else if (typeof x === 'string' && /email/i.test(k)) o[k] = maskEmail(x);
+        else o[k] = maskDeep(x);
+      });
+      return o;
+    }
+    return v;
+  }
+
+  /* ══ 탭 ═══════════════════════════════════════════════════════════ */
+  function paintTab() {
+    U.qsa('.tab', $('#tabs')).forEach(function (t) { t.setAttribute('aria-selected', String(t.dataset.tab === state.tab)); });
+    U.qsa('[data-pane]').forEach(function (p) { p.hidden = p.dataset.pane !== state.tab; });
+  }
+  ui.tabs($('#tabs'), function (key) { state.tab = key; });
+
+  /* ══ 요약 타일 ═════════════════════════════════════════════════════ */
+  function renderTiles() {
+    var users = db.all('users');
+    var active = users.filter(function (u) { return u.active !== false; });
+    var teams = db.all('teams');
+    var tgtUsers = targetUsers();
+    var tgtSum = U.sum(tgtUsers, function (u) { return M.targetFor(u.id, PERIOD, '매출'); });
+    var actSum = U.sum(tgtUsers, function (u) { return M.actualTotal(u.id, PERIOD); });
+    var logs = db.all('auditLogs');
+    var lastLog = logs.length ? U.sortBy(logs, 'at', 'desc')[0] : null;
+
+    var tiles = [
+      { label: '사용자', value: U.num(active.length) + '<small>명 활성</small>',
+        foot: '전체 ' + users.length + '명 · 비활성 ' + (users.length - active.length) + '명' },
+      { label: '팀', value: U.num(teams.length) + '<small>개</small>',
+        foot: teams.map(function (t) { return esc(t.kind); }).filter(function (v, i, a) { return a.indexOf(v) === i; })
+          .map(function (k) { return k + ' ' + teams.filter(function (t) { return t.kind === k; }).length + '개'; }).join(' · ') },
+      { label: PERIOD + ' 매출 목표', value: U.won(tgtSum),
+        foot: tgtSum > 0
+          ? '확정 실적 ' + U.won(actSum) + ' · 달성 ' + Math.round((actSum / tgtSum) * 100) + '%'
+          : '이번 달 목표가 아직 입력되지 않았습니다' },
+      { label: '감사 로그', value: U.num(logs.length) + '<small>건</small>',
+        foot: lastLog ? '마지막 기록 ' + esc(U.ago(lastLog.at)) + ' · ' + esc(db.userName(lastLog.actorId)) : '기록된 로그가 없습니다' }
+    ];
+    $('#tiles').innerHTML = tiles.map(function (t) {
+      return '<article class="stat reveal"><p class="stat__label">' + esc(t.label) + '</p>' +
+        '<p class="stat__value">' + t.value + '</p>' +
+        '<p class="stat__foot">' + t.foot + '</p></article>';
+    }).join('');
+
+    $('#cntUsers').textContent = String(users.length);
+    $('#cntTeams').textContent = String(teams.length);
+    $('#cntAudit').textContent = String(logs.length);
+  }
+
+  /* ══════════════════════════════════════════════════════════════════
+     사용자
+     ══════════════════════════════════════════════════════════════════ */
+  var U_VIEWS = [{ key: 'all', label: '전체' }, { key: 'active', label: '활성' }, { key: 'off', label: '비활성' }];
+  $('#uViews').innerHTML = U_VIEWS.map(function (v) {
+    return '<button class="seg__item" type="button" data-uview="' + v.key + '" aria-pressed="' +
+      (state.uView === v.key) + '">' + esc(v.label) + '</button>';
+  }).join('');
+  $('#uRole').innerHTML = '<option value="">역할 전체</option>' + D.ROLES.map(function (r) {
+    return '<option value="' + esc(r) + '">' + esc(r) + '</option>';
+  }).join('');
+  $('#uTeam').innerHTML = '<option value="">팀 전체</option>' + db.all('teams').map(function (t) {
+    return '<option value="' + esc(t.id) + '">' + esc(t.name) + '</option>';
+  }).join('');
+
+  function teamName(id) { var t = db.get('teams', id); return t ? t.name : '미지정'; }
+
+  function userRows() {
+    return db.all('users').filter(function (u) {
+      if (state.uView === 'active' && u.active === false) return false;
+      if (state.uView === 'off' && u.active !== false) return false;
+      if (state.uRole && u.role !== state.uRole) return false;
+      if (state.uTeam && u.teamId !== state.uTeam) return false;
+      if (state.uq) {
+        var q = state.uq.trim().toLowerCase();
+        var hay = [u.name, u.role, u.title || '', u.craft || '', teamName(u.teamId),
+          (u.skills || []).map(function (s) { return s.name; }).join(' ')].join(' ').toLowerCase();
+        if (q && hay.indexOf(q) === -1) return false;
+      }
+      return true;
+    });
+  }
+
+  function skillCell(u) {
+    var sk = u.skills || [];
+    if (!sk.length) return '<span class="t-faint">등록된 스킬 없음</span>';
+    var head = sk.slice(0, 3).map(function (s) { return ui.chip(s.name + ' ' + s.level, 'plain'); }).join('');
+    return '<span class="skill-cell">' + head + (sk.length > 3 ? ui.chip('+' + (sk.length - 3), 'idle') : '') + '</span>';
+  }
+
+  function renderUsers() {
+    var rows = U.sortBy(userRows(), function (u) { return (u.active === false ? '1' : '0') + u.role + u.name; });
+    state.uPage = clampPage(rows.length, state.uPage, U_SIZE);
+    var from = (state.uPage - 1) * U_SIZE;
+    var page = rows.slice(from, from + U_SIZE);
+
+    var cols = [
+      { key: 'name', label: '이름', cell: function (u) {
+          return '<span class="row gap-xs t-nowrap">' + ui.avatar(u, 'sm') + '<span>' + esc(u.name) + '</span>' +
+            (u.id === me.id ? ' ' + ui.chip('나', 'accent') : '') + '</span>';
+        } },
+      { key: 'role', label: '역할', cell: function (u) {
+          if (u.id === me.id) {
+            return ui.chip(u.role, ROLE_KIND[u.role]) + ' <span class="t-micro">본인 역할은 이 화면에서 바꿀 수 없습니다</span>';
+          }
+          return '<select class="select cell-sel" data-edit="role" data-id="' + esc(u.id) + '" aria-label="' + esc(u.name) + ' 역할">' +
+            D.ROLES.map(function (r) {
+              return '<option value="' + esc(r) + '"' + (u.role === r ? ' selected' : '') + '>' + esc(r) + '</option>';
+            }).join('') + '</select>';
+        } },
+      { key: 'team', label: '팀', cell: function (u) {
+          return '<select class="select cell-sel" data-edit="teamId" data-id="' + esc(u.id) + '" aria-label="' + esc(u.name) + ' 소속 팀">' +
+            db.all('teams').map(function (t) {
+              return '<option value="' + esc(t.id) + '"' + (u.teamId === t.id ? ' selected' : '') + '>' + esc(t.name) + '</option>';
+            }).join('') + '</select>';
+        } },
+      { key: 'title', label: '직무', cell: function (u) { return '<span class="t-small t-nowrap">' + esc(u.title || u.craft || '—') + '</span>'; } },
+      { key: 'cap', label: '주간 캐파', align: 'right', cell: function (u) {
+          return '<span class="row gap-2xs" style="justify-content:flex-end">' +
+            '<input class="input input--num cell-num-in" type="number" min="1" max="80" step="1" ' +
+            'data-edit="weeklyCapacity" data-id="' + esc(u.id) + '" value="' + D.capacityOf(u) + '" ' +
+            'aria-label="' + esc(u.name) + ' 주간 캐파(시간)" /><span class="t-micro">시간</span></span>';
+        } },
+      { key: 'skills', label: '스킬', sortable: false, cell: skillCell },
+      { key: 'status', label: '상태', cell: function (u) {
+          return u.active === false ? ui.chip('비활성', 'idle') : ui.chip('활성', 'pos');
+        } },
+      { key: 'act', label: '작업', sortable: false, tight: true, cell: function (u) {
+          if (u.id === me.id) return '<span class="t-faint t-nowrap">본인</span>';
+          if (u.active === false) {
+            return '<button class="btn btn--sm btn--ghost t-nowrap" type="button" data-reactivate="' + esc(u.id) + '">재활성화</button>';
+          }
+          return '<button class="btn btn--sm btn--ghost t-nowrap" type="button" data-deactivate="' + esc(u.id) + '">비활성화</button>';
+        } }
+    ];
+
+    var host = $('#uTable');
+    host.innerHTML = '';
+    host.appendChild(ui.table(noSort(cols), page, {
+      empty: { title: '조건에 맞는 사용자가 없습니다', body: '검색어를 줄이거나 상태 보기를 전체로 바꿔 보세요.' }
+    }));
+    $('#uPager').innerHTML = pagerHTML(rows.length, state.uPage, U_SIZE, '명');
+    $('#uCount').textContent = rows.length + '명 / 전체 ' + db.count('users') + '명';
+
+    var byRole = D.ROLES.map(function (r) {
+      return { label: r, value: db.count('users', function (u) { return u.role === r && u.active !== false; }) };
+    });
+    $('#roleChart').innerHTML =
+      ch.bars(byRole, { h: 180, fmt: function (v) { return U.num(v) + '명'; }, label: '역할별 활성 사용자 수' }) +
+      '<p class="t-micro mt-xs">활성 사용자만 셉니다. 비활성 사용자는 레코드 소유 이력을 위해 남겨 두지만 배정 대상에서는 빠집니다.</p>';
+    $('#roleNote').textContent = '활성 ' + db.count('users', function (u) { return u.active !== false; }) + '명 기준';
+  }
+
+  /* ── 인라인 편집 ─────────────────────────────────────────────────── */
+  U.live($('#uTable'), 'change', '[data-edit]', function (e, t) {
+    var id = t.dataset.id, field = t.dataset.edit;
+    var u = db.get('users', id);
+    if (!u) return;
+    var prev = field === 'weeklyCapacity' ? D.capacityOf(u) : u[field];
+    var val;
+
+    if (field === 'weeklyCapacity') {
+      val = Math.round(Number(t.value));
+      if (!isFinite(val) || val < 1 || val > 80) {
+        t.value = prev;
+        ui.toast('주간 캐파는 1~80시간 사이의 숫자여야 합니다.', { kind: 'neg' });
+        return;
+      }
+    } else {
+      val = t.value;
+    }
+    if (val === prev) return;
+
+    var patch = {}; patch[field] = val;
+    db.update('users', id, patch);
+
+    var label = field === 'role' ? '역할' : field === 'teamId' ? '소속 팀' : '주간 캐파';
+    var shown = field === 'teamId' ? teamName(val) : field === 'weeklyCapacity' ? val + '시간' : val;
+    refreshAll();
+    ui.toast(u.name + '님의 ' + jEul(label) + ' ' + jEuro(String(shown)) + ' 바꿨습니다.', {
+      undo: function () {
+        var back = {}; back[field] = prev;
+        db.update('users', id, back);
+        refreshAll();
+      }
+    });
+  });
+
+  /* ── 비활성화: 레코드 이관 마법사 ───────────────────────────────── */
+  function transferPlan(u) {
+    var openTickets = function (t) { return D.TICKET_OPEN.indexOf(t.status) > -1; };
+    return {
+      accounts: db.where('accounts', function (a) { return a.ownerId === u.id; }),
+      oppsOpen: db.where('opportunities', function (o) { return o.ownerId === u.id && D.isOpen(o); }),
+      oppsClosed: db.where('opportunities', function (o) { return o.ownerId === u.id && !D.isOpen(o); }),
+      leads: db.where('leads', function (l) { return l.ownerId === u.id && l.status !== '전환됨' && l.status !== '부적격'; }),
+      tkAssigned: db.where('tickets', function (t) { return t.assigneeId === u.id && openTickets(t); }),
+      tkRequested: db.where('tickets', function (t) { return t.requesterId === u.id && openTickets(t); }),
+      activities: db.where('activities', function (a) { return a.ownerId === u.id && a.status !== '완료'; })
+    };
+  }
+
+  function transferModal(u) {
+    var p = transferPlan(u);
+    var moves = [
+      { label: '담당 광고주', n: p.accounts.length, note: '소유권을 넘깁니다' },
+      { label: '진행 중 영업기회', n: p.oppsOpen.length, note: p.oppsOpen.length ? U.won(U.sum(p.oppsOpen, 'amount')) + ' 규모' : '없음' },
+      { label: '미전환 리드', n: p.leads.length, note: '신규·접촉 단계만' },
+      { label: '진행 중 제작 의뢰(담당)', n: p.tkAssigned.length, note: '작업 담당자를 바꿉니다' },
+      { label: '진행 중 제작 의뢰(의뢰자)', n: p.tkRequested.length, note: '의뢰자를 바꿉니다' },
+      { label: '미완료 활동', n: p.activities.length, note: '기한이 남은 할 일' }
+    ];
+    var total = U.sum(moves, 'n');
+
+    var candidates = U.sortBy(db.where('users', function (x) {
+      return x.id !== u.id && x.active !== false;
+    }), 'name');
+    var same = candidates.filter(function (x) { return x.role === u.role; });
+    var other = candidates.filter(function (x) { return x.role !== u.role; });
+
+    var sel = el('select', { class: 'select', 'data-autofocus': '', 'aria-label': '이관 대상자' });
+    if (same.length) {
+      var g1 = el('optgroup', { label: '같은 역할 · ' + u.role });
+      same.forEach(function (x) { g1.appendChild(el('option', { value: x.id, text: x.name + ' · ' + (x.title || x.role) })); });
+      sel.appendChild(g1);
+    }
+    if (other.length) {
+      var g2 = el('optgroup', { label: '그 외 역할' });
+      other.forEach(function (x) { g2.appendChild(el('option', { value: x.id, text: x.name + ' · ' + x.role + ' · ' + (x.title || '—') })); });
+      sel.appendChild(g2);
+    }
+
+    var kv = el('div', { class: 'kv', html: moves.map(function (m) {
+      return '<div class="kv__row"><span class="kv__k">' + esc(m.label) + '</span>' +
+        '<span class="kv__v"><strong class="t-num">' + m.n + '건</strong> <span class="t-muted">' + esc(m.note) + '</span></span></div>';
+    }).join('') +
+      '<div class="kv__row"><span class="kv__k">종료된 영업기회</span>' +
+      '<span class="kv__v"><strong class="t-num">' + p.oppsClosed.length + '건</strong> <span class="t-muted">이관하지 않음 · 실적 이력 보존</span></span></div>' });
+
+    var body = el('div', { class: 'stack gap-sm' }, [
+      el('p', { class: 't-body', html: '<strong>' + esc(u.name) + '</strong>님을 비활성화합니다. ' +
+        '레코드는 삭제되지 않고 아래 건수만 이관 대상자에게 넘어갑니다.' }),
+      kv,
+      total
+        ? el('label', { class: 'field' }, [el('span', { class: 'field__label', text: '이관 대상자' }), sel])
+        : el('p', { class: 't-small', text: '이관할 레코드가 없습니다. 비활성화만 진행합니다.' }),
+      el('p', { class: 't-micro', text: '비활성화된 사용자는 목록·배정 후보·담당자 선택에서 빠지지만 계정과 과거 기록은 그대로 남습니다. 되돌리기는 변경 직후 토스트에서 가능합니다.' })
+    ]);
+
+    ui.modal({
+      title: '레코드 이관 후 비활성화', size: 'wide', body: body,
+      actions: [
+        { label: '취소' },
+        { label: total ? '이관하고 비활성화' : '비활성화', kind: 'primary', onClick: function () {
+            if (total && !sel.value) { ui.toast('이관 대상자를 선택해 주세요.', { kind: 'neg' }); return false; }
+            applyTransfer(u, total ? sel.value : null, p, total);
+          } }
+      ]
+    });
+  }
+
+  function applyTransfer(u, toId, p, total) {
+    var changes = [];
+    function move(entity, list, field, value) {
+      list.forEach(function (r) {
+        if (r[field] === value) return;
+        changes.push({ e: entity, id: r.id, f: field, prev: r[field] });
+        var patch = {}; patch[field] = value;
+        db.update(entity, r.id, patch);
+      });
+    }
+    if (toId) {
+      move('accounts', p.accounts, 'ownerId', toId);
+      move('opportunities', p.oppsOpen, 'ownerId', toId);
+      move('leads', p.leads, 'ownerId', toId);
+      move('tickets', p.tkAssigned, 'assigneeId', toId);
+      move('tickets', p.tkRequested, 'requesterId', toId);
+      move('activities', p.activities, 'ownerId', toId);
+    }
+    db.update('users', u.id, { active: false });
+
+    if (toId && changes.length) {
+      db.notify(toId, '배정', u.name + '님의 레코드 ' + changes.length + '건을 이어받았습니다.', 'admin.html?tab=users');
+    }
+    refreshAll();
+    ui.toast(u.name + '님을 비활성화하고 ' + (total ? '레코드 ' + changes.length + '건을 ' + db.userName(toId) + '님에게 이관했습니다.' : '이관할 레코드는 없었습니다.'), {
+      undo: function () {
+        changes.forEach(function (c) {
+          var back = {}; back[c.f] = c.prev;
+          db.update(c.e, c.id, back);
+        });
+        db.update('users', u.id, { active: true });
+        refreshAll();
+      }
+    });
+  }
+
+  U.live($('#uTable'), 'click', '[data-deactivate]', function (e, t) {
+    var u = db.get('users', t.dataset.deactivate);
+    if (u) transferModal(u);
+  });
+  U.live($('#uTable'), 'click', '[data-reactivate]', function (e, t) {
+    var u = db.get('users', t.dataset.reactivate);
+    if (!u) return;
+    db.update('users', u.id, { active: true });
+    refreshAll();
+    ui.toast(u.name + '님을 다시 활성화했습니다.', {
+      undo: function () { db.update('users', u.id, { active: false }); refreshAll(); }
+    });
+  });
+
+  /* ── 새 사용자 ───────────────────────────────────────────────────── */
+  function newUserModal() {
+    var name = el('input', { class: 'input', 'data-autofocus': '', placeholder: '표시할 이름', autocomplete: 'off', maxlength: '20' });
+    var nameField = el('label', { class: 'field' }, [
+      el('span', { class: 'field__label', html: '이름 <span class="req">*</span>' }), name,
+      el('span', { class: 'field__error', text: '이름을 입력해 주세요.' })
+    ]);
+    var role = el('select', { class: 'select', 'aria-label': '역할' });
+    D.ROLES.forEach(function (r) { role.appendChild(el('option', { value: r, text: r })); });
+    role.value = '영업사원';
+    var team = el('select', { class: 'select', 'aria-label': '소속 팀' });
+    db.all('teams').forEach(function (t) { team.appendChild(el('option', { value: t.id, text: t.name })); });
+    var craft = el('select', { class: 'select', 'aria-label': '제작 직무' });
+    craft.appendChild(el('option', { value: '', text: '해당 없음' }));
+    D.RESOURCE_ROLES.forEach(function (r) { craft.appendChild(el('option', { value: r, text: r })); });
+    var title = el('input', { class: 'input', placeholder: '예: AE, 1팀장', autocomplete: 'off', maxlength: '24' });
+    var cap = el('input', { class: 'input input--num', type: 'number', min: '1', max: '80', step: '1', value: String(D.WEEKLY_CAPACITY), 'aria-label': '주간 캐파(시간)' });
+
+    ui.modal({
+      title: '새 사용자',
+      body: el('div', { class: 'stack gap-sm' }, [
+        nameField,
+        el('div', { class: 'row gap-sm' }, [
+          el('label', { class: 'field grow' }, [el('span', { class: 'field__label', text: '역할' }), role]),
+          el('label', { class: 'field grow' }, [el('span', { class: 'field__label', text: '소속 팀' }), team])
+        ]),
+        el('div', { class: 'row gap-sm' }, [
+          el('label', { class: 'field grow' }, [el('span', { class: 'field__label', text: '직무 표기' }), title]),
+          el('label', { class: 'field grow' }, [el('span', { class: 'field__label', text: '제작 직무' }), craft])
+        ]),
+        el('label', { class: 'field' }, [
+          el('span', { class: 'field__label', text: '주간 캐파 (시간)' }), cap,
+          el('span', { class: 'field__help', text: '회의·리서치 버퍼를 뺀 실가동 시간입니다. 기본값은 ' + D.WEEKLY_CAPACITY + '시간입니다.' })
+        ]),
+        el('p', { class: 't-micro', text: '데모 계정입니다. 실제 임직원의 실명·연락처·사번 등 개인정보는 입력하지 마세요. 사내 메일 주소는 계정 ID로 자동 생성되고 연락처는 저장하지 않습니다.' })
+      ]),
+      actions: [
+        { label: '취소' },
+        { label: '만들기', kind: 'primary', onClick: function () {
+            var nm = name.value.trim();
+            if (!nm) { nameField.classList.add('is-invalid'); name.focus(); return false; }
+            var id = U.uid('usr');
+            var rec = db.insert('users', {
+              id: id, name: nm, initials: U.initials(nm), role: role.value, teamId: team.value,
+              email: id + '@closer-demo.co.kr', phone: null,
+              hireDate: U.iso(C.today), active: true,
+              title: title.value.trim() || (craft.value || role.value),
+              craft: craft.value || undefined,
+              skills: [], weeklyCapacity: Math.round(Number(cap.value)) || D.WEEKLY_CAPACITY
+            });
+            state.uView = 'all'; state.uq = ''; state.uRole = ''; state.uTeam = ''; state.uPage = 1;
+            $('#uq').value = ''; $('#uRole').value = ''; $('#uTeam').value = '';
+            U.qsa('[data-uview]', $('#uViews')).forEach(function (b) { b.setAttribute('aria-pressed', String(b.dataset.uview === 'all')); });
+            refreshAll();
+            ui.toast(rec.name + '님을 사용자 목록에 추가했습니다.', {
+              undo: function () { db.remove('users', rec.id, { noTrash: true }); refreshAll(); }
+            });
+          } }
+      ]
+    });
+  }
+
+  /* ══════════════════════════════════════════════════════════════════
+     팀
+     ══════════════════════════════════════════════════════════════════ */
+  function renderTeams() {
+    var teams = db.all('teams');
+    $('#teamPeriod').textContent = PERIOD + ' 기준';
+
+    var rows = teams.map(function (t) {
+      var members = db.where('users', function (u) { return u.teamId === t.id; });
+      var live = members.filter(function (u) { return u.active !== false; });
+      var target = U.sum(live, function (u) { return M.targetFor(u.id, PERIOD, '매출'); });
+      var actual = U.sum(live, function (u) { return M.actualTotal(u.id, PERIOD); });
+      return { t: t, members: members, live: live, target: target, actual: actual };
+    });
+
+    var host = $('#teamTable');
+    host.innerHTML = '';
+    host.appendChild(ui.table(noSort([
+      { key: 'name', label: '팀', cell: function (r) { return '<span class="t-nowrap">' + esc(r.t.name) + '</span>'; } },
+      { key: 'kind', label: '구분', cell: function (r) { return ui.chip(r.t.kind, r.t.kind === '영업' ? 'accent' : 'idle'); } },
+      { key: 'leader', label: '팀장', cell: function (r) {
+          if (!r.live.length) return '<span class="t-faint">소속 인원 없음</span>';
+          return '<select class="select cell-sel" data-leader="' + esc(r.t.id) + '" aria-label="' + esc(r.t.name) + ' 팀장">' +
+            '<option value="">미지정</option>' +
+            U.sortBy(r.live, 'name').map(function (u) {
+              return '<option value="' + esc(u.id) + '"' + (r.t.leaderId === u.id ? ' selected' : '') + '>' +
+                esc(u.name) + ' · ' + esc(u.title || u.role) + '</option>';
+            }).join('') + '</select>';
+        } },
+      { key: 'head', label: '인원', align: 'right', cell: function (r) {
+          return '<span class="t-num">' + r.live.length + '명</span>' +
+            (r.members.length > r.live.length ? ' <span class="t-muted">비활성 ' + (r.members.length - r.live.length) + '</span>' : '');
+        } },
+      { key: 'target', label: PERIOD + ' 목표', align: 'right', cell: function (r) {
+          return r.target > 0 ? U.won(r.target) : '<span class="t-faint">없음</span>';
+        } },
+      { key: 'actual', label: '확정 실적', align: 'right', cell: function (r) {
+          return r.actual > 0 ? U.won(r.actual) : '<span class="t-faint">없음</span>';
+        } },
+      { key: 'rate', label: '달성', cell: function (r) {
+          if (!r.target) return '<span class="t-faint">목표 없음</span>';
+          var pct = (r.actual / r.target) * 100;
+          return '<span class="row gap-xs"><span class="t-mono" style="width:38px;text-align:right">' + Math.round(pct) + '%</span>' +
+            ui.meter(pct, 100, pct >= 100 ? 'pos' : pct >= 70 ? null : 'warn') + '</span>';
+        } }
+    ]), rows, {
+      empty: { title: '등록된 팀이 없습니다', body: '팀을 만들면 인원과 목표 합계가 여기에 표시됩니다.' }
+    }));
+
+    var salesTeams = rows.filter(function (r) { return r.t.kind === '영업'; });
+    var tSum = U.sum(salesTeams, 'target'), aSum = U.sum(salesTeams, 'actual');
+    $('#teamFoot').innerHTML = '영업 팀 ' + salesTeams.length + '개의 ' + PERIOD + ' 목표 합계는 <strong>' + U.won(tSum) +
+      '</strong>, 확정 실적 합계는 <strong>' + U.won(aSum) + '</strong>입니다' +
+      (tSum > 0 ? ' (달성 ' + Math.round((aSum / tSum) * 100) + '%).' : '.') +
+      ' 목표는 목표 탭에서 사람 단위로 고칩니다.';
+
+    $('#teamHeadcount').textContent = '활성 ' + db.count('users', function (u) { return u.active !== false; }) + '명';
+    $('#teamMembers').innerHTML = '<div class="kv">' + rows.map(function (r) {
+      var chips = U.sortBy(r.members, function (u) { return (u.active === false ? '1' : '0') + u.name; }).map(function (u) {
+        var lead = r.t.leaderId === u.id;
+        return ui.chip(u.name + ' · ' + (u.title || u.role) + (lead ? ' · 팀장' : ''),
+          u.active === false ? 'idle' : lead ? 'accent' : 'plain');
+      }).join(' ');
+      return '<div class="kv__row"><span class="kv__k t-nowrap">' + esc(r.t.name) + '</span>' +
+        '<span class="kv__v">' + (chips || '<span class="t-faint">소속 인원이 없습니다</span>') + '</span></div>';
+    }).join('') + '</div>' +
+      '<p class="t-micro mt-xs">회색 칩은 비활성 사용자입니다. 소속 팀은 사용자 탭의 표에서 바로 바꿀 수 있습니다.</p>';
+  }
+
+  U.live($('#teamTable'), 'change', '[data-leader]', function (e, t) {
+    var id = t.dataset.leader, team = db.get('teams', id);
+    if (!team) return;
+    var prev = team.leaderId || '';
+    var val = t.value || null;
+    if ((prev || '') === (val || '')) return;
+    db.update('teams', id, { leaderId: val });
+    refreshAll();
+    ui.toast(team.name + ' 팀장을 ' + (val ? db.userName(val) + '님으로' : '미지정으로') + ' 바꿨습니다.', {
+      undo: function () { db.update('teams', id, { leaderId: prev || null }); refreshAll(); }
+    });
+  });
+
+  /* ══════════════════════════════════════════════════════════════════
+     목표
+     ══════════════════════════════════════════════════════════════════ */
+  function targetPeriods() {
+    var out = [];
+    for (var i = -3; i <= 2; i++) {
+      var d = new Date(C.today.getFullYear(), C.today.getMonth() + i, 1);
+      out.push({ key: U.ymOf(d), label: U.fmtDate(d, 'ym'), now: i === 0 });
+    }
+    return out;
+  }
+  function targetUsers() {
+    var hasTarget = {};
+    db.all('targets').forEach(function (t) { hasTarget[t.ownerId] = true; });
+    return U.sortBy(db.where('users', function (u) {
+      if (u.active === false) return !!hasTarget[u.id];
+      return hasTarget[u.id] || u.role === '영업사원' || u.role === '영업관리자';
+    }), function (u) { return (u.teamId || '') + u.name; });
+  }
+  function tgtMult() { return state.tType === '매출' ? 1000000 : 1; }
+  function tgtAmount(uid, period) { return M.targetFor(uid, period, state.tType); }
+  function fmtT(v) { return state.tType === '매출' ? U.won(v) : U.num(v) + '개사'; }
+
+  function renderTargets() {
+    var periods = targetPeriods(), users = targetUsers();
+    var mult = tgtMult();
+    $('#tgtUnit').textContent = state.tType === '매출' ? '입력 단위: 백만원' : '입력 단위: 개사';
+
+    var head = '<tr><th scope="col">담당자</th>' + periods.map(function (p) {
+      return '<th scope="col" class="cell-num' + (p.now ? ' tgt-now' : '') + '">' + esc(p.label) + (p.now ? ' · 이번 달' : '') + '</th>';
+    }).join('') + '<th scope="col" class="cell-num">합계</th></tr>';
+
+    var body = users.map(function (u) {
+      var rowSum = 0;
+      var cells = periods.map(function (p) {
+        var amt = tgtAmount(u.id, p.key);
+        rowSum += amt;
+        var shown = amt ? String(Math.round((amt / mult) * 100) / 100) : '';
+        return '<td class="cell-num' + (p.now ? ' tgt-now' : '') + '">' +
+          '<input class="input input--num tgt-in" type="number" min="0" step="' + (state.tType === '매출' ? '5' : '1') + '" ' +
+          'data-tuser="' + esc(u.id) + '" data-period="' + esc(p.key) + '" value="' + esc(shown) + '" ' +
+          'aria-label="' + esc(u.name) + ' ' + esc(p.label) + ' ' + esc(state.tType) + ' 목표" /></td>';
+      }).join('');
+      return '<tr><th scope="row"><span class="row gap-xs t-nowrap">' + ui.avatar(u, 'sm') +
+        '<span>' + esc(u.name) + '</span>' + (u.active === false ? ' ' + ui.chip('비활성', 'idle') : '') + '</span>' +
+        '<span class="t-micro" style="display:block">' + esc(teamName(u.teamId)) + '</span></th>' +
+        cells + '<td class="cell-num" data-rowtotal="' + esc(u.id) + '">' + fmtT(rowSum) + '</td></tr>';
+    }).join('');
+
+    var foot = '<tr><th scope="row">합계</th>' + periods.map(function (p) {
+      var s = U.sum(users, function (u) { return tgtAmount(u.id, p.key); });
+      return '<td class="cell-num' + (p.now ? ' tgt-now' : '') + '" data-coltotal="' + esc(p.key) + '">' + fmtT(s) + '</td>';
+    }).join('') + '<td class="cell-num" data-grandtotal="1">' + fmtT(U.sum(users, function (u) {
+      return U.sum(periods, function (p) { return tgtAmount(u.id, p.key); });
+    })) + '</td></tr>';
+
+    $('#tgtGrid').innerHTML = users.length
+      ? '<table class="table table--compact"><thead>' + head + '</thead><tbody>' + body + '</tbody><tfoot>' + foot + '</tfoot></table>'
+      : ui.empty('목표를 세울 대상이 없습니다', '영업 역할 사용자가 있으면 여기에 기간별 목표 그리드가 그려집니다.');
+
+    $('#tgtFoot').innerHTML = '셀을 고치면 그 자리에서 저장됩니다. ' +
+      (state.tType === '매출' ? '백만원 단위로 입력하세요. 1,000은 10억 원입니다. ' : '개사 단위로 입력하세요. ') +
+      '대상 ' + users.length + '명 · 기간 ' + periods[0].label + '~' + periods[periods.length - 1].label + ' · ' +
+      '저장된 목표 레코드 ' + db.count('targets') + '건.';
+  }
+
+  function refreshTargetTotals() {
+    var periods = targetPeriods(), users = targetUsers(), grand = 0;
+    users.forEach(function (u) {
+      var s = U.sum(periods, function (p) { return tgtAmount(u.id, p.key); });
+      grand += s;
+      var c = U.qs('[data-rowtotal="' + u.id + '"]', $('#tgtGrid'));
+      if (c) c.innerHTML = fmtT(s);
+    });
+    periods.forEach(function (p) {
+      var c = U.qs('[data-coltotal="' + p.key + '"]', $('#tgtGrid'));
+      if (c) c.innerHTML = fmtT(U.sum(users, function (u) { return tgtAmount(u.id, p.key); }));
+    });
+    var g = U.qs('[data-grandtotal]', $('#tgtGrid'));
+    if (g) g.innerHTML = fmtT(grand);
+    $('#tgtFoot').innerHTML = $('#tgtFoot').innerHTML.replace(/저장된 목표 레코드 [\d,]+건/, '저장된 목표 레코드 ' + U.num(db.count('targets')) + '건');
+  }
+
+  function saveTarget(uid, period, amount) {
+    var rec = db.first('targets', function (x) { return x.ownerId === uid && x.period === period && x.type === state.tType; });
+    if (rec) { db.update('targets', rec.id, { amount: amount }); return { id: rec.id, created: false }; }
+    var made = db.insert('targets', { ownerId: uid, period: period, type: state.tType, amount: amount });
+    return { id: made.id, created: true };
+  }
+
+  U.live($('#tgtGrid'), 'change', 'input[data-tuser]', function (e, t) {
+    var uid = t.dataset.tuser, period = t.dataset.period;
+    var mult = tgtMult();
+    var raw = t.value.trim();
+    var n = raw === '' ? 0 : Number(raw);
+    var prev = tgtAmount(uid, period);
+    if (!isFinite(n) || n < 0) {
+      t.value = prev ? String(Math.round((prev / mult) * 100) / 100) : '';
+      ui.toast('0 이상의 숫자만 입력할 수 있습니다.', { kind: 'neg' });
+      return;
+    }
+    var amount = Math.round(n * mult);
+    if (amount === prev) return;
+    var res = saveTarget(uid, period, amount);
+    refreshTargetTotals(); renderTiles(); renderAudit(); renderEntities();
+    ui.toast(db.userName(uid) + '님 ' + period + ' ' + state.tType + ' 목표를 ' + jEuro(fmtT(amount)) + ' 저장했습니다.', {
+      undo: function () {
+        if (res.created) db.remove('targets', res.id, { noTrash: true });
+        else db.update('targets', res.id, { amount: prev });
+        var inp = U.qs('input[data-tuser="' + uid + '"][data-period="' + period + '"]', $('#tgtGrid'));
+        if (inp) inp.value = prev ? String(Math.round((prev / mult) * 100) / 100) : '';
+        refreshTargetTotals(); renderTiles(); renderAudit(); renderEntities();
+      }
+    });
+  });
+
+  /* 한글 입력 중에는 Enter를 가로채지 않는다 — 조합이 끝나야 값이 확정된다. */
+  U.live($('#tgtGrid'), 'keydown', 'input[data-tuser]', function (e, t) {
+    if (e.isComposing || e.keyCode === 229) return;
+    if (e.key !== 'Enter') return;
+    e.preventDefault();
+    t.blur();
+  });
+
+  U.live($('#segType'), 'click', '[data-ttype]', function (e, t) {
+    if (state.tType === t.dataset.ttype) return;
+    state.tType = t.dataset.ttype;
+    U.qsa('[data-ttype]', $('#segType')).forEach(function (b) { b.setAttribute('aria-pressed', String(b === t)); });
+    renderTargets();
+  });
+
+  U.on($('#copyNext'), 'click', function () {
+    var cur = PERIOD;
+    var nd = new Date(C.today.getFullYear(), C.today.getMonth() + 1, 1);
+    var nxt = U.ymOf(nd);
+    var users = targetUsers();
+    var changes = [];
+    users.forEach(function (u) {
+      var src = tgtAmount(u.id, cur);
+      if (!src) return;
+      var dst = db.first('targets', function (x) { return x.ownerId === u.id && x.period === nxt && x.type === state.tType; });
+      if (dst) {
+        if (dst.amount === src) return;
+        changes.push({ id: dst.id, prev: dst.amount, created: false });
+        db.update('targets', dst.id, { amount: src });
+      } else {
+        var made = db.insert('targets', { ownerId: u.id, period: nxt, type: state.tType, amount: src });
+        changes.push({ id: made.id, prev: null, created: true });
+      }
+    });
+    if (!changes.length) {
+      ui.toast('복사할 값이 없거나 ' + nxt + ' 목표가 이미 같습니다.');
+      return;
+    }
+    renderTargets(); renderTiles(); renderAudit(); renderEntities();
+    ui.toast(cur + ' ' + state.tType + ' 목표를 ' + nxt + '로 ' + changes.length + '명분 복사했습니다.', {
+      undo: function () {
+        changes.forEach(function (c) {
+          if (c.created) db.remove('targets', c.id, { noTrash: true });
+          else db.update('targets', c.id, { amount: c.prev });
+        });
+        renderTargets(); renderTiles(); renderAudit(); renderEntities();
+      }
+    });
+  });
+
+  U.on($('#tgtCsv'), 'click', function () {
+    var periods = targetPeriods(), users = targetUsers();
+    var unit = state.tType === '매출' ? '원' : '개사';
+    var rows = [['담당자', '팀', '유형', '단위'].concat(periods.map(function (p) { return p.key; })).concat(['합계'])];
+    users.forEach(function (u) {
+      var vals = periods.map(function (p) { return tgtAmount(u.id, p.key); });
+      rows.push([u.name, teamName(u.teamId), state.tType, unit].concat(vals).concat([U.sum(vals)]));
+    });
+    ui.exportCSV('closer-목표-' + state.tType + '.csv', rows);
+    db.audit('내보내기', 'targets', '-', state.tType + ' 목표 ' + users.length + '명분 CSV');
+    renderAudit(); renderTiles();
+  });
+
+  /* ══════════════════════════════════════════════════════════════════
+     권한
+     ══════════════════════════════════════════════════════════════════ */
+  var OBJ_KEYS = Object.keys(OBJ_LABEL);
+
+  function renderPerms() {
+    var head = '<tr><th scope="col">역할</th>' + OBJ_KEYS.map(function (k) {
+      return '<th scope="col">' + esc(OBJ_LABEL[k]) + '</th>';
+    }).join('') + '</tr>';
+
+    var body = D.ROLES.map(function (role) {
+      var n = db.count('users', function (u) { return u.role === role && u.active !== false; });
+      return '<tr><th scope="row"><span class="t-nowrap">' + ui.chip(role, ROLE_KIND[role]) + '</span>' +
+        '<span class="t-micro" style="display:block">활성 ' + n + '명</span></th>' +
+        OBJ_KEYS.map(function (k) {
+          var perm = (D.PERMS[role] || {})[k] || '';
+          if (!perm) return '<td><span class="perm-none">접근 불가</span></td>';
+          return '<td>' + ['C', 'R', 'U', 'D'].map(function (a) {
+            return '<span class="perm" data-act="' + a + '" data-on="' + (perm.indexOf(a) > -1 ? '1' : '0') +
+              '" title="' + esc(ACT_LABEL[a]) + (perm.indexOf(a) > -1 ? ' 가능' : ' 불가') + '">' + a + '</span>';
+          }).join('') + '</td>';
+        }).join('') + '</tr>';
+    }).join('');
+
+    $('#permTable').innerHTML = '<table class="table table--compact"><thead>' + head + '</thead><tbody>' + body + '</tbody></table>';
+    $('#permFoot').textContent =
+      '이 표는 domain.js의 권한 매트릭스를 그대로 읽습니다. 화면의 버튼은 모두 이 표를 보고 나타나거나 사라집니다. ' +
+      '역할 ' + D.ROLES.length + '개 × 객체 ' + OBJ_KEYS.length + '개.';
+  }
+
+  $('#pkUser').innerHTML = U.sortBy(db.all('users'), function (u) { return u.role + u.name; }).map(function (u) {
+    return '<option value="' + esc(u.id) + '"' + (u.id === me.id ? ' selected' : '') + '>' +
+      esc(u.name) + ' · ' + esc(u.role) + (u.active === false ? ' · 비활성' : '') + '</option>';
+  }).join('');
+  $('#pkObj').innerHTML = OBJ_KEYS.map(function (k) {
+    return '<option value="' + esc(k) + '">' + esc(OBJ_LABEL[k]) + '</option>';
+  }).join('');
+
+  function renderAnswer() {
+    var u = db.get('users', $('#pkUser').value);
+    var obj = $('#pkObj').value;
+    if (!u || !obj) {
+      $('#permAnswer').innerHTML = '<p class="t-body">사용자와 객체를 고르면 무엇을 할 수 있는지 문장으로 답합니다.</p>';
+      return;
+    }
+    var label = OBJ_LABEL[obj];
+    var got = ['C', 'R', 'U', 'D'].filter(function (a) { return D.can(obj, a, u); });
+    var lack = ['C', 'R', 'U', 'D'].filter(function (a) { return got.indexOf(a) === -1; });
+    var scope = db.visibleUserIds(u).length;
+
+    var who = '<strong>' + esc(u.name) + '</strong>님(' + esc(u.role) + ')은 ';
+    var say;
+    if (!got.length) {
+      say = who + eul(label) +
+        ' 열 수 없습니다. 목록과 상세 화면 모두 접근이 막히고, 다른 화면에서도 이 객체로 가는 링크가 나타나지 않습니다.';
+    } else {
+      var lackWord = lack.map(function (a) { return ACT_LABEL[a]; }).join('·');
+      say = who + eul(label) + ' ' +
+        esc(got.map(function (a) { return ACT_LABEL[a]; }).join('·')) + '할 수 있습니다.' +
+        (lack.length ? ' ' + esc(jNeun(lackWord)) + ' 할 수 없습니다.' : ' 네 가지 동작 모두 열려 있습니다.');
+    }
+
+    var extra = [
+      ['볼 수 있는 사용자 범위', scope + '명' + (u.role === '관리자' ? ' · 전사' : u.role === '영업관리자' ? ' · 같은 팀' : ' · 본인')],
+      ['설정·관리 화면', D.can('admin', 'R', u) ? '접근 가능' : '접근 불가'],
+      ['소속 팀', teamName(u.teamId)],
+      ['계정 상태', u.active === false ? '비활성 — 배정 후보에서 제외됩니다' : '활성']
+    ];
+
+    $('#permAnswer').innerHTML = '<p class="t-body">' + say + '</p>' +
+      '<div class="kv mt-sm">' + extra.map(function (r) {
+        return '<div class="kv__row"><span class="kv__k">' + esc(r[0]) + '</span><span class="kv__v">' + esc(r[1]) + '</span></div>';
+      }).join('') + '</div>';
+  }
+  U.on($('#pkUser'), 'change', renderAnswer);
+  U.on($('#pkObj'), 'change', renderAnswer);
+
+  /* ══════════════════════════════════════════════════════════════════
+     감사 로그
+     ══════════════════════════════════════════════════════════════════ */
+  function auditActors() {
+    var ids = U.uniq(db.all('auditLogs').map(function (l) { return l.actorId; })).filter(Boolean);
+    return U.sortBy(ids.map(function (id) { return { id: id, name: db.userName(id) }; }), 'name');
+  }
+  function auditObjects() {
+    return U.uniq(db.all('auditLogs').map(function (l) { return l.objectType; })).filter(Boolean).sort();
+  }
+  function auditActions() {
+    return U.uniq(db.all('auditLogs').map(function (l) { return l.action; })).filter(Boolean).sort();
+  }
+  function fillAuditFilters() {
+    var actorVal = state.aActor, objVal = state.aObj, actVal = state.aAction;
+    $('#aActor').innerHTML = '<option value="">행위자 전체</option>' + auditActors().map(function (a) {
+      return '<option value="' + esc(a.id) + '"' + (actorVal === a.id ? ' selected' : '') + '>' + esc(a.name) + '</option>';
+    }).join('');
+    $('#aObj').innerHTML = '<option value="">객체 전체</option>' + auditObjects().map(function (o) {
+      return '<option value="' + esc(o) + '"' + (objVal === o ? ' selected' : '') + '>' + esc(ENT_LABEL[o] || o) + '</option>';
+    }).join('');
+    $('#aAction').innerHTML = '<option value="">행위 전체</option>' + auditActions().map(function (a) {
+      return '<option value="' + esc(a) + '"' + (actVal === a ? ' selected' : '') + '>' + esc(a) + '</option>';
+    }).join('');
+  }
+
+  function auditRows() {
+    return U.sortBy(db.all('auditLogs').filter(function (l) {
+      if (state.aActor && l.actorId !== state.aActor) return false;
+      if (state.aObj && l.objectType !== state.aObj) return false;
+      if (state.aAction && l.action !== state.aAction) return false;
+      var day = String(l.at || '').slice(0, 10);
+      if (state.aFrom && day < state.aFrom) return false;
+      if (state.aTo && day > state.aTo) return false;
+      return true;
+    }), 'at', 'desc');
+  }
+
+  function renderAudit() {
+    fillAuditFilters();
+    var rows = auditRows();
+    state.aPage = clampPage(rows.length, state.aPage, A_SIZE);
+    var from = (state.aPage - 1) * A_SIZE;
+    var page = rows.slice(from, from + A_SIZE);
+
+    var host = $('#aTable');
+    host.innerHTML = '';
+    host.appendChild(ui.table(noSort([
+      { key: 'at', label: '일시', cell: function (l) {
+          return '<span class="t-mono t-nowrap">' + esc(U.fmtDateTime(l.at)) + '</span>' +
+            '<span class="t-micro" style="display:block">' + esc(U.ago(String(l.at).slice(0, 10))) + '</span>';
+        } },
+      { key: 'actor', label: '행위자', cell: function (l) { return ui.personCell(db.get('users', l.actorId)); } },
+      { key: 'action', label: '행위', cell: function (l) { return ui.chip(l.action, ACTION_KIND[l.action]); } },
+      { key: 'object', label: '객체', cell: function (l) {
+          return '<span class="t-small t-nowrap">' + esc(ENT_LABEL[l.objectType] || l.objectType) + '</span>' +
+            '<span class="tkt-key" style="display:inline-block;margin-left:var(--space-2xs)">' + esc(l.objectId || '-') + '</span>';
+        } },
+      { key: 'detail', label: '상세', sortable: false, cell: function (l) {
+          return '<span class="t-small">' + esc(l.detail || '—') + '</span>';
+        } }
+    ]), page, {
+      compact: true,
+      empty: { title: '조건에 맞는 감사 로그가 없습니다', body: '기간을 넓히거나 행위자·객체 필터를 비워 보세요.' }
+    }));
+
+    $('#aPager').innerHTML = pagerHTML(rows.length, state.aPage, A_SIZE, '건');
+    $('#aCount').textContent = rows.length + '건 / 전체 ' + db.count('auditLogs') + '건';
+  }
+
+  U.on($('#aActor'), 'change', function () { state.aActor = this.value; state.aPage = 1; renderAudit(); });
+  U.on($('#aObj'), 'change', function () { state.aObj = this.value; state.aPage = 1; renderAudit(); });
+  U.on($('#aAction'), 'change', function () { state.aAction = this.value; state.aPage = 1; renderAudit(); });
+  U.on($('#aFrom'), 'change', function () { state.aFrom = this.value; state.aPage = 1; renderAudit(); });
+  U.on($('#aTo'), 'change', function () { state.aTo = this.value; state.aPage = 1; renderAudit(); });
+  U.on($('#aReset'), 'click', function () {
+    state.aActor = ''; state.aObj = ''; state.aAction = ''; state.aFrom = ''; state.aTo = ''; state.aPage = 1;
+    $('#aFrom').value = ''; $('#aTo').value = '';
+    renderAudit();
+  });
+  U.on($('#aCsv'), 'click', exportAuditCSV);
+
+  function exportAuditCSV() {
+    var rows = auditRows();
+    if (!rows.length) { ui.toast('내보낼 감사 로그가 없습니다.', { kind: 'neg' }); return; }
+    var out = [['일시', '행위자', '행위', '객체 타입', '객체 ID', '상세']];
+    rows.forEach(function (l) {
+      out.push([U.fmtDateTime(l.at), db.userName(l.actorId), l.action,
+        ENT_LABEL[l.objectType] || l.objectType, l.objectId || '', l.detail || '']);
+    });
+    ui.exportCSV('closer-감사로그.csv', out);
+    db.audit('내보내기', 'auditLogs', '-', rows.length + '건 CSV 내보내기');
+    renderAudit(); renderTiles(); renderEntities();
+  }
+
+  U.live($('#uPager'), 'click', '[data-page]', function (e, t) {
+    var p = Number(t.dataset.page);
+    if (!p || p === state.uPage) return;
+    state.uPage = p; renderUsers();
+  });
+  U.live($('#aPager'), 'click', '[data-page]', function (e, t) {
+    var p = Number(t.dataset.page);
+    if (!p || p === state.aPage) return;
+    state.aPage = p; renderAudit();
+  });
+  U.live($('#trashPager'), 'click', '[data-page]', function (e, t) {
+    var p = Number(t.dataset.page);
+    if (!p || p === state.trashPage) return;
+    state.trashPage = p; renderTrash();
+  });
+
+  /* ══════════════════════════════════════════════════════════════════
+     데이터
+     ══════════════════════════════════════════════════════════════════ */
+  function renderEntities() {
+    var rows = db.entities.map(function (e) {
+      return { entity: e, label: ENT_LABEL[e] || e, n: db.count(e) };
+    });
+    var max = Math.max.apply(null, rows.map(function (r) { return r.n; }).concat([1]));
+    var host = $('#entTable');
+    host.innerHTML = '';
+    host.appendChild(ui.table(noSort([
+      { key: 'label', label: '객체', cell: function (r) {
+          return '<span class="t-nowrap">' + esc(r.label) + '</span>' +
+            '<span class="t-micro" style="display:block">' + esc(r.entity) + '</span>';
+        } },
+      { key: 'n', label: '레코드', align: 'right', cell: function (r) {
+          return r.n ? '<span class="t-num">' + U.num(r.n) + '</span>' : '<span class="t-faint">0</span>';
+        } },
+      { key: 'share', label: '비중', sortable: false, cell: function (r) { return ui.meter(r.n, max, r.n ? null : 'neg'); } }
+    ]), rows, { compact: true, empty: { title: '저장된 객체가 없습니다', body: '데이터를 초기화하면 데모 시드가 다시 채워집니다.' } }));
+
+    $('#entTotal').textContent = U.num(U.sum(rows, 'n')) + '건 · ' + rows.length + '개 객체';
+
+    $('#storeChip').innerHTML = db.storageOK ? ui.chip('저장소 정상', 'pos') : ui.chip('저장소 사용 불가', 'neg');
+    $('#storeNote').textContent = db.storageOK
+      ? '변경 사항은 이 브라우저의 localStorage에 저장됩니다. 다른 기기·다른 브라우저와는 공유되지 않습니다.'
+      : '브라우저가 저장소를 막고 있어 변경 사항이 이 탭에서만 유지됩니다. 새로고침하면 데모 시드로 돌아갑니다.';
+  }
+
+  function renderPII() {
+    var scan = [];
+    db.entities.forEach(function (e) {
+      var rows = db.all(e), phone = 0, masked = 0, email = 0;
+      rows.forEach(function (r) {
+        if (r && typeof r.phone === 'string' && r.phone) { phone++; if (isMasked(r.phone)) masked++; }
+        if (r && typeof r.email === 'string' && r.email) email++;
+      });
+      if (phone || email) scan.push({ entity: e, phone: phone, masked: masked, email: email });
+    });
+    var totalPhone = U.sum(scan, 'phone'), totalMasked = U.sum(scan, 'masked'), totalEmail = U.sum(scan, 'email');
+    var allMasked = totalPhone === totalMasked;
+
+    $('#piiChip').innerHTML = totalPhone === 0
+      ? ui.chip('연락처 없음', 'idle')
+      : allMasked ? ui.chip('전건 마스킹', 'pos') : ui.chip('마스킹 누락 ' + (totalPhone - totalMasked) + '건', 'neg');
+
+    var rules = [
+      ['연락처', '010-****-0000 — 가운데 네 자리를 항상 가립니다'],
+      ['이메일', 'ㅇ***@closer-demo.co.kr — 계정 앞 한 글자만 남깁니다'],
+      ['내보내기', 'JSON·CSV로 내보낼 때도 같은 규칙을 적용합니다'],
+      ['입력 금지', '실명·주민등록번호·계좌번호 등 실제 개인정보는 저장하지 않습니다']
+    ];
+
+    $('#piiBody').innerHTML =
+      '<p class="t-small">이 데모의 모든 인물과 연락처는 가상입니다. 화면과 내보내기 파일 모두 같은 마스킹 규칙을 씁니다.</p>' +
+      '<div class="kv">' + rules.map(function (r) {
+        return '<div class="kv__row"><span class="kv__k">' + esc(r[0]) + '</span><span class="kv__v">' + esc(r[1]) + '</span></div>';
+      }).join('') + '</div>' +
+      '<p class="t-micro">연락처를 가진 레코드 <strong>' + U.num(totalPhone) + '건</strong> 가운데 <strong>' +
+      U.num(totalMasked) + '건</strong>이 마스킹 상태입니다' +
+      (allMasked ? '.' : ' — 누락분은 내보내기 시점에 다시 마스킹됩니다.') +
+      ' 이메일을 가진 레코드는 ' + U.num(totalEmail) + '건입니다.' +
+      (scan.length ? ' 대상 객체: ' + scan.map(function (s) { return esc(ENT_LABEL[s.entity] || s.entity); }).join(' · ') + '.' : '');
+  }
+
+  function renderTrash() {
+    var rows = db.trashList();
+    state.trashPage = clampPage(rows.length, state.trashPage, T_SIZE);
+    var from = (state.trashPage - 1) * T_SIZE;
+    var page = rows.slice(from, from + T_SIZE);
+
+    var host = $('#trashHost');
+    host.innerHTML = '';
+    host.appendChild(ui.table(noSort([
+      { key: 'label', label: '레코드', cell: function (r) { return '<span class="t-small">' + esc(r.label || r.id) + '</span>'; } },
+      { key: 'entity', label: '객체', cell: function (r) { return ui.chip(ENT_LABEL[r.entity] || r.entity, 'idle'); } },
+      { key: 'actor', label: '삭제한 사람', cell: function (r) { return ui.personCell(db.get('users', r.actorId)); } },
+      { key: 'at', label: '삭제 시각', align: 'right', cell: function (r) {
+          var gap = U.days(String(r.at).slice(0, 10), C.today);
+          return '<span class="t-mono t-nowrap' + (gap > 15 ? ' t-warn' : '') + '">' + esc(U.fmtDateTime(r.at)) + '</span>' +
+            '<span class="t-micro" style="display:block">' + (gap > 15 ? '보관 15일 경과' : '보관 ' + Math.max(0, 15 - gap) + '일 남음') + '</span>';
+        } },
+      { key: 'act', label: '작업', sortable: false, tight: true, cell: function (r) {
+          return '<button class="btn btn--sm btn--ghost t-nowrap" type="button" data-untrash="' + esc(r.id) + '">복원</button>';
+        } }
+    ]), page, {
+      compact: true,
+      empty: { title: '휴지통이 비어 있습니다', body: '삭제한 레코드는 여기에서 15일간 보관되고 언제든 되살릴 수 있습니다.' }
+    }));
+
+    $('#trashPager').innerHTML = pagerHTML(rows.length, state.trashPage, T_SIZE, '건');
+    $('#trashNote').textContent = rows.length ? rows.length + '건 보관 중' : '보관 중인 항목 없음';
+    $('#trashEmpty').disabled = !rows.length;
+  }
+
+  U.live($('#trashHost'), 'click', '[data-untrash]', function (e, t) {
+    var id = t.dataset.untrash;
+    var item = db.get('trash', id);
+    if (!item) return;
+    var label = item.label || item.record.id;
+    db.untrash(id);
+    refreshAll();
+    ui.toast('“' + label + '”을(를) 되살렸습니다.');
+  });
+
+  U.on($('#trashEmpty'), 'click', function () {
+    var n = db.trashList().length;
+    if (!n) { ui.toast('휴지통에 비울 항목이 없습니다.'); return; }
+    ui.confirmDestructive({
+      title: '휴지통 비우기',
+      message: '보관 중인 ' + n + '건을 영구 삭제합니다. 되돌릴 수 없습니다.',
+      phrase: '비우기', confirmLabel: '영구 삭제',
+      onConfirm: function () {
+        db.emptyTrash();
+        refreshAll();
+        ui.toast(n + '건을 영구 삭제했습니다.', { kind: 'neg' });
+      }
+    });
+  });
+
+  U.on($('#expJson'), 'click', function () {
+    var data = maskDeep(db.dump());
+    downloadFile('closer-data-' + U.iso(C.today) + '.json', JSON.stringify(data, null, 2), 'application/json;charset=utf-8');
+    db.audit('내보내기', '데이터 전체', '-', '전체 데이터 JSON 내보내기(연락처 마스킹 적용)');
+    renderAudit(); renderTiles(); renderEntities();
+    ui.toast('전체 데이터를 JSON으로 내보냈습니다. 연락처와 이메일은 마스킹된 상태입니다.');
+  });
+  U.on($('#expAudit'), 'click', exportAuditCSV);
+
+  U.on($('#doReset'), 'click', function () {
+    ui.confirmDestructive({
+      title: '로컬 데이터 초기화',
+      message: '이 브라우저에 저장된 변경 사항 ' + U.num(U.sum(db.entities, function (e) { return db.count(e); })) +
+        '건을 버리고 처음 배포된 데모 데이터로 되돌립니다. 되돌릴 수 없습니다.',
+      phrase: '초기화', confirmLabel: '초기화',
+      onConfirm: function () {
+        db.reset();
+        window.location.reload();
+      }
+    });
+  });
+
+  U.on($('#uCsv'), 'click', function () {
+    var rows = userRows();
+    if (!rows.length) { ui.toast('내보낼 사용자가 없습니다.', { kind: 'neg' }); return; }
+    var out = [['이름', '역할', '팀', '직무', '주간 캐파(시간)', '스킬', '상태', '메일']];
+    rows.forEach(function (u) {
+      out.push([u.name, u.role, teamName(u.teamId), u.title || u.craft || '', D.capacityOf(u),
+        (u.skills || []).map(function (s) { return s.name + '(' + s.level + ')'; }).join(' '),
+        u.active === false ? '비활성' : '활성', maskEmail(u.email || '')]);
+    });
+    ui.exportCSV('closer-사용자.csv', out);
+    db.audit('내보내기', 'users', '-', rows.length + '명 CSV 내보내기(메일 마스킹 적용)');
+    renderAudit(); renderTiles(); renderEntities();
+  });
+
+  /* ══ 필터 배선 ═════════════════════════════════════════════════════ */
+  U.live($('#uViews'), 'click', '[data-uview]', function (e, t) {
+    state.uView = t.dataset.uview; state.uPage = 1;
+    U.qsa('[data-uview]', $('#uViews')).forEach(function (b) { b.setAttribute('aria-pressed', String(b === t)); });
+    renderUsers();
+  });
+  U.on($('#uq'), 'input', U.debounce(function () { state.uq = $('#uq').value; state.uPage = 1; renderUsers(); }, 180));
+  U.on($('#uRole'), 'change', function () { state.uRole = this.value; state.uPage = 1; renderUsers(); });
+  U.on($('#uTeam'), 'change', function () { state.uTeam = this.value; state.uPage = 1; renderUsers(); });
+  U.on($('#uReset'), 'click', function () {
+    state.uView = 'active'; state.uq = ''; state.uRole = ''; state.uTeam = ''; state.uPage = 1;
+    $('#uq').value = ''; $('#uRole').value = ''; $('#uTeam').value = '';
+    U.qsa('[data-uview]', $('#uViews')).forEach(function (b) { b.setAttribute('aria-pressed', String(b.dataset.uview === 'active')); });
+    renderUsers();
+  });
+
+  U.on($('#headNewUser'), 'click', newUserModal);
+  U.on($('#headKeys'), 'click', function () { ui.shortcutsHelp(); });
+
+  /* ══ 최초 렌더 ═════════════════════════════════════════════════════ */
+  function refreshAll() {
+    renderTiles();
+    renderUsers();
+    renderTeams();
+    renderTargets();
+    renderAudit();
+    renderEntities();
+    renderPII();
+    renderTrash();
+    renderAnswer();
+  }
+
+  renderPerms();
+  refreshAll();
+  paintTab();
+  U.revealAll();
+})();
+</script>
+</body>
+</html>

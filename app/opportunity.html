@@ -1,0 +1,1225 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>영업기회 · CLOSER</title>
+<meta name="description" content="영업기회 레코드 페이지. 단계 경로, 상품 라인, 제작 의뢰, 견적·계약, 활동 이력을 한 화면에서 다룹니다." />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=IBM+Plex+Sans+KR:wght@400;500;600&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="../tokens.css" />
+<link rel="stylesheet" href="../assets/css/base.css" />
+<link rel="stylesheet" href="../assets/css/components.css" />
+<link rel="stylesheet" href="../assets/css/app.css" />
+<style>
+  /* 이 화면에만 필요한 소품. 모든 값은 토큰을 참조합니다. */
+  #recRoot .kv__v { display: flex; align-items: baseline; gap: var(--space-2xs); }
+  #recRoot .kv__pen { opacity: 0.45; transition: opacity var(--dur-short) var(--ease-out); }
+  #recRoot .kv__row:hover .kv__pen,
+  #recRoot .kv__pen:focus-visible { opacity: 1; }
+
+  .path__step .path__lab { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .path__step.is-sel { box-shadow: inset 0 0 0 var(--rule-thick) var(--color-accent); }
+
+  .req-row { display: flex; align-items: center; gap: var(--space-xs); font-size: var(--text-sm); padding: var(--space-3xs) 0; }
+
+  .tbl-sum td {
+    background: var(--color-paper-2);
+    border-top: var(--rule-thick) solid var(--color-rule-2);
+    color: var(--color-ink); font-weight: 600;
+  }
+
+  .side-fact {
+    display: flex; align-items: baseline; justify-content: space-between; gap: var(--space-sm);
+    padding: var(--space-2xs) 0; border-bottom: var(--rule-hair) solid var(--color-rule);
+    font-size: var(--text-sm); color: var(--color-ink);
+  }
+  .side-fact:last-child { border-bottom: none; }
+  .side-fact__k {
+    font-family: var(--font-mono); font-size: var(--text-2xs); letter-spacing: var(--track-mono);
+    text-transform: uppercase; color: var(--color-ink-3); white-space: nowrap;
+  }
+
+  .peep { display: flex; align-items: center; gap: var(--space-xs); padding: var(--space-xs) 0; border-bottom: var(--rule-hair) solid var(--color-rule); }
+  .peep:last-child { border-bottom: none; }
+
+  @media (max-width: 640px) {
+    .rec-top { gap: var(--space-sm); }
+    .path__step { min-width: 132px; }
+  }
+</style>
+</head>
+<body class="app">
+<a class="skip-link" href="#main">본문으로 건너뛰기</a>
+
+<div class="app-main">
+  <main class="app-page" id="main">
+
+    <nav class="crumb mb-sm" id="crumb" aria-label="경로"></nav>
+
+    <div id="recRoot" data-verify></div>
+
+    <footer class="hairline mt-2xl" style="padding-block:var(--space-md)">
+      <p class="t-mono t-faint">CLOSER · 데모 데이터 · 모든 회사·인물·연락처는 가상입니다</p>
+    </footer>
+  </main>
+</div>
+
+<script src="../assets/js/seed.js"></script>
+<script src="../assets/js/util.js"></script>
+<script src="../assets/js/store.js"></script>
+<script src="../assets/js/domain.js"></script>
+<script src="../assets/js/metrics.js"></script>
+<script src="../assets/js/insights.js"></script>
+<script src="../assets/js/ui.js"></script>
+<script src="../assets/js/charts.js"></script>
+<script src="../assets/js/shell.js"></script>
+<script>
+(function () {
+  'use strict';
+  var C = window.CLOSER, U = C.util, db = C.db, D = C.domain, M = C.metrics, ui = C.ui;
+  C.shell.mount('opportunities');
+
+  var $ = U.qs, esc = U.esc, el = U.el;
+  var me = db.me();
+  var root = $('#recRoot');
+  var idParam = U.param('id');
+
+  /* 주소에 id가 없으면 데모가 빈 화면으로 열리지 않도록 내 진행 딜 중
+     마감이 가장 가까운 건을 연다. id가 있는데 없는 레코드면 빈 상태를 보인다. */
+  function fallbackOpp() {
+    var list = db.where('opportunities', function (o) { return o.ownerId === me.id && D.isOpen(o); });
+    if (!list.length) list = db.where('opportunities', D.isOpen);
+    if (!list.length) list = db.all('opportunities');
+    return U.sortBy(list, 'closeDate')[0] || null;
+  }
+
+  var opp = idParam ? db.get('opportunities', idParam) : fallbackOpp();
+
+  if (!opp) {
+    document.title = '영업기회를 찾을 수 없습니다 · CLOSER';
+    $('#crumb').innerHTML = '<a class="link" href="opportunities.html">영업기회</a>';
+    root.innerHTML = '<section class="panel"><div class="panel__body">' +
+      ui.empty('영업기회를 찾을 수 없습니다',
+        idParam
+          ? '요청하신 ID “' + idParam + '” 에 해당하는 레코드가 없습니다. 삭제되었거나 주소가 잘못되었을 수 있습니다.'
+          : '아직 등록된 영업기회가 없습니다. 목록에서 새 레코드를 만들어 주세요.',
+        '<a class="btn btn--primary btn--sm" href="opportunities.html">영업기회 목록으로</a>' +
+        '<a class="btn btn--sm" href="dashboard.html" style="margin-left:var(--space-xs)">홈으로</a>') +
+      '</div></section>';
+    return;
+  }
+
+  var acc = db.accountOf(opp);
+  var canU = D.can('opportunities', 'U');
+  var canD = D.can('opportunities', 'D');
+  var canQuote = D.can('quotes', 'C');
+  var canTicket = D.can('tickets', 'C');
+
+  var TABS = ['detail', 'tickets', 'quotes', 'activities', 'team'];
+  var TAB_LABEL = { detail: '상세', tickets: '제작 의뢰', quotes: '견적·계약', activities: '활동', team: '팀·경쟁' };
+  var state = {
+    tab: TABS.indexOf(U.param('tab')) > -1 ? U.param('tab') : 'detail',
+    step: opp.stage
+  };
+
+  var FIELD_LABEL = {
+    name: '영업기회명', accountId: '광고주', contactId: '고객 담당자', ownerId: '담당자',
+    amount: '금액', closeDate: '마감일', type: '유형', source: '유입 경로',
+    nextStep: '다음 액션', competitorId: '경쟁사', lossReason: '실주 사유', stage: '단계'
+  };
+  var ACT_TYPE = { call: '통화', email: '메일', meeting: '미팅', task: '업무' };
+
+  /* ── 뼈대 — 한 번만 만들고 이후에는 안쪽만 다시 그립니다 ───────── */
+  root.innerHTML =
+    '<section class="rec-highlights reveal" id="hl" aria-label="영업기회 요약"></section>' +
+    '<section class="mt-md reveal" aria-label="영업 단계 경로">' +
+      '<div class="path" id="path"></div>' +
+      '<div id="guide" class="mt-sm"></div>' +
+    '</section>' +
+    '<div class="rec-grid mt-lg">' +
+      '<div style="min-width:0">' +
+        '<div class="tabs" id="tabs" role="tablist" aria-label="영업기회 세부 정보"></div>' +
+        '<div id="panes" class="mt-md"></div>' +
+      '</div>' +
+      '<aside class="stack gap-lg reveal" id="side" aria-label="분석 의견과 관련 정보"></aside>' +
+    '</div>';
+
+  /* ══ 렌더 ═══════════════════════════════════════════════════════════ */
+  function renderAll() {
+    opp = db.get('opportunities', opp.id) || opp;
+    acc = db.accountOf(opp);
+    document.title = opp.name + ' · CLOSER';
+    renderCrumb(); renderHL(); renderPath(); renderGuide();
+    renderTabs(); renderPanes(); renderSide();
+  }
+
+  function renderCrumb() {
+    $('#crumb').innerHTML =
+      '<a class="link" href="opportunities.html">영업기회</a>' +
+      '<span class="crumb__sep">/</span>' +
+      (acc ? '<a class="link" href="account.html?id=' + encodeURIComponent(acc.id) + '">' + esc(acc.name) + '</a>' +
+             '<span class="crumb__sep">/</span>' : '') +
+      '<span class="t-ink">' + esc(opp.name) + '</span>';
+  }
+
+  /* ── 하이라이트 패널 ─────────────────────────────────────────────── */
+  function renderHL() {
+    var st = D.stage(opp.stage), owner = db.ownerOf(opp);
+    var chips =
+      ui.chip(opp.stage, st.won ? 'pos' : st.lost ? 'neg' : st.cast === 'Commit' ? 'accent' : null) +
+      ui.chip(st.cast) +
+      (opp.type ? ui.chip(opp.type, 'plain') : '') +
+      (D.isStalled(opp) ? ui.chip('정체 ' + D.daysInStage(opp) + '일', 'warn') : '') +
+      (D.isOverdue(opp) ? ui.chip('마감 ' + U.days(opp.closeDate, C.today) + '일 경과', 'neg') : '');
+
+    var facts = [
+      { k: '금액', v: U.won(opp.amount), num: true },
+      { k: '가중 금액', v: U.won(D.weighted(opp)), num: true },
+      { k: '확률', v: U.pct(st.prob), num: true },
+      { k: '마감일', v: U.fmtDate(opp.closeDate) + ' <span class="t-muted">' + dday(opp.closeDate) + '</span>', num: true },
+      { k: '담당자', v: owner ? ui.personCell(owner) : '<span class="t-faint">미지정</span>' },
+      { k: '유형', v: esc(opp.type || '—') },
+      { k: '순매출', v: U.won(D.netRevenue(opp)), num: true }
+    ];
+
+    $('#hl').innerHTML =
+      '<div class="rec-top">' +
+        '<div style="min-width:0">' +
+          '<p class="rec-type">영업기회</p>' +
+          '<h1 class="rec-name">' + esc(opp.name) + '</h1>' +
+          '<div class="row row--wrap gap-xs mt-xs">' +
+            (acc ? '<a class="link" href="account.html?id=' + encodeURIComponent(acc.id) + '">' + esc(acc.name) + '</a>' : '<span class="t-faint">광고주 미연결</span>') +
+            chips +
+          '</div>' +
+        '</div>' +
+        '<div class="row row--wrap gap-2xs" id="actBar">' + actionBar() + '</div>' +
+      '</div>' +
+      '<div class="rec-facts">' + facts.map(function (f) {
+        return '<div><p class="rec-fact__k">' + esc(f.k) + '</p>' +
+          '<p class="rec-fact__v' + (f.num ? ' t-num' : '') + '">' + f.v + '</p></div>';
+      }).join('') + '</div>' +
+      '<p class="t-micro mt-sm">가중 금액은 금액 × 단계 확률, 순매출은 상품별 수수료율을 적용한 대행 수수료 기준입니다. ' +
+      '매체비는 취급고로만 잡습니다.</p>';
+  }
+
+  function dday(v) {
+    if (!v) return '';
+    var n = U.days(C.today, v);
+    return n === 0 ? 'D-DAY' : n > 0 ? 'D-' + n : 'D+' + Math.abs(n);
+  }
+
+  function actionBar() {
+    var b = [];
+    if (canU) b.push(act('edit', '편집'));
+    if (canU && D.isOpen(opp)) b.push(act('stage', '단계 이동', 'primary'));
+    if (canU) b.push(act('activity', '활동 기록'));
+    if (canTicket) b.push('<a class="btn btn--sm" href="tickets.html?new=1&amp;opp=' + encodeURIComponent(opp.id) + '">제작 의뢰</a>');
+    if (canQuote) b.push(act('quote', '견적 생성'));
+    if (canQuote) b.push(act('approval', '승인 요청'));
+    if (canD) b.push('<button class="btn btn--sm btn--danger" type="button" data-act="delete">삭제</button>');
+    if (!b.length) b.push('<span class="t-micro">' + esc(me.role) + ' 역할은 이 레코드를 읽기만 할 수 있습니다.</span>');
+    return b.join('');
+  }
+  function act(key, label, kind) {
+    return '<button class="btn btn--sm' + (kind === 'primary' ? ' btn--primary' : '') + '" type="button" data-act="' + key + '">' + esc(label) + '</button>';
+  }
+
+  /* ── Path ────────────────────────────────────────────────────────── */
+  function pathSteps() {
+    return D.STAGES.filter(function (s) { return !s.lost || D.isLost(opp); });
+  }
+  function renderPath() {
+    var cur = D.stage(opp.stage);
+    $('#path').innerHTML = pathSteps().map(function (s) {
+      var cls = 'path__step';
+      if (s.key === opp.stage) cls += s.lost ? ' is-lost' : ' is-current';
+      else if (s.order < cur.order) cls += ' is-done';
+      if (s.key === state.step) cls += ' is-sel';
+      return '<button type="button" class="' + cls + '" data-act="step" data-stage="' + esc(s.key) + '"' +
+        (s.key === opp.stage ? ' aria-current="step"' : '') + '>' +
+        '<span class="path__lab">' + esc(s.key) + '</span>' +
+        '<span class="path__pct">' + s.prob + '% · ' + esc(s.cast) + '</span></button>';
+    }).join('');
+  }
+
+  function fieldPreview(f) {
+    var v = opp[f];
+    if (!v) return '미입력';
+    if (f === 'amount') return U.won(v);
+    if (f === 'closeDate') return U.fmtDate(v);
+    if (f === 'accountId') return acc ? acc.name : '—';
+    if (f === 'ownerId') return db.userName(v);
+    if (f === 'contactId') { var c = db.get('contacts', v); return c ? c.name : '—'; }
+    return String(v).length > 22 ? String(v).slice(0, 22) + '…' : String(v);
+  }
+  function missingOf(stageKey) {
+    return (D.stage(stageKey).requires || []).filter(function (f) { return !opp[f]; });
+  }
+
+  function renderGuide() {
+    var s = D.stage(state.step), isCur = state.step === opp.stage;
+    var reqs = s.requires || [];
+    var missing = missingOf(state.step);
+    var nextStage = nextOf(state.step);
+
+    var reqHTML = reqs.length ? '<div class="mt-sm">' + reqs.map(function (f) {
+      var ok = !!opp[f];
+      return '<div class="req-row"><span class="dot ' + (ok ? 'dot--pos' : 'dot--warn') + '"></span>' +
+        '<span class="grow">' + esc(FIELD_LABEL[f] || f) + '</span>' +
+        '<span class="t-mono">' + esc(fieldPreview(f)) + '</span></div>';
+    }).join('') + '</div>'
+      : '<p class="t-small mt-sm">이 단계에는 필수 입력 필드가 없습니다.</p>';
+
+    var actions = '';
+    if (canU && isCur && D.isOpen(opp) && nextStage) {
+      actions = '<button class="btn btn--sm btn--primary" type="button" data-act="advance">이 단계 완료로 표시 · ' + esc(nextStage.key) + '(으)로</button>';
+    } else if (canU && !isCur && D.isOpen(opp)) {
+      actions = '<button class="btn btn--sm" type="button" data-act="moveto" data-stage="' + esc(s.key) + '">이 단계로 이동</button>';
+    } else if (!D.isOpen(opp)) {
+      actions = '<span class="t-micro">종결된 딜입니다. 단계를 다시 열려면 상단 “단계 이동”을 사용하세요.</span>';
+    }
+
+    $('#guide').innerHTML =
+      '<div class="panel">' +
+        '<div class="panel__head">' +
+          '<h2 class="panel__title">' + esc(s.key) + ' 단계 가이드</h2>' +
+          '<span class="row gap-2xs">' + ui.chip(s.prob + '%', isCur ? 'accent' : null) + ui.chip(s.cast) + '</span>' +
+        '</div>' +
+        '<div class="panel__body">' +
+          '<p class="t-body">' + esc(s.guide) + '</p>' +
+          '<p class="t-mono mt-md">완료 기준</p>' +
+          '<p class="t-small">' + esc(s.exit) + '</p>' +
+          '<p class="t-mono mt-md">필수 입력</p>' +
+          reqHTML +
+          (isCur && D.isOpen(opp)
+            ? '<p class="t-micro mt-sm">이 단계 체류 <strong>' + D.daysInStage(opp) + '일</strong> · 기준 ' +
+              (D.STAGE_MAX_DAYS[opp.stage] || 14) + '일' +
+              (missing.length ? ' · <span class="t-warn">미충족 ' + missing.length + '개</span>' : '') + '</p>'
+            : '') +
+          (actions ? '<div class="mt-md row row--wrap gap-xs">' + actions + '</div>' : '') +
+        '</div>' +
+      '</div>';
+  }
+
+  function nextOf(key) {
+    var cur = D.stage(key);
+    var list = D.STAGES.filter(function (s) { return !s.lost; });
+    for (var i = 0; i < list.length; i++) if (list[i].order > cur.order) return list[i];
+    return null;
+  }
+
+  /* ── 탭 ──────────────────────────────────────────────────────────── */
+  function counts() {
+    return {
+      detail: 0,
+      tickets: db.ticketsOf(opp.id).length,
+      quotes: quotesOf().length + contractsOf().length,
+      activities: db.activitiesOf('opportunity', opp.id).length,
+      team: (opp.teamIds || []).length
+    };
+  }
+  function quotesOf() { return U.sortBy(db.where('quotes', function (q) { return q.oppId === opp.id; }), 'version', 'desc'); }
+  function contractsOf() { return db.where('contracts', function (c) { return c.oppId === opp.id; }); }
+
+  function renderTabs() {
+    var n = counts();
+    $('#tabs').innerHTML = TABS.map(function (k) {
+      return '<button class="tab" type="button" role="tab" data-tab="' + k + '" id="tab-' + k + '" ' +
+        'aria-controls="pane-' + k + '" aria-selected="' + (state.tab === k ? 'true' : 'false') + '">' +
+        esc(TAB_LABEL[k]) + (n[k] ? '<span class="tab__count">' + n[k] + '</span>' : '') + '</button>';
+    }).join('');
+  }
+
+  function renderPanes() {
+    $('#panes').innerHTML = TABS.map(function (k) {
+      return '<section id="pane-' + k + '" data-pane="' + k + '" role="tabpanel" aria-labelledby="tab-' + k + '"' +
+        (state.tab === k ? '' : ' hidden') + '><div class="stack gap-lg">' + paneHTML(k) + '</div></section>';
+    }).join('');
+    var host;
+    if ((host = $('#lineTable'))) host.appendChild(linesTable());
+    if ((host = $('#ticketTable'))) host.appendChild(ticketTable());
+    if ((host = $('#quoteTable'))) host.appendChild(quoteTable());
+    if ((host = $('#contractTable'))) host.appendChild(contractTable());
+  }
+
+  function paneHTML(k) {
+    if (k === 'detail') return detailPane();
+    if (k === 'tickets') return ticketPane();
+    if (k === 'quotes') return quotePane();
+    if (k === 'activities') return activityPane();
+    return teamPane();
+  }
+
+  /* ── 탭 1 · 상세 ─────────────────────────────────────────────────── */
+  function kvRow(label, value, editKey) {
+    return '<div class="kv__row"><div class="kv__k">' + esc(label) + '</div>' +
+      '<div class="kv__v"><span class="grow">' + value + '</span>' +
+      (editKey && canU
+        ? '<button class="btn btn--ghost btn--sm btn--icon kv__pen" type="button" data-act="editf" data-f="' + editKey +
+          '" aria-label="' + esc(label) + ' 편집" title="' + esc(label) + ' 편집">✎</button>'
+        : '') +
+      '</div></div>';
+  }
+
+  function detailPane() {
+    var st = D.stage(opp.stage), owner = db.ownerOf(opp);
+    var contact = opp.contactId ? db.get('contacts', opp.contactId) : null;
+    var comp = opp.competitorId ? db.get('competitors', opp.competitorId) : null;
+    var lines = db.linesOf(opp.id);
+    var maxDisc = lines.length ? Math.max.apply(null, lines.map(function (l) { return l.discountPct || 0; })) : 0;
+    var rule = D.approvalFor(maxDisc);
+
+    var kv =
+      kvRow('영업기회명', esc(opp.name), 'name') +
+      kvRow('광고주', acc ? '<a class="link--quiet" href="account.html?id=' + encodeURIComponent(acc.id) + '">' + esc(acc.name) + '</a> <span class="t-muted">· ' + esc(acc.tier) + '</span>' : '<span class="t-faint">미연결</span>') +
+      kvRow('고객 담당자', contact ? esc(contact.name) + ' <span class="t-muted">· ' + esc(contact.title || '') + '</span>' : '<span class="t-faint">미지정</span>', 'contactId') +
+      kvRow('담당자', owner ? esc(owner.name) + ' <span class="t-muted">· ' + esc(owner.role) + '</span>' : '<span class="t-faint">미지정</span>', 'ownerId') +
+      kvRow('단계', ui.chip(opp.stage, st.won ? 'pos' : st.lost ? 'neg' : 'accent') + ' <span class="t-muted">' + st.prob + '% · ' + esc(st.cast) + '</span>') +
+      kvRow('금액', '<span class="t-num">' + U.won(opp.amount, { exact: true }) + '</span>', 'amount') +
+      kvRow('가중 금액', '<span class="t-num t-muted">' + U.won(D.weighted(opp), { exact: true }) + '</span>') +
+      kvRow('순매출(수수료)', '<span class="t-num">' + U.won(D.netRevenue(opp), { exact: true }) + '</span>') +
+      kvRow('마감일', U.fmtDate(opp.closeDate) + ' <span class="t-muted">' + dday(opp.closeDate) + '</span>', 'closeDate') +
+      kvRow('유형', esc(opp.type || '—'), 'type') +
+      kvRow('유입 경로', esc(opp.source || '—'), 'source') +
+      kvRow('다음 액션', esc(opp.nextStep || '—'), 'nextStep') +
+      kvRow('경쟁사', comp ? esc(comp.name) : '<span class="t-faint">없음</span>', 'competitorId') +
+      (D.isLost(opp) ? kvRow('실주 사유', opp.lossReason ? ui.chip(opp.lossReason, 'neg') : '<span class="t-warn">미입력</span>', 'lossReason') : '') +
+      kvRow('생성일', U.fmtDate(opp.createdAt) + ' <span class="t-muted">· ' + U.ago(opp.createdAt) + '</span>') +
+      kvRow('현재 단계 진입', U.fmtDate(opp.stageEnteredAt) + ' <span class="t-muted">· ' + D.daysInStage(opp) + '일 경과</span>') +
+      (opp.updatedAt ? kvRow('최근 수정', U.fmtDateTime(opp.updatedAt)) : '');
+
+    var badge = maxDisc > 10
+      ? '<span class="chip chip--warn">최대 할인 ' + maxDisc + '% · ' + esc(rule.label) + '</span>'
+      : '<span class="chip chip--idle">최대 할인 ' + maxDisc + '% · ' + esc(rule.label) + '</span>';
+
+    return '<div class="panel">' +
+        '<div class="panel__head"><h2 class="panel__title">상세 정보</h2>' +
+          (canU ? '<button class="btn btn--sm" type="button" data-act="edit">주요 항목 편집</button>' : '') +
+        '</div>' +
+        '<div class="panel__body"><div class="kv">' + kv + '</div></div>' +
+      '</div>' +
+      '<div class="panel">' +
+        '<div class="panel__head"><h2 class="panel__title">영업기회 상품</h2>' +
+          '<span class="row row--wrap gap-xs">' + badge +
+          (canU ? '<button class="btn btn--sm" type="button" data-act="addline">라인 추가</button>' : '') +
+          '</span>' +
+        '</div>' +
+        '<div id="lineTable"></div>' +
+        '<div class="panel__foot"><p class="t-micro">라인을 추가하거나 지우면 영업기회 금액이 라인 합계로 다시 계산됩니다. ' +
+        '할인율 10% 초과 라인은 ' + esc(D.DISCOUNT_RULES[1].label) + ' 이상이 필요합니다.</p></div>' +
+      '</div>';
+  }
+
+  function linesTable() {
+    var lines = db.linesOf(opp.id);
+    var cols = [
+      { key: 'product', label: '상품', cell: function (l) {
+          var p = db.get('products', l.productId);
+          return '<span>' + esc(p ? p.name : '알 수 없는 상품') + '</span>' +
+            (p ? ' <span class="chip chip--idle">' + esc(p.category) + '</span>' : '');
+        } },
+      { key: 'qty', label: '수량', align: 'right', cell: function (l) { return U.num(l.qty); } },
+      { key: 'months', label: '개월', align: 'right', cell: function (l) { return U.num(l.months || 1); } },
+      { key: 'unitPrice', label: '단가', align: 'right', cell: function (l) { return U.won(l.unitPrice, { exact: true }); } },
+      { key: 'discountPct', label: '할인율', align: 'right', cell: function (l) {
+          var d = l.discountPct || 0;
+          if (d <= 10) return '<span class="t-muted">' + U.pct(d) + '</span>';
+          return '<span class="t-warn">' + U.pct(d) + '</span> ' + ui.chip(D.approvalFor(d).label, 'warn');
+        } },
+      { key: 'amount', label: '금액', align: 'right', cell: function (l) { return U.won(lineAmount(l), { exact: true }); } }
+    ];
+    if (canU) cols.push({ key: 'del', label: '작업', sortable: false, tight: true, cell: function (l) {
+      return '<button class="btn btn--ghost btn--sm" type="button" data-act="delline" data-id="' + esc(l.id) + '">삭제</button>';
+    } });
+
+    var wrap = ui.table(cols, lines, {
+      empty: { title: '등록된 상품 라인이 없습니다', body: '광고상품을 추가하면 금액과 순매출이 자동으로 계산됩니다.' }
+    });
+    if (lines.length) {
+      var total = U.sum(lines, lineAmount);
+      var tr = el('tr', { class: 'tbl-sum' }, [
+        el('td', { colspan: 5, html: '합계 <span class="t-muted">· 라인 ' + lines.length + '건 · 순매출 ' + U.won(D.netRevenue(opp)) + '</span>' }),
+        el('td', { class: 'cell-num', html: U.won(total, { exact: true }) })
+      ]);
+      if (canU) tr.appendChild(el('td'));
+      wrap.querySelector('table').appendChild(el('tfoot', {}, [tr]));
+    }
+    return wrap;
+  }
+  function lineAmount(l) {
+    return Math.round((l.qty || 0) * (l.unitPrice || 0) * (1 - (l.discountPct || 0) / 100) * (l.months || 1));
+  }
+
+  /* ── 탭 2 · 제작 의뢰 ────────────────────────────────────────────── */
+  function ticketPane() {
+    return '<div class="panel">' +
+      '<div class="panel__head"><h2 class="panel__title">제작 의뢰</h2>' +
+        (canTicket ? '<a class="btn btn--sm" href="tickets.html?new=1&amp;opp=' + encodeURIComponent(opp.id) + '">새 제작 의뢰</a>' : '') +
+      '</div>' +
+      '<div id="ticketTable"></div>' +
+      '<div class="panel__foot"><p class="t-micro">SLA 시계는 의뢰 접수 시각부터 흐릅니다. 배정 전 대기 시간도 포함됩니다.</p></div>' +
+      '</div>';
+  }
+  function ticketTable() {
+    var rows = U.sortBy(db.ticketsOf(opp.id), 'dueDate');
+    return ui.table([
+      { key: 'key', label: '키', cell: function (t) {
+          return '<a class="tkt-key link--quiet" href="ticket.html?id=' + encodeURIComponent(t.id) + '">' + esc(t.key) + '</a>';
+        } },
+      { key: 'type', label: '유형', cell: function (t) { return ui.chip(t.type); } },
+      { key: 'title', label: '제목', cell: function (t) { return '<span class="t-clamp-2">' + esc(t.title) + '</span>'; } },
+      { key: 'assigneeId', label: '담당', cell: function (t) { return ui.personCell(db.get('users', t.assigneeId)); } },
+      { key: 'status', label: '상태', cell: function (t) {
+          return ui.chip(t.status, t.status === '완료' ? 'pos' : t.status === '보류' || t.status === '취소' ? 'idle' : 'accent');
+        } },
+      { key: 'sla', label: 'SLA', cell: function (t) {
+          var s = D.slaState(t);
+          if (s === 'done') return '<span class="t-faint">종료</span>';
+          var r = D.slaRemaining(t);
+          return ui.chip(s === 'breach' ? '초과 ' + Math.abs(r) + 'h' : s === 'risk' ? '임박 ' + r + 'h' : '여유 ' + r + 'h',
+            s === 'breach' ? 'neg' : s === 'risk' ? 'warn' : 'pos');
+        } },
+      { key: 'dueDate', label: '마감', align: 'right', cell: function (t) {
+          var late = opp.closeDate && U.days(opp.closeDate, t.dueDate) > 0;
+          return '<span class="' + (late ? 't-neg' : '') + '" title="' + (late ? '딜 마감일보다 늦습니다' : '') + '">' + U.fmtDate(t.dueDate) + '</span>';
+        } }
+    ], rows, {
+      onRow: function (t) { window.location.href = 'ticket.html?id=' + encodeURIComponent(t.id); },
+      empty: { title: '이 딜에 걸린 제작 의뢰가 없습니다', body: '영상·디자인·랜딩페이지 제작을 티켓으로 의뢰하면 여기에 모입니다.' }
+    });
+  }
+
+  /* ── 탭 3 · 견적·계약 ────────────────────────────────────────────── */
+  function quotePane() {
+    return '<div class="panel">' +
+        '<div class="panel__head"><h2 class="panel__title">견적</h2>' +
+          (canQuote ? '<button class="btn btn--sm" type="button" data-act="quote">현재 라인으로 견적 생성</button>' : '') +
+        '</div>' +
+        '<div id="quoteTable"></div>' +
+      '</div>' +
+      '<div class="panel">' +
+        '<div class="panel__head"><h2 class="panel__title">계약</h2>' +
+          '<a class="link" href="contracts.html">계약 목록</a>' +
+        '</div>' +
+        '<div id="contractTable"></div>' +
+      '</div>';
+  }
+  function quoteTable() {
+    var rows = quotesOf();
+    return ui.table([
+      { key: 'no', label: '견적번호', cell: function (q) {
+          return '<a class="link--quiet" href="quotes.html?id=' + encodeURIComponent(q.id) + '">' + esc(q.no) + '</a>' +
+            ' <span class="t-muted">v' + U.num(q.version) + '</span>';
+        } },
+      { key: 'status', label: '상태', cell: function (q) {
+          return ui.chip(q.status, q.status === '수주' ? 'pos' : q.status === '만료' ? 'idle' : 'accent');
+        } },
+      { key: 'total', label: '견적 금액', align: 'right', cell: function (q) { return U.won(q.total); } },
+      { key: 'lines', label: '라인 합계', align: 'right', cell: function (q) {
+          var ql = db.where('quoteLines', function (l) { return l.quoteId === q.id; });
+          return '<span class="t-muted">' + U.won(U.sum(ql, 'amount')) + ' · ' + ql.length + '줄</span>';
+        } },
+      { key: 'maxDiscountPct', label: '최대 할인', align: 'right', cell: function (q) {
+          var d = q.maxDiscountPct || 0;
+          return (d > 10 ? '<span class="t-warn">' : '<span class="t-muted">') + U.pct(d) + '</span>' +
+            (d > 10 ? ' ' + ui.chip(D.approvalFor(d).label, 'warn') : '');
+        } },
+      { key: 'validUntil', label: '유효기한', align: 'right', cell: function (q) { return U.fmtDate(q.validUntil); } },
+      { key: 'approvedBy', label: '승인', cell: function (q) {
+          return q.approvedBy ? ui.chip(db.userName(q.approvedBy) + ' 승인', 'pos') : '<span class="t-faint">—</span>';
+        } }
+    ], rows, {
+      empty: { title: '발행된 견적이 없습니다', body: '상품 라인을 확정한 뒤 견적을 생성하면 버전별로 관리됩니다.' }
+    });
+  }
+  function contractTable() {
+    var rows = U.sortBy(contractsOf(), 'startDate', 'desc');
+    return ui.table([
+      { key: 'no', label: '계약번호', cell: function (c) {
+          return '<a class="link--quiet" href="contracts.html?id=' + encodeURIComponent(c.id) + '">' + esc(c.no) + '</a>';
+        } },
+      { key: 'period', label: '기간', cell: function (c) { return U.fmtDate(c.startDate) + ' ~ ' + U.fmtDate(c.endDate); } },
+      { key: 'termMonths', label: '개월', align: 'right', cell: function (c) { return U.num(c.termMonths) + '개월'; } },
+      { key: 'amount', label: '금액', align: 'right', cell: function (c) { return U.won(c.amount); } },
+      { key: 'status', label: '상태', cell: function (c) { return ui.chip(c.status, c.status === '유효' ? 'pos' : 'idle'); } },
+      { key: 'autoRenew', label: '자동갱신', cell: function (c) { return c.autoRenew ? ui.chip('자동갱신', 'accent') : '<span class="t-faint">없음</span>'; } },
+      { key: 'billingCycle', label: '정산', cell: function (c) { return '<span class="t-small">' + esc(c.billingCycle || '—') + '</span>'; } }
+    ], rows, {
+      empty: { title: '연결된 계약이 없습니다', body: '계약이 체결되면 집행 캠페인과 정산 조건이 여기에 나타납니다.' }
+    });
+  }
+
+  /* ── 탭 4 · 활동 ─────────────────────────────────────────────────── */
+  function activityPane() {
+    var acts = db.activitiesOf('opportunity', opp.id);
+    var upcoming = U.sortBy(acts.filter(function (a) { return a.status !== '완료'; }), 'dueDate');
+    var done = acts.filter(function (a) { return a.status === '완료'; });
+
+    var upHTML = upcoming.length ? upcoming.map(function (a) {
+      var late = U.days(a.dueDate, C.today) > 0;
+      return '<div class="peep">' +
+        '<span class="dot ' + (late ? 'dot--neg' : a.priority === '높음' ? 'dot--warn' : 'dot--accent') + '"></span>' +
+        '<span class="grow"><span style="display:block">' + esc(a.subject) + '</span>' +
+        '<span class="t-mono" style="font-size:10px">' + esc(ACT_TYPE[a.type] || a.type) + ' · ' +
+        (late ? '지연 ' + U.days(a.dueDate, C.today) + '일' : U.fmtDate(a.dueDate)) + ' · ' + esc(db.userName(a.ownerId)) + '</span></span>' +
+        (canU ? '<button class="btn btn--sm" type="button" data-act="doneact" data-id="' + esc(a.id) + '">완료</button>' : '') +
+        '</div>';
+    }).join('') : ui.empty('예정된 활동이 없습니다', '다음 접촉을 잡아 두면 딜이 조용해지는 것을 막을 수 있습니다.');
+
+    var tlHTML = done.length ? '<ol class="tl">' + U.sortBy(done, 'dueDate', 'desc').map(function (a) {
+      return '<li class="tl__item' + (a.type === 'meeting' ? ' is-accent' : '') + '">' +
+        '<p class="tl__when">' + U.fmtDate(a.dueDate) + ' · ' + esc(ACT_TYPE[a.type] || a.type) + ' · ' + esc(db.userName(a.ownerId)) + '</p>' +
+        '<p class="tl__what">' + esc(a.subject) + (a.note ? ' — <span class="t-muted">' + esc(a.note) + '</span>' : '') + '</p></li>';
+    }).join('') + '</ol>' : ui.empty('완료된 활동이 없습니다', '통화·미팅·메일을 기록하면 딜의 온도가 남습니다.');
+
+    return '<div class="panel">' +
+        '<div class="panel__head"><h2 class="panel__title">예정 활동</h2>' +
+          (canU ? '<button class="btn btn--sm btn--primary" type="button" data-act="activity">활동 추가</button>' : '') +
+        '</div>' +
+        '<div class="panel__body panel__body--flush" style="padding-inline:var(--space-md)">' + upHTML + '</div>' +
+      '</div>' +
+      '<div class="panel">' +
+        '<div class="panel__head"><h2 class="panel__title">활동 이력</h2>' +
+          '<span class="t-mono">' + done.length + '건</span>' +
+        '</div>' +
+        '<div class="panel__body">' + tlHTML + '</div>' +
+      '</div>';
+  }
+
+  /* ── 탭 5 · 팀·경쟁 ──────────────────────────────────────────────── */
+  function teamPane() {
+    var ids = opp.teamIds || [];
+    var owner = db.ownerOf(opp);
+    var teamHTML = '<div class="peep">' + ui.avatar(owner) +
+      '<span class="grow"><span style="display:block">' + esc(owner ? owner.name : '미지정') + '</span>' +
+      '<span class="t-mono" style="font-size:10px">딜 오너 · ' + esc(owner ? (owner.title || owner.role) : '—') + '</span></span>' +
+      ui.chip('오너', 'accent') + '</div>';
+
+    teamHTML += ids.map(function (uid) {
+      var u = db.get('users', uid);
+      if (!u) return '';
+      return '<div class="peep">' + ui.avatar(u) +
+        '<span class="grow"><span style="display:block">' + esc(u.name) + '</span>' +
+        '<span class="t-mono" style="font-size:10px">' + esc(u.title || u.role) + ' · ' + esc(u.role) + '</span></span>' +
+        (canU ? '<button class="btn btn--ghost btn--sm" type="button" data-act="delteam" data-id="' + esc(u.id) + '">제외</button>' : '') +
+        '</div>';
+    }).join('');
+    if (!ids.length) teamHTML += '<p class="t-micro" style="padding-block:var(--space-sm)">함께 들어간 제작·기획 인력이 아직 없습니다.</p>';
+
+    var comp = opp.competitorId ? db.get('competitors', opp.competitorId) : null;
+    var sameAcc = acc ? db.where('opportunities', function (o) {
+      return o.accountId === acc.id && D.isLost(o) && o.competitorId === opp.competitorId;
+    }) : [];
+
+    return '<div class="panel">' +
+        '<div class="panel__head"><h2 class="panel__title">참여 인력</h2>' +
+          (canU ? '<button class="btn btn--sm" type="button" data-act="addteam">팀원 추가</button>' : '') +
+        '</div>' +
+        '<div class="panel__body panel__body--flush" style="padding-inline:var(--space-md)">' + teamHTML + '</div>' +
+      '</div>' +
+      '<div class="panel">' +
+        '<div class="panel__head"><h2 class="panel__title">경쟁 상황</h2>' +
+          (canU ? '<button class="btn btn--sm" type="button" data-act="editf" data-f="competitorId">경쟁사 변경</button>' : '') +
+        '</div>' +
+        '<div class="panel__body">' +
+          '<div class="side-fact"><span class="side-fact__k">경쟁 대행사</span><span>' +
+            (comp ? esc(comp.name) : '<span class="t-faint">기록 없음</span>') + '</span></div>' +
+          '<div class="side-fact"><span class="side-fact__k">이 광고주에서 같은 경쟁사에 진 이력</span><span class="t-num">' +
+            (comp ? sameAcc.length + '건' : '—') + '</span></div>' +
+          '<div class="side-fact"><span class="side-fact__k">실주 사유</span><span>' +
+            (D.isLost(opp)
+              ? (opp.lossReason ? ui.chip(opp.lossReason, 'neg') : '<span class="t-warn">미입력 — 실주 사유는 다음 분기 전략의 재료입니다</span>')
+              : '<span class="t-faint">해당 없음 (진행 중)</span>') + '</span></div>' +
+          '<div class="side-fact"><span class="side-fact__k">유입 경로</span><span>' + esc(opp.source || '—') + '</span></div>' +
+        '</div>' +
+      '</div>';
+  }
+
+  /* ── 사이드 ──────────────────────────────────────────────────────── */
+  function renderSide() {
+    var ins = C.insights.forOpportunity(opp);
+    var insHTML = ins.length
+      ? ins.map(function (x) { return ui.insight(x); }).join('')
+      : ui.empty('지금 지적할 위험이 없습니다', '단계 요건·체류 기간·마감일·접촉 공백·제작 일정을 계속 확인합니다.');
+
+    $('#side').innerHTML =
+      '<div class="panel">' +
+        '<div class="panel__head"><h2 class="panel__title">이 딜에 대한 의견</h2><a class="link" href="insights.html">전체</a></div>' +
+        '<div class="panel__body stack gap-xs">' + insHTML + '</div>' +
+      '</div>' +
+      '<div class="panel">' +
+        '<div class="panel__head"><h2 class="panel__title">단계 이력</h2>' +
+          '<span class="t-mono">' + D.daysInStage(opp) + '일째</span></div>' +
+        '<div class="panel__body">' + historyHTML() + '</div>' +
+      '</div>' +
+      accountCard();
+  }
+
+  function historyHTML() {
+    var logs = db.where('auditLogs', function (l) {
+      return l.objectType === 'opportunities' && l.objectId === opp.id;
+    }).map(function (l) {
+      return { at: l.at, what: esc(l.action) + ' — ' + esc(l.detail), who: db.userName(l.actorId) };
+    });
+    var hasEntry = logs.some(function (l) { return U.fmtDate(l.at) === U.fmtDate(opp.stageEnteredAt); });
+    if (!hasEntry) logs.push({ at: opp.stageEnteredAt, what: '현재 단계 진입 — ' + esc(opp.stage), who: db.userName(opp.ownerId) });
+    logs.push({ at: opp.createdAt, what: '영업기회 생성', who: db.userName(opp.ownerId) });
+
+    logs = U.sortBy(logs, 'at', 'desc').slice(0, 12);
+    return '<ol class="tl">' + logs.map(function (l, i) {
+      return '<li class="tl__item' + (i === 0 ? ' is-accent' : '') + '">' +
+        '<p class="tl__when">' + U.fmtDateTime(l.at) + ' · ' + esc(l.who) + '</p>' +
+        '<p class="tl__what">' + l.what + '</p></li>';
+    }).join('') + '</ol>';
+  }
+
+  function accountCard() {
+    if (!acc) {
+      return '<div class="panel"><div class="panel__body">' +
+        ui.empty('연결된 광고주가 없습니다', '광고주를 연결하면 건강도와 거래 이력을 함께 볼 수 있습니다.') + '</div></div>';
+    }
+    var h = D.accountHealth(acc);
+    var openN = db.where('opportunities', function (o) { return o.accountId === acc.id && D.isOpen(o); }).length;
+    var rev = M.accountRevenue(acc.id, 365);
+    var kind = h.score >= 70 ? 'pos' : h.score >= 55 ? 'warn' : 'neg';
+    return '<div class="panel">' +
+      '<div class="panel__head"><h2 class="panel__title">광고주</h2>' +
+        '<a class="link" href="account.html?id=' + encodeURIComponent(acc.id) + '">레코드 열기</a></div>' +
+      '<div class="panel__body">' +
+        '<p class="t-h5 t-ink">' + esc(acc.name) + '</p>' +
+        '<div class="row row--wrap gap-2xs mt-2xs">' + ui.chip(acc.tier, 'accent') + ui.chip(acc.industry) + ui.chip(acc.status) + '</div>' +
+        '<div class="mt-md">' +
+          '<div class="row row--between gap-sm"><span class="side-fact__k">건강도</span>' +
+            '<span class="t-num t-' + (kind === 'pos' ? 'pos' : kind === 'warn' ? 'warn' : 'neg') + '">' + h.score + '점</span></div>' +
+          ui.meter(h.score, 100, kind) +
+          '<p class="t-micro mt-2xs">' + esc(h.reasons.slice(0, 3).join(' · ') || '판단 근거가 될 활동 기록이 부족합니다.') + '</p>' +
+        '</div>' +
+        '<div class="mt-md">' +
+          '<div class="side-fact"><span class="side-fact__k">최근 1년 매출</span><span class="t-num">' + U.won(rev) + '</span></div>' +
+          '<div class="side-fact"><span class="side-fact__k">진행 중 영업기회</span><span class="t-num">' + openN + '건</span></div>' +
+          '<div class="side-fact"><span class="side-fact__k">연 광고 예산</span><span class="t-num">' + U.won(acc.annualBudget) + '</span></div>' +
+          '<div class="side-fact"><span class="side-fact__k">최근 활동</span><span>' + U.fmtDate(acc.lastActivityDate) + ' · ' + U.ago(acc.lastActivityDate) + '</span></div>' +
+          '<div class="side-fact"><span class="side-fact__k">담당 AE</span><span>' + esc(db.userName(acc.ownerId)) + '</span></div>' +
+        '</div>' +
+      '</div>' +
+    '</div>';
+  }
+
+  /* ══ 입력 컨트롤 ════════════════════════════════════════════════════
+     read() 는 값이 유효하지 않으면 BAD 를 돌려줍니다. */
+  var BAD = {};
+
+  function selectCtl(options, value, allowEmpty) {
+    var node = el('select', { class: 'select', 'data-autofocus': '' });
+    if (allowEmpty) node.appendChild(el('option', { value: '', text: '선택 안 함' }));
+    options.forEach(function (o) {
+      node.appendChild(el('option', { value: o.value, text: o.label, selected: String(o.value) === String(value) ? true : null }));
+    });
+    if (value == null) node.value = allowEmpty ? '' : node.value;
+    return { el: node, read: function () { return node.value === '' ? null : node.value; } };
+  }
+  function opts(list) { return list.map(function (v) { return { value: v, label: v }; }); }
+
+  function buildControl(k) {
+    var v = opp[k];
+    if (k === 'amount') {
+      var n = el('input', { class: 'input input--num', type: 'number', min: '0', step: '100000', value: v == null ? '' : String(v), 'data-autofocus': '' });
+      return { el: n, read: function () { var x = Number(n.value); return (isNaN(x) || x < 0 || n.value === '') ? BAD : Math.round(x); } };
+    }
+    if (k === 'closeDate') {
+      var d = el('input', { class: 'input', type: 'date', value: v ? U.iso(v) : '', 'data-autofocus': '' });
+      return { el: d, read: function () { return d.value ? d.value : BAD; } };
+    }
+    if (k === 'name' || k === 'nextStep') {
+      var t = el('input', { class: 'input', type: 'text', value: v || '', 'data-autofocus': '', autocomplete: 'off' });
+      return { el: t, read: function () { var s = t.value.trim(); return (k === 'name' && !s) ? BAD : s; } };
+    }
+    if (k === 'type') return selectCtl(opts(D.OPP_TYPES), v);
+    if (k === 'source') return selectCtl(opts(D.LEAD_SOURCES), v);
+    if (k === 'lossReason') return selectCtl(opts(D.LOSS_REASONS), v);
+    if (k === 'ownerId') {
+      return selectCtl(db.where('users', function (u) { return u.role !== '제작인력' && u.active !== false; })
+        .map(function (u) { return { value: u.id, label: u.name + ' · ' + u.role }; }), v);
+    }
+    if (k === 'contactId') {
+      var cs = acc ? db.where('contacts', function (c) { return c.accountId === acc.id; }) : [];
+      return selectCtl(cs.map(function (c) { return { value: c.id, label: c.name + ' · ' + (c.title || '') }; }), v, true);
+    }
+    if (k === 'competitorId') {
+      return selectCtl(db.all('competitors').map(function (c) { return { value: c.id, label: c.name }; }), v, true);
+    }
+    var f = el('input', { class: 'input', type: 'text', value: v == null ? '' : String(v), 'data-autofocus': '' });
+    return { el: f, read: function () { return f.value.trim(); } };
+  }
+
+  function field(label, controlEl, help) {
+    return el('label', { class: 'field' }, [
+      el('span', { class: 'field__label', text: label }),
+      controlEl,
+      help ? el('span', { class: 'field__help', text: help }) : null
+    ]);
+  }
+
+  /* ══ 동작 ═══════════════════════════════════════════════════════════ */
+  function save(patch) {
+    db.update('opportunities', opp.id, patch);
+    renderAll();
+  }
+
+  function editField(k) {
+    if (!canU) return;
+    var c = buildControl(k);
+    var wrap = field(FIELD_LABEL[k] || k, c.el);
+    ui.modal({
+      title: (FIELD_LABEL[k] || k) + ' 편집',
+      body: el('div', { class: 'stack gap-sm' }, [wrap]),
+      actions: [
+        { label: '취소' },
+        { label: '저장', kind: 'primary', onClick: function () {
+            var v = c.read();
+            if (v === BAD) {
+              wrap.classList.add('is-invalid');
+              ui.toast('값을 확인해 주세요. ' + (FIELD_LABEL[k] || k) + ' 은(는) 비워 둘 수 없습니다.', { kind: 'neg' });
+              return false;
+            }
+            var patch = {}; patch[k] = v;
+            save(patch);
+          } }
+      ]
+    });
+  }
+
+  function editMain() {
+    if (!canU) return;
+    var cName = buildControl('name'), cAmt = buildControl('amount'), cDate = buildControl('closeDate');
+    var cType = buildControl('type'), cNext = buildControl('nextStep'), cOwner = buildControl('ownerId');
+    var fName = field('영업기회명', cName.el), fAmt = field('금액 (원)', cAmt.el, '상품 라인이 있으면 라인 합계가 우선합니다.');
+    var fDate = field('마감일', cDate.el), fType = field('유형', cType.el);
+    var fNext = field('다음 액션', cNext.el), fOwner = field('담당자', cOwner.el);
+    ui.modal({
+      title: '영업기회 편집',
+      size: 'wide',
+      body: el('div', { class: 'grid grid--2' }, [fName, fAmt, fDate, fType, fOwner, fNext]),
+      actions: [
+        { label: '취소' },
+        { label: '저장', kind: 'primary', onClick: function () {
+            var name = cName.read(), amt = cAmt.read(), date = cDate.read();
+            if (name === BAD) { fName.classList.add('is-invalid'); ui.toast('영업기회명을 입력해 주세요.', { kind: 'neg' }); return false; }
+            if (amt === BAD) { fAmt.classList.add('is-invalid'); ui.toast('금액은 0 이상의 숫자여야 합니다.', { kind: 'neg' }); return false; }
+            if (date === BAD) { fDate.classList.add('is-invalid'); ui.toast('마감일을 입력해 주세요.', { kind: 'neg' }); return false; }
+            save({ name: name, amount: amt, closeDate: date, type: cType.read(), nextStep: cNext.read(), ownerId: cOwner.read() });
+          } }
+      ]
+    });
+  }
+
+  /* 단계 이동 — 되돌릴 수 있는 변경이므로 확인 대화상자 없이 즉시 반영 + 되돌리기 */
+  function moveStage(target, extra) {
+    var st = D.stage(target);
+    var before = {
+      stage: opp.stage, probability: opp.probability, forecastCategory: opp.forecastCategory,
+      stageEnteredAt: opp.stageEnteredAt, lossReason: opp.lossReason, competitorId: opp.competitorId
+    };
+    var patch = {
+      stage: target, probability: st.prob, forecastCategory: st.cast,
+      stageEnteredAt: new Date().toISOString()
+    };
+    Object.keys(extra || {}).forEach(function (k) { patch[k] = extra[k]; });
+    db.update('opportunities', opp.id, patch);
+    state.step = target;
+    renderAll();
+    ui.toast('단계를 ' + target + '(으)로 옮겼습니다.', {
+      undo: function () { db.update('opportunities', opp.id, before); state.step = before.stage; renderAll(); }
+    });
+  }
+
+  function advance() {
+    if (!canU) return;
+    var missing = missingOf(opp.stage);
+    if (missing.length) {
+      ui.toast('“' + opp.stage + '” 단계를 마치려면 ' + missing.map(function (f) { return FIELD_LABEL[f] || f; }).join(', ') + ' 이(가) 필요합니다.', { kind: 'neg', ms: 6000 });
+      state.step = opp.stage;
+      renderGuide(); renderPath();
+      return;
+    }
+    var next = nextOf(opp.stage);
+    if (!next) return;
+    moveStage(next.key);
+  }
+
+  function stageModal() {
+    if (!canU) return;
+    var sel = selectCtl(D.STAGES.map(function (s) { return { value: s.key, label: s.key + ' · ' + s.prob + '% · ' + s.cast }; }), opp.stage);
+    var lossSel = selectCtl(opts(D.LOSS_REASONS), opp.lossReason);
+    var compSel = selectCtl(db.all('competitors').map(function (c) { return { value: c.id, label: c.name }; }), opp.competitorId, true);
+    var lossField = field('실주 사유', lossSel.el);
+    var compField = field('경쟁사', compSel.el);
+    var extra = el('div', { class: 'stack gap-sm', hidden: opp.stage !== '실주' ? true : null }, [lossField, compField]);
+    var note = el('p', { class: 't-micro' });
+
+    function sync() {
+      var t = sel.el.value;
+      extra.hidden = t !== '실주';
+      var miss = t !== opp.stage && D.stage(t).order > D.stage(opp.stage).order ? missingOf(opp.stage) : [];
+      note.innerHTML = miss.length
+        ? '<span class="t-warn">현재 단계의 필수 항목 ' + miss.map(function (f) { return esc(FIELD_LABEL[f] || f); }).join(', ') + ' 이(가) 비어 있습니다. 채운 뒤 이동할 수 있습니다.</span>'
+        : esc(D.stage(t).guide);
+    }
+    sel.el.addEventListener('change', sync);
+    sync();
+
+    ui.modal({
+      title: '단계 이동',
+      body: el('div', { class: 'stack gap-sm' }, [field('이동할 단계', sel.el), note, extra]),
+      actions: [
+        { label: '취소' },
+        { label: '이동', kind: 'primary', onClick: function () {
+            var t = sel.el.value;
+            if (t === opp.stage) { ui.toast('이미 ' + t + ' 단계입니다.', { kind: 'neg' }); return false; }
+            if (D.stage(t).order > D.stage(opp.stage).order) {
+              var miss = missingOf(opp.stage);
+              if (miss.length) {
+                ui.toast('“' + opp.stage + '” 단계의 ' + miss.map(function (f) { return FIELD_LABEL[f] || f; }).join(', ') + ' 을(를) 먼저 채워 주세요.', { kind: 'neg', ms: 6000 });
+                return false;
+              }
+            }
+            var ex = {};
+            if (t === '실주') {
+              var lr = lossSel.read();
+              if (!lr) { lossField.classList.add('is-invalid'); ui.toast('실주 사유를 선택해 주세요.', { kind: 'neg' }); return false; }
+              ex.lossReason = lr;
+              ex.competitorId = compSel.read();
+            }
+            moveStage(t, ex);
+          } }
+      ]
+    });
+  }
+
+  /* 상품 라인 */
+  function addLine() {
+    if (!canU) return;
+    var prods = db.where('products', function (p) { return p.active !== false; });
+    var pSel = selectCtl(prods.map(function (p) { return { value: p.id, label: p.name + ' · ' + p.category }; }), prods[0] && prods[0].id);
+    var qty = el('input', { class: 'input input--num', type: 'number', min: '1', step: '1', value: '1' });
+    var months = el('input', { class: 'input input--num', type: 'number', min: '1', step: '1', value: '3' });
+    var price = el('input', { class: 'input input--num', type: 'number', min: '0', step: '100000', value: String(prods[0] ? prods[0].listPrice : 0) });
+    var disc = el('input', { class: 'input input--num', type: 'number', min: '0', max: '100', step: '1', value: '0' });
+    var hint = el('p', { class: 't-micro' });
+
+    function sync() {
+      var p = db.get('products', pSel.el.value);
+      var d = Number(disc.value) || 0;
+      var amt = Math.round((Number(qty.value) || 0) * (Number(price.value) || 0) * (1 - d / 100) * (Number(months.value) || 1));
+      hint.innerHTML = '라인 금액 <strong>' + U.won(amt, { exact: true }) + '</strong>' +
+        (p ? ' · 수수료율 ' + U.pct(p.commissionRate) + ' → 순매출 ' + U.won(Math.round(amt * p.commissionRate / 100)) : '') +
+        (d > 10 ? ' · <span class="t-warn">' + esc(D.approvalFor(d).label) + ' 필요</span>' : '');
+    }
+    pSel.el.addEventListener('change', function () {
+      var p = db.get('products', pSel.el.value);
+      if (p) { price.value = String(p.listPrice); months.value = p.unit === '월' ? '3' : '1'; }
+      sync();
+    });
+    [qty, months, price, disc].forEach(function (n) { n.addEventListener('input', sync); });
+    sync();
+
+    ui.modal({
+      title: '상품 라인 추가',
+      size: 'wide',
+      body: el('div', { class: 'stack gap-sm' }, [
+        field('광고상품', pSel.el),
+        el('div', { class: 'grid grid--4' }, [
+          field('수량', qty), field('개월', months), field('단가 (원)', price), field('할인율 (%)', disc)
+        ]),
+        hint
+      ]),
+      actions: [
+        { label: '취소' },
+        { label: '추가', kind: 'primary', onClick: function () {
+            var q = Number(qty.value), m = Number(months.value), u = Number(price.value), d = Number(disc.value);
+            if (!pSel.el.value || !(q > 0) || !(m > 0) || !(u >= 0) || !(d >= 0 && d <= 100)) {
+              ui.toast('수량·개월은 1 이상, 할인율은 0~100 사이여야 합니다.', { kind: 'neg' });
+              return false;
+            }
+            var line = { oppId: opp.id, productId: pSel.el.value, qty: q, months: m, unitPrice: Math.round(u), discountPct: d };
+            line.amount = lineAmount(line);
+            db.insert('opportunityLines', line);
+            syncAmount();
+            renderAll();
+          } }
+      ]
+    });
+  }
+
+  function delLine(id) {
+    if (!canU) return;
+    var all = db.all('opportunityLines');
+    var idx = -1;
+    for (var i = 0; i < all.length; i++) if (all[i].id === id) { idx = i; break; }
+    var gone = db.remove('opportunityLines', id);
+    if (!gone) return;
+    syncAmount();
+    renderAll();
+    ui.toast('상품 라인을 삭제했습니다.', {
+      undo: function () { db.restore('opportunityLines', gone, idx); syncAmount(); renderAll(); }
+    });
+  }
+
+  /** 라인이 있으면 영업기회 금액은 라인 합계를 따릅니다(Salesforce와 같은 규칙). */
+  function syncAmount() {
+    var amt = D.oppAmount(opp.id);
+    if (amt !== null && amt !== opp.amount) db.update('opportunities', opp.id, { amount: amt });
+  }
+
+  /* 활동 */
+  function addActivity() {
+    if (!canU) return;
+    var tSel = selectCtl([
+      { value: 'call', label: '통화' }, { value: 'meeting', label: '미팅' },
+      { value: 'email', label: '메일' }, { value: 'task', label: '업무' }
+    ], 'call');
+    var subj = el('input', { class: 'input', type: 'text', placeholder: '예: 단가 협의 통화', autocomplete: 'off' });
+    var date = el('input', { class: 'input', type: 'date', value: U.iso(C.today) });
+    var memo = el('textarea', { class: 'textarea', placeholder: '무엇을 확인했고 다음에 무엇을 하기로 했는지 남기세요.' });
+    var fSubj = field('제목', subj), fDate = field('일자', date);
+
+    ui.modal({
+      title: '활동 기록',
+      body: el('div', { class: 'stack gap-sm' }, [
+        el('div', { class: 'grid grid--2' }, [field('유형', tSel.el), fDate]),
+        fSubj, field('메모', memo)
+      ]),
+      actions: [
+        { label: '취소' },
+        { label: '저장', kind: 'primary', onClick: function () {
+            var s = subj.value.trim();
+            if (!s) { fSubj.classList.add('is-invalid'); ui.toast('활동 제목을 입력해 주세요.', { kind: 'neg' }); return false; }
+            if (!date.value) { fDate.classList.add('is-invalid'); ui.toast('일자를 선택해 주세요.', { kind: 'neg' }); return false; }
+            var past = U.days(date.value, C.today) > 0;
+            db.insert('activities', {
+              type: tSel.read() || 'call', subject: s,
+              relatedType: 'opportunity', relatedId: opp.id, ownerId: me.id,
+              dueDate: date.value, status: past ? '완료' : '예정',
+              doneAt: past ? U.date(date.value).toISOString() : null,
+              priority: '보통', note: memo.value.trim()
+            });
+            state.tab = 'activities';
+            renderAll();
+          } }
+      ]
+    });
+  }
+
+  function completeActivity(id) {
+    var a = db.get('activities', id);
+    if (!a || !canU) return;
+    var before = { status: a.status, doneAt: a.doneAt };
+    db.update('activities', id, { status: '완료', doneAt: new Date().toISOString() });
+    renderAll();
+    ui.toast('“' + a.subject + '” 을(를) 완료로 표시했습니다.', {
+      undo: function () { db.update('activities', id, before); renderAll(); }
+    });
+  }
+
+  /* 팀 */
+  function addTeam() {
+    if (!canU) return;
+    var have = opp.teamIds || [];
+    var pool = db.where('users', function (u) {
+      return u.active !== false && u.id !== opp.ownerId && have.indexOf(u.id) === -1;
+    });
+    if (!pool.length) { ui.toast('추가할 수 있는 인원이 없습니다.', { kind: 'neg' }); return; }
+    var sel = selectCtl(pool.map(function (u) { return { value: u.id, label: u.name + ' · ' + (u.title || u.role) }; }), pool[0].id);
+    ui.modal({
+      title: '팀원 추가',
+      body: el('div', { class: 'stack gap-sm' }, [field('참여 인력', sel.el, '딜에 함께 들어가는 기획·제작 인력을 지정합니다.')]),
+      actions: [
+        { label: '취소' },
+        { label: '추가', kind: 'primary', onClick: function () {
+            var v = sel.read();
+            if (!v) return false;
+            db.update('opportunities', opp.id, { teamIds: (opp.teamIds || []).concat([v]) });
+            state.tab = 'team';
+            renderAll();
+          } }
+      ]
+    });
+  }
+
+  function delTeam(uid) {
+    if (!canU) return;
+    var before = (opp.teamIds || []).slice();
+    db.update('opportunities', opp.id, { teamIds: before.filter(function (x) { return x !== uid; }) });
+    renderAll();
+    ui.toast(db.userName(uid) + ' 님을 이 딜에서 제외했습니다.', {
+      undo: function () { db.update('opportunities', opp.id, { teamIds: before }); renderAll(); }
+    });
+  }
+
+  /* 견적 · 승인 */
+  function createQuote() {
+    if (!canQuote) return;
+    var lines = db.linesOf(opp.id);
+    if (!lines.length) { ui.toast('상품 라인이 없어 견적을 만들 수 없습니다. 먼저 라인을 추가하세요.', { kind: 'neg' }); return; }
+    var total = U.sum(lines, lineAmount);
+    var maxD = Math.max.apply(null, lines.map(function (l) { return l.discountPct || 0; }));
+    var version = quotesOf().length + 1;
+    var rule = D.approvalFor(maxD);
+
+    var valid = el('input', { class: 'input', type: 'date', value: U.iso(U.addDays(C.today, 30)), 'data-autofocus': '' });
+    var fValid = field('유효기한', valid, '이 날짜까지 제시 금액이 유효합니다.');
+    var terms = el('textarea', { class: 'textarea', text: '집행 개시 전 50% 선금, 종료 후 30일 이내 잔금. 세금계산서는 매월 말일 발행.' });
+
+    ui.modal({
+      title: '견적 생성',
+      body: el('div', { class: 'stack gap-sm' }, [
+        el('p', { class: 't-body', text: '현재 상품 라인 ' + lines.length + '건을 그대로 담아 버전 ' + version + ' 견적을 만듭니다.' }),
+        el('div', { html:
+          '<div class="side-fact"><span class="side-fact__k">견적 금액</span><span class="t-num">' + U.won(total, { exact: true }) + '</span></div>' +
+          '<div class="side-fact"><span class="side-fact__k">최대 할인율</span><span class="t-num">' + U.pct(maxD) + '</span></div>' +
+          '<div class="side-fact"><span class="side-fact__k">필요 승인</span><span>' + esc(rule.label) + '</span></div>'
+        }),
+        fValid,
+        field('결제 조건', terms)
+      ]),
+      actions: [
+        { label: '취소' },
+        { label: '견적 생성', kind: 'primary', onClick: function () {
+            if (!valid.value) { fValid.classList.add('is-invalid'); ui.toast('유효기한을 선택해 주세요.', { kind: 'neg' }); return false; }
+            var q = db.insert('quotes', {
+              oppId: opp.id, accountId: opp.accountId, ownerId: me.id,
+              version: version, no: 'Q-' + C.today.getFullYear() + '-' + (101 + db.count('quotes')),
+              status: '작성중', total: total,
+              discountTotal: Math.round(U.sum(lines, function (l) { return l.qty * l.unitPrice * (l.months || 1) * ((l.discountPct || 0) / 100); })),
+              maxDiscountPct: maxD,
+              createdAt: new Date().toISOString(),
+              validUntil: valid.value,
+              approvedBy: null,
+              terms: terms.value.trim()
+            });
+            lines.forEach(function (l) {
+              var p = db.get('products', l.productId) || {};
+              db.insert('quoteLines', {
+                quoteId: q.id, productId: l.productId, name: p.name || '상품',
+                qty: l.qty, months: l.months || 1, unitPrice: l.unitPrice,
+                discountPct: l.discountPct || 0, amount: lineAmount(l),
+                commissionRate: p.commissionRate == null ? 15 : p.commissionRate
+              }, { silent: true });
+            });
+            state.tab = 'quotes';
+            renderAll();
+          } }
+      ]
+    });
+  }
+
+  function approverFor() {
+    if (me.role === '영업관리자' || me.role === '관리자') return db.first('users', function (u) { return u.role === '관리자' && u.id !== me.id; });
+    return db.first('users', function (u) { return u.role === '영업관리자' && u.teamId === me.teamId; }) ||
+           db.first('users', function (u) { return u.role === '관리자'; });
+  }
+
+  function requestApproval() {
+    if (!canQuote) return;
+    var q = quotesOf()[0];
+    if (!q) { ui.toast('승인을 요청할 견적이 없습니다. 먼저 견적을 생성하세요.', { kind: 'neg' }); return; }
+    var maxD = q.maxDiscountPct || 0;
+    var rule = D.approvalFor(maxD);
+    if (!rule.approver) {
+      ui.toast('최대 할인율 ' + U.pct(maxD) + ' 는 승인 기준(10%) 이하라 승인 없이 진행할 수 있습니다.');
+      return;
+    }
+    var dup = db.first('approvals', function (a) { return a.objectType === 'quotes' && a.objectId === q.id && a.status === '대기'; });
+    if (dup) { ui.toast('이 견적에는 이미 대기 중인 승인 요청이 있습니다.', { kind: 'neg' }); return; }
+    var approver = approverFor();
+    if (!approver) { ui.toast('결재자를 찾을 수 없습니다.', { kind: 'neg' }); return; }
+
+    var comment = el('textarea', { class: 'textarea', placeholder: '할인이 필요한 이유를 적어 주세요. 결재자가 그대로 읽습니다.' });
+    ui.modal({
+      title: '할인 승인 요청',
+      body: el('div', { class: 'stack gap-sm' }, [
+        el('div', { html:
+          '<div class="side-fact"><span class="side-fact__k">견적</span><span>' + esc(q.no) + ' · v' + U.num(q.version) + '</span></div>' +
+          '<div class="side-fact"><span class="side-fact__k">할인율</span><span class="t-num">' + U.pct(maxD) + '</span></div>' +
+          '<div class="side-fact"><span class="side-fact__k">승인 단계</span><span>' + esc(rule.label) + '</span></div>' +
+          '<div class="side-fact"><span class="side-fact__k">결재자</span><span>' + esc(approver.name) + ' · ' + esc(approver.role) + '</span></div>'
+        }),
+        field('요청 사유', comment)
+      ]),
+      actions: [
+        { label: '취소' },
+        { label: '요청 제출', kind: 'primary', onClick: function () {
+            db.insert('approvals', {
+              objectType: 'quotes', objectId: q.id, oppId: opp.id,
+              kind: '할인 승인', step: maxD > 20 ? '2차 (본부장)' : '1차 (팀장)',
+              requesterId: me.id, approverId: approver.id, status: '대기',
+              submittedAt: new Date().toISOString(), decidedAt: null,
+              comment: comment.value.trim(),
+              detail: '할인율 ' + maxD + '% · 견적 ' + q.no + ' · 금액 ' + U.won(q.total, { exact: true })
+            });
+            db.notify(approver.id, '승인', me.name + '님이 “' + opp.name + '” 할인 승인을 요청했습니다.', 'approvals.html');
+            renderAll();
+            ui.toast('승인 요청을 제출했습니다. 결재자: ' + approver.name);
+          } }
+      ]
+    });
+  }
+
+  /* 삭제 — 되돌릴 수 없으므로 확인 대화상자를 씁니다. */
+  function removeOpp() {
+    if (!canD) return;
+    var lines = db.linesOf(opp.id);
+    ui.confirmDestructive({
+      title: '영업기회 삭제',
+      message: '“' + opp.name + '” 와(과) 연결된 상품 라인 ' + lines.length + '건이 함께 삭제됩니다. 이 작업은 되돌릴 수 없습니다.',
+      phrase: '삭제',
+      confirmLabel: '영구 삭제',
+      onConfirm: function () {
+        lines.forEach(function (l) { db.remove('opportunityLines', l.id); });
+        db.remove('opportunities', opp.id);
+        window.location.href = 'opportunities.html';
+      }
+    });
+  }
+
+  /* ══ 이벤트 — 위임이라 다시 그려도 살아남습니다 ═════════════════════ */
+  U.live(root, 'click', '[data-act]', function (e, t) {
+    var a = t.dataset.act;
+    if (a === 'step') { state.step = t.dataset.stage; renderPath(); renderGuide(); return; }
+    if (a === 'advance') return advance();
+    if (a === 'moveto') {
+      var target = t.dataset.stage;
+      if (D.stage(target).order > D.stage(opp.stage).order) {
+        var miss = missingOf(opp.stage);
+        if (miss.length) {
+          ui.toast('“' + opp.stage + '” 단계의 ' + miss.map(function (f) { return FIELD_LABEL[f] || f; }).join(', ') + ' 을(를) 먼저 채워 주세요.', { kind: 'neg', ms: 6000 });
+          return;
+        }
+      }
+      if (target === '실주') return stageModal();
+      return moveStage(target);
+    }
+    if (a === 'edit') return editMain();
+    if (a === 'editf') return editField(t.dataset.f);
+    if (a === 'stage') return stageModal();
+    if (a === 'activity') return addActivity();
+    if (a === 'doneact') return completeActivity(t.dataset.id);
+    if (a === 'addline') return addLine();
+    if (a === 'delline') return delLine(t.dataset.id);
+    if (a === 'addteam') return addTeam();
+    if (a === 'delteam') return delTeam(t.dataset.id);
+    if (a === 'quote') return createQuote();
+    if (a === 'approval') return requestApproval();
+    if (a === 'delete') return removeOpp();
+  });
+
+  ui.tabs(root, function (k) { state.tab = k; });
+
+  renderAll();
+  U.revealAll();
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,1221 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>승인함 · CLOSER</title>
+<meta name="description" content="CLOSER 승인함. 할인 승인과 공수 승인을 미결·기결·상신함으로 나눠 처리하고, 결재선과 소요 시간을 한 화면에서 확인합니다." />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=IBM+Plex+Sans+KR:wght@400;500;600&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="../tokens.css" />
+<link rel="stylesheet" href="../assets/css/base.css" />
+<link rel="stylesheet" href="../assets/css/components.css" />
+<link rel="stylesheet" href="../assets/css/app.css" />
+<style>
+  /* 이 화면에만 필요한 조각. 색·간격·반경·이징은 모두 토큰만 사용합니다. */
+  .list-card {
+    border: var(--rule-hair) solid var(--color-rule);
+    border-top: none;
+    border-radius: 0 0 var(--radius-md) var(--radius-md);
+    background: var(--color-surface);
+  }
+  .bulkbar {
+    display: flex; align-items: center; gap: var(--space-xs); flex-wrap: wrap;
+    padding: var(--space-xs) var(--space-md);
+    border-bottom: var(--rule-hair) solid var(--color-rule);
+    background: var(--color-accent-soft);
+  }
+  .pagerbar {
+    display: flex; align-items: center; justify-content: space-between;
+    gap: var(--space-sm); flex-wrap: wrap;
+    padding: var(--space-xs) var(--space-md);
+    border-top: var(--rule-hair) solid var(--color-rule);
+  }
+  .filterbar { border-radius: 0; }
+  .filterbar .input, .filterbar .select { min-height: 28px; height: 28px; font-size: var(--text-xs); }
+  .filterbar .select { max-width: 160px; }
+  .filterbar__q { width: min(210px, 46vw); }
+
+  /* 대결(위임) 안내 띠 — 범위를 문장으로 명시한다. */
+  .deleg {
+    display: flex; align-items: flex-start; gap: var(--space-sm); flex-wrap: wrap;
+    padding: var(--space-sm) var(--space-md);
+    border: var(--rule-hair) solid var(--color-accent-soft-2);
+    border-radius: var(--radius-md);
+    background: var(--color-accent-soft);
+    margin-bottom: var(--space-md);
+  }
+  .deleg__txt { flex: 1 1 260px; min-width: 0; font-size: var(--text-sm); color: var(--color-accent-press); line-height: 1.55; }
+
+  /* 결재선 — .path 위에 결재자 이름과 소요 시간을 얹는다. */
+  .chain { min-width: 100%; }
+  .chain .path__step { flex: 1 1 0; min-width: 168px; text-align: left; padding: var(--space-sm) var(--space-md); }
+  .chain__who { display: block; font-size: var(--text-sm); font-weight: 500; margin-top: var(--space-3xs); }
+  .chain__arrow { align-self: center; padding-inline: var(--space-2xs); color: var(--color-ink-4); font-family: var(--font-mono); font-size: var(--text-xs); }
+  .chart-duo { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: var(--space-lg); align-items: start; }
+  @media (max-width: 900px) { .chart-duo { grid-template-columns: minmax(0, 1fr); } }
+  @media (max-width: 860px) { #tiles.grid--4 { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+  @media (max-width: 640px) {
+    .filterbar { padding-inline: var(--space-sm); }
+    .filterbar .select { max-width: 44vw; }
+    .bulkbar, .pagerbar { padding-inline: var(--space-sm); }
+  }
+  @media (max-width: 420px) { #tiles.grid--4 { grid-template-columns: minmax(0, 1fr); } }
+</style>
+</head>
+<body class="app">
+<a class="skip-link" href="#main">본문으로 건너뛰기</a>
+
+<div class="app-main">
+  <main class="app-page" id="main">
+
+    <div class="page-head">
+      <div>
+        <h1 class="page-head__title">승인함</h1>
+        <p class="page-head__sub" id="subline"></p>
+      </div>
+      <div class="page-head__acts" id="headActs"></div>
+    </div>
+
+    <section class="grid grid--4" id="tiles" data-verify aria-label="결재 요약 지표"></section>
+
+    <section class="mt-lg" id="opinionSec" aria-label="결재 분석 의견">
+      <div class="stack gap-xs" id="opinionList"></div>
+    </section>
+
+    <section class="mt-lg" aria-label="결재 목록">
+      <div id="delegHost"></div>
+
+      <div class="tabs" id="tabs" role="tablist" aria-label="결재함 탭"></div>
+
+      <div class="filterbar" id="filterbar">
+        <div class="seg" id="scopeSeg" role="group" aria-label="미결 범위" hidden></div>
+
+        <label class="field" style="flex:0 0 auto">
+          <span class="sr-only">결재 건 검색</span>
+          <input class="input filterbar__q" type="search" id="q" placeholder="대상 · 상세 · 사람" autocomplete="off" />
+        </label>
+
+        <label class="field" style="flex:0 0 auto">
+          <span class="sr-only">종류</span>
+          <select class="select" id="fKind"></select>
+        </label>
+        <label class="field" style="flex:0 0 auto">
+          <span class="sr-only" id="personLabel">상신자</span>
+          <select class="select" id="fPerson" aria-labelledby="personLabel"></select>
+        </label>
+
+        <label class="check t-nowrap" id="overWrap"><input type="checkbox" id="fOver" /><span>24시간 초과만</span></label>
+        <button class="btn btn--sm btn--ghost" type="button" id="reset">필터 초기화</button>
+        <span class="grow"></span>
+        <label class="check t-nowrap" id="selAllWrap"><input type="checkbox" id="selAll" /><span>이 페이지 전체 선택</span></label>
+        <span class="filterbar__count" id="count"></span>
+      </div>
+
+      <div class="list-card">
+        <div class="bulkbar" id="bulkbar" hidden></div>
+        <div id="tableHost" data-verify></div>
+        <div class="pagerbar" id="pagerHost"></div>
+      </div>
+    </section>
+
+    <section class="mt-lg panel reveal" aria-label="결재선 미리보기">
+      <div class="panel__head">
+        <h2 class="panel__title">결재선 미리보기</h2>
+        <span class="t-mono" id="chainNote"></span>
+      </div>
+      <div class="panel__body" id="chainHost" data-verify></div>
+    </section>
+
+    <section class="mt-lg chart-duo" aria-label="결재 처리 분석">
+      <div class="panel reveal">
+        <div class="panel__head">
+          <h2 class="panel__title">결재 소요시간 분포</h2>
+          <span class="t-mono" id="durNote"></span>
+        </div>
+        <div class="panel__body" id="durChart"></div>
+      </div>
+      <div class="panel reveal">
+        <div class="panel__head">
+          <h2 class="panel__title">반려 사유 분포</h2>
+          <span class="t-mono" id="rejNote"></span>
+        </div>
+        <div class="panel__body" id="rejChart"></div>
+      </div>
+    </section>
+
+    <footer class="hairline mt-2xl" style="padding-block:var(--space-md)">
+      <p class="t-mono t-faint">CLOSER · 데모 데이터 · 모든 회사·인물·연락처는 가상입니다</p>
+    </footer>
+  </main>
+</div>
+
+<script src="../assets/js/seed.js"></script>
+<script src="../assets/js/util.js"></script>
+<script src="../assets/js/store.js"></script>
+<script src="../assets/js/domain.js"></script>
+<script src="../assets/js/metrics.js"></script>
+<script src="../assets/js/insights.js"></script>
+<script src="../assets/js/ui.js"></script>
+<script src="../assets/js/charts.js"></script>
+<script src="../assets/js/shell.js"></script>
+<script>
+(function () {
+  'use strict';
+  var C = window.CLOSER, U = C.util, db = C.db, D = C.domain, ui = C.ui, ch = C.charts;
+  C.shell.mount('approvals');
+
+  var me = db.me();
+  var $ = U.qs, esc = U.esc, el = U.el;
+  var PAGE_SIZE = 15;
+  var HOUR = 3600000;
+  var REJECT_CODES = ['마진 미달', '근거 부족', '일정 불가', '기타'];
+  var DELEG_KEY = 'closer.approvals.delegate';
+  var STEP_NAME = ['', '1차 (팀장)', '2차 (본부장)', '3차 (본부장 · 마진 검토)'];
+  var isAdmin = me && me.role === '관리자';
+
+  /* ── 시계 — 데모 클럭(C.today)을 기준으로 기록해야 소요시간이 일관됩니다 ── */
+  function pad(n) { return (n < 10 ? '0' : '') + n; }
+  function stamp() {
+    var x = C.today;
+    return U.iso(x) + 'T' + pad(x.getHours()) + ':' + pad(x.getMinutes()) + ':00';
+  }
+  function hoursBetween(from, to) {
+    if (!from || !to) return null;
+    var a = new Date(from), b = new Date(to);
+    if (isNaN(a.getTime()) || isNaN(b.getTime())) return null;
+    return (b - a) / HOUR;
+  }
+  function dur(h) {
+    if (h === null || h === undefined || isNaN(h)) return '—';
+    var v = Math.max(0, h);
+    if (v < 1) return '1시간 미만';
+    if (v < 48) return Math.round(v) + '시간';
+    var d = Math.floor(v / 24), rem = Math.round(v % 24);
+    return d + '일' + (rem ? ' ' + rem + '시간' : '');
+  }
+
+  /* ── 대결(위임) — 이 데모 세션에만 남는 상태 ────────────────────────── */
+  function readDeleg() {
+    try {
+      var raw = window.sessionStorage.getItem(DELEG_KEY);
+      var v = raw ? JSON.parse(raw) : null;
+      return v && v.toId && v.from && v.to ? v : null;
+    } catch (e) { return null; }
+  }
+  function writeDeleg(v) {
+    try {
+      if (v) window.sessionStorage.setItem(DELEG_KEY, JSON.stringify(v));
+      else window.sessionStorage.removeItem(DELEG_KEY);
+    } catch (e) { /* 저장소를 못 쓰면 이번 렌더에만 반영됩니다 */ }
+    delegCache = v;
+  }
+  var delegCache = readDeleg();
+  function delegActive() {
+    var v = delegCache;
+    if (!v) return null;
+    var today = U.iso(C.today);
+    return today >= v.from && today <= v.to ? v : null;
+  }
+
+  /* ── 상태 — URL 파라미터가 초기값을 결정합니다 ───────────────────────── */
+  var TABS = [
+    { key: 'pending', label: '미결' },
+    { key: 'decided', label: '기결' },
+    { key: 'submitted', label: '상신함' }
+  ];
+  var initTab = U.param('tab', '');
+  if (!TABS.some(function (t) { return t.key === initTab; })) initTab = 'pending';
+
+  var state = {
+    tab: initTab,
+    q: U.param('q', '') || '',
+    kind: U.param('kind', '') || '',
+    person: '',
+    over: U.param('filter', '') === 'overdue',
+    scopeAll: false,
+    page: { pending: 1, decided: 1, submitted: 1 },
+    sel: {},
+    focusId: U.param('id', '') || ''
+  };
+
+  /* ── 대상 레코드 조인 ───────────────────────────────────────────────── */
+  function targetOf(ap) {
+    if (ap.objectType === 'quotes') {
+      var q = db.get('quotes', ap.objectId);
+      var opp = db.get('opportunities', ap.oppId || (q && q.oppId));
+      return {
+        kind: 'quote', quote: q, opp: opp,
+        no: q ? q.no : ap.objectId,
+        href: opp ? 'opportunity.html?id=' + encodeURIComponent(opp.id) : null,
+        hint: opp ? opp.name : '연결된 영업기회를 찾을 수 없습니다',
+        amount: q ? q.total : null,
+        pct: q ? q.maxDiscountPct : null,
+        size: q ? U.won(q.total) : '—'
+      };
+    }
+    if (ap.objectType === 'resourceRequests') {
+      var rr = db.get('resourceRequests', ap.objectId);
+      var tk = rr ? db.get('tickets', rr.ticketId) : null;
+      return {
+        kind: 'request', request: rr, ticket: tk,
+        no: String(ap.objectId).toUpperCase(),
+        href: 'resources.html?id=' + encodeURIComponent(ap.objectId),
+        hint: rr ? rr.roleNeeded + ' · ' + (tk ? tk.key + ' ' + tk.title : '연결 티켓 없음') : '신청 레코드를 찾을 수 없습니다',
+        amount: null,
+        pct: null,
+        size: rr ? '공수 ' + U.num(rr.hours) + '시간' : '—'
+      };
+    }
+    return { kind: 'other', no: ap.objectId, href: null, hint: '', amount: null, pct: null, size: '—' };
+  }
+
+  function stepNo(ap) { var n = parseInt(ap.step, 10); return n > 0 ? n : 1; }
+
+  var adminUser = db.first('users', function (u) { return u.role === '관리자' && u.active !== false; });
+  function leaderFor(userId) {
+    var u = db.get('users', userId);
+    if (!u) return null;
+    var team = db.get('teams', u.teamId);
+    var lead = team && team.leaderId ? db.get('users', team.leaderId) : null;
+    if (lead && lead.id !== u.id) return lead;
+    return db.first('users', function (x) { return x.role === '영업관리자' && x.teamId === u.teamId && x.id !== u.id; }) ||
+           db.first('users', function (x) { return x.role === '영업관리자' && x.id !== u.id; });
+  }
+
+  /**
+   * 결재선 — 대상의 할인율·금액을 D.approvalFor()에 넣어 단계를 만들고,
+   * 같은 대상에 존재하는 결재 행을 단계에 붙여 완료/대기를 판정합니다.
+   */
+  function chainFor(ap) {
+    var t = targetOf(ap);
+    var siblings = db.where('approvals', function (x) {
+      return x.objectType === ap.objectType && x.objectId === ap.objectId;
+    });
+    function rowAt(n) {
+      var hit = siblings.filter(function (x) { return stepNo(x) === n; });
+      return hit.length ? U.sortBy(hit, 'submittedAt')[hit.length - 1] : null;
+    }
+    var steps = [], basis = '', verdict = '', required = 0;
+
+    if (t.kind === 'quote' && t.pct !== null && t.pct !== undefined) {
+      var rule = D.approvalFor(t.pct);
+      var idx = D.DISCOUNT_RULES.indexOf(rule);
+      required = idx;
+      basis = '할인율 ' + U.pct(t.pct) + ' · 견적 ' + t.no + ' · ' + U.won(t.amount);
+      verdict = idx ? rule.label + '까지 필요' : rule.label;
+      var top = Math.max(idx, stepNo(ap));
+      for (var i = 1; i <= top; i++) {
+        var r = D.DISCOUNT_RULES[Math.min(i, D.DISCOUNT_RULES.length - 1)];
+        var row = rowAt(i);
+        var who = row ? db.get('users', row.approverId)
+                      : (r.approver === '관리자' ? adminUser : leaderFor(ap.requesterId));
+        steps.push({ no: i, name: STEP_NAME[i] || i + '차', role: r.approver || '—', approver: who, row: row, extra: i > idx });
+      }
+    } else if (t.kind === 'request') {
+      required = 1;
+      var rr = t.request;
+      basis = rr ? rr.roleNeeded + ' ' + U.num(rr.hours) + '시간 · ' + U.fmtDate(rr.startDate) + ' ~ ' + U.fmtDate(rr.endDate)
+                 : ap.detail || '공수 신청';
+      verdict = '리소스매니저 승인';
+      var r1 = rowAt(1) || ap;
+      steps.push({ no: 1, name: ap.step || '1차 (리소스매니저)', role: '리소스매니저',
+        approver: db.get('users', r1.approverId), row: r1, extra: false });
+    } else {
+      required = 1;
+      basis = ap.detail || '';
+      verdict = ap.step || '단독 결재';
+      steps.push({ no: 1, name: ap.step || '1차', role: '—', approver: db.get('users', ap.approverId), row: ap, extra: false });
+    }
+    return { steps: steps, basis: basis, verdict: verdict, required: required, target: t };
+  }
+
+  /* ── 행 모델 — 표·정렬·차트가 모두 이 배열을 봅니다 ──────────────────── */
+  function rowOf(ap) {
+    var t = targetOf(ap);
+    var elapsed = hoursBetween(ap.submittedAt, stamp());
+    var spent = ap.decidedAt ? hoursBetween(ap.submittedAt, ap.decidedAt) : null;
+    return {
+      id: ap.id, ap: ap, t: t,
+      requesterName: db.userName(ap.requesterId),
+      approverName: db.userName(ap.approverId),
+      elapsed: elapsed === null ? 0 : Math.max(0, elapsed),
+      spent: spent === null ? null : Math.max(0, spent),
+      amount: t.amount === null || t.amount === undefined ? 0 : t.amount,
+      over: ap.status === '대기' && elapsed !== null && elapsed > 24
+    };
+  }
+
+  function myInbox() {
+    return db.where('approvals', function (a) {
+      return a.approverId === me.id || (isAdmin && state.scopeAll);
+    }).map(rowOf);
+  }
+  function pendingRows() { return myInbox().filter(function (r) { return r.ap.status === '대기'; }); }
+  function decidedRows() {
+    return db.where('approvals', function (a) {
+      return (a.status === '승인' || a.status === '반려') &&
+        (a.approverId === me.id || (isAdmin && state.scopeAll));
+    }).map(rowOf);
+  }
+  function submittedRows() {
+    return db.where('approvals', function (a) { return a.requesterId === me.id; }).map(rowOf);
+  }
+  /** 내 결재 흐름 — 내가 결재자이거나 상신자인 모든 건. 지표와 차트의 모집단. */
+  function myFlow() {
+    return db.where('approvals', function (a) {
+      return a.approverId === me.id || a.requesterId === me.id;
+    }).map(rowOf);
+  }
+
+  function baseRows() {
+    if (state.tab === 'pending') return pendingRows();
+    if (state.tab === 'decided') return decidedRows();
+    return submittedRows();
+  }
+
+  function matches(r) {
+    var ap = r.ap;
+    if (state.kind && ap.kind !== state.kind) return false;
+    if (state.person) {
+      var pid = state.tab === 'submitted' ? ap.approverId : ap.requesterId;
+      if (pid !== state.person) return false;
+    }
+    if (state.tab === 'pending' && state.over && !r.over) return false;
+    if (state.q) {
+      var term = state.q.trim().toLowerCase();
+      var hay = [ap.kind, ap.detail, ap.step, r.t.no, r.t.hint, r.requesterName, r.approverName, ap.comment].join(' ').toLowerCase();
+      if (term && hay.indexOf(term) === -1) return false;
+    }
+    return true;
+  }
+
+  var SORTS = {
+    kind:      { get: function (r) { return r.ap.kind + r.ap.step; }, dir: 'asc' },
+    target:    { get: function (r) { return r.t.no; }, dir: 'asc' },
+    requester: { get: function (r) { return r.requesterName; }, dir: 'asc' },
+    approver:  { get: function (r) { return r.approverName; }, dir: 'asc' },
+    submitted: { get: function (r) { return r.ap.submittedAt || ''; }, dir: 'desc' },
+    elapsed:   { get: function (r) { return r.elapsed; }, dir: 'desc' },
+    decided:   { get: function (r) { return r.ap.decidedAt || ''; }, dir: 'desc' },
+    spent:     { get: function (r) { return r.spent === null ? -1 : r.spent; }, dir: 'desc' },
+    status:    { get: function (r) { return D.APPROVAL_STATUS.indexOf(r.ap.status); }, dir: 'asc' },
+    amount:    { get: function (r) { return r.amount; }, dir: 'desc' }
+  };
+  var sorts = {
+    pending: { key: 'elapsed', dir: 'desc' },
+    decided: { key: 'decided', dir: 'desc' },
+    submitted: { key: 'submitted', dir: 'desc' }
+  };
+
+  /* ── 권한 ───────────────────────────────────────────────────────────── */
+  function canDecide(ap) {
+    return ap.status === '대기' && (ap.approverId === me.id || isAdmin);
+  }
+  function canRecall(ap) {
+    return ap.status === '대기' && ap.requesterId === me.id;
+  }
+
+  /* ── 머리말과 상단 버튼 ─────────────────────────────────────────────── */
+  $('#headActs').innerHTML =
+    '<button class="btn btn--sm" type="button" id="exportBtn">현재 목록 내보내기</button>' +
+    '<button class="btn btn--sm btn--primary" type="button" id="delegBtn">위임 설정</button>';
+
+  /* ── 필터 채우기 ────────────────────────────────────────────────────── */
+  function fillSelect(node, placeholder, values, current) {
+    node.innerHTML = '<option value="">' + esc(placeholder) + '</option>' + values.map(function (v) {
+      return '<option value="' + esc(v.value) + '"' + (current === v.value ? ' selected' : '') + '>' + esc(v.label) + '</option>';
+    }).join('');
+  }
+  $('#q').value = state.q;
+
+  if (isAdmin) {
+    $('#scopeSeg').hidden = false;
+    $('#scopeSeg').innerHTML =
+      '<button class="seg__item" type="button" data-scope="mine" aria-pressed="true">내 미결</button>' +
+      '<button class="seg__item" type="button" data-scope="all" aria-pressed="false">전체 대기</button>';
+  }
+
+  /* ── 렌더 ───────────────────────────────────────────────────────────── */
+  var pageRows = [];
+
+  function render() {
+    delegCache = delegCache || readDeleg();
+    var rows = baseRows().filter(matches);
+    var s = SORTS[sorts[state.tab].key] || SORTS.submitted;
+    rows = U.sortBy(rows, s.get, sorts[state.tab].dir);
+
+    var pages = Math.max(1, Math.ceil(rows.length / PAGE_SIZE));
+    if (state.page[state.tab] > pages) state.page[state.tab] = pages;
+    if (state.page[state.tab] < 1) state.page[state.tab] = 1;
+    var from = (state.page[state.tab] - 1) * PAGE_SIZE;
+    pageRows = rows.slice(from, from + PAGE_SIZE);
+
+    if (!state.focusId || !db.get('approvals', state.focusId)) {
+      state.focusId = pageRows.length ? pageRows[0].id : (baseRows()[0] ? baseRows()[0].id : '');
+    }
+
+    renderHead();
+    renderTabs();
+    renderFilterUI();
+    renderTiles();
+    renderDeleg();
+    renderTable(rows);
+    renderPager(rows, from, pages);
+    renderBulk();
+    renderChain();
+    renderCharts();
+    U.revealAll();
+  }
+
+  function renderHead() {
+    var pend = pendingRows().length;
+    var mine = submittedRows();
+    var waiting = mine.filter(function (r) { return r.ap.status === '대기'; }).length;
+    var dg = delegActive();
+    $('#subline').innerHTML =
+      '내 결재 대기 <strong>' + pend + '건</strong> · 내가 올린 건 ' + mine.length + '건(대기 ' + waiting + '건) · ' +
+      esc(me.name) + ' · ' + esc(me.role) +
+      (dg ? ' · <strong>' + esc(db.userName(dg.toId)) + '</strong>님에게 대결 위임 중' : '');
+  }
+
+  function renderTabs() {
+    var counts = {
+      pending: pendingRows().length,
+      decided: decidedRows().length,
+      submitted: submittedRows().length
+    };
+    $('#tabs').innerHTML = TABS.map(function (t) {
+      return '<button class="tab" type="button" role="tab" data-tab="' + t.key + '" aria-selected="' +
+        (state.tab === t.key) + '">' + esc(t.label) +
+        '<span class="tab__count">' + counts[t.key] + '</span></button>';
+    }).join('');
+  }
+
+  function renderFilterUI() {
+    var kinds = U.uniq(db.all('approvals').map(function (a) { return a.kind; })).sort();
+    fillSelect($('#fKind'), '종류 전체', kinds.map(function (k) { return { value: k, label: k }; }), state.kind);
+
+    var pool = baseRows();
+    var ids = U.uniq(pool.map(function (r) {
+      return state.tab === 'submitted' ? r.ap.approverId : r.ap.requesterId;
+    })).filter(Boolean);
+    $('#personLabel').textContent = state.tab === 'submitted' ? '결재자' : '상신자';
+    fillSelect($('#fPerson'), state.tab === 'submitted' ? '결재자 전체' : '상신자 전체',
+      U.sortBy(ids.map(function (id) { return { value: id, label: db.userName(id) }; }), 'label'), state.person);
+
+    $('#overWrap').hidden = state.tab !== 'pending';
+    $('#fOver').checked = state.over;
+    $('#selAllWrap').hidden = state.tab !== 'pending';
+    $('#scopeSeg').hidden = !isAdmin || state.tab === 'decided' ? (!isAdmin) : false;
+    if (isAdmin) {
+      U.qsa('[data-scope]', $('#scopeSeg')).forEach(function (b) {
+        b.setAttribute('aria-pressed', String((b.dataset.scope === 'all') === state.scopeAll));
+      });
+      $('#scopeSeg').hidden = state.tab === 'submitted';
+    }
+  }
+
+  function renderTiles() {
+    var pend = pendingRows();
+    var flow = myFlow();
+    var oldest = U.sortBy(pend, 'elapsed', 'desc')[0];
+    var over = pend.filter(function (r) { return r.over; });
+    var done = flow.filter(function (r) { return r.spent !== null; });
+    var avg = done.length ? U.avg(done, 'spent') : null;
+    var period = U.ymOf(C.today);
+    var monthDone = flow.filter(function (r) {
+      return r.ap.decidedAt && U.ymOf(r.ap.decidedAt) === period &&
+        (r.ap.status === '승인' || r.ap.status === '반려');
+    });
+    var monthRej = monthDone.filter(function (r) { return r.ap.status === '반려'; });
+    var overAmt = U.sum(over, 'amount');
+
+    var tiles = [
+      { label: '내 미결', value: U.num(pend.length) + '<small>건</small>',
+        foot: pend.length
+          ? '가장 오래 기다린 건 ' + dur(oldest.elapsed) + ' 경과 · ' + esc(oldest.t.no)
+          : (submittedRows().length
+              ? '내가 결재할 건이 없습니다. 상신함 ' + submittedRows().length + '건은 다른 결재자를 기다립니다.'
+              : '내가 결재할 건도, 올린 건도 없습니다.') },
+      { label: '평균 결재 소요시간', value: avg === null ? '—' : esc(dur(avg)),
+        foot: done.length
+          ? '내 결재 흐름에서 처리 완료된 ' + done.length + '건 기준'
+          : '처리 완료된 건이 아직 없어 평균을 낼 수 없습니다.' },
+      { label: '이번 달 반려율', value: monthDone.length ? U.pct((monthRej.length / monthDone.length) * 100) : '—',
+        foot: monthDone.length
+          ? period + ' 처리 ' + monthDone.length + '건 중 반려 ' + monthRej.length + '건'
+          : period + '에 처리된 결재가 아직 없습니다.' },
+      { label: '24시간 초과 대기', value: U.num(over.length) + '<small>건</small>',
+        foot: over.length
+          ? '묶여 있는 금액 ' + U.won(overAmt) + ' · 결재 지연은 광고주에게 보이지 않지만 마감일에는 반영됩니다.'
+          : '24시간을 넘긴 미결 건이 없습니다.' }
+    ];
+    $('#tiles').innerHTML = tiles.map(function (t) {
+      return '<article class="stat reveal"><p class="stat__label">' + esc(t.label) + '</p>' +
+        '<p class="stat__value">' + t.value + '</p>' +
+        '<p class="stat__foot">' + t.foot + '</p></article>';
+    }).join('');
+  }
+
+  function renderDeleg() {
+    var host = $('#delegHost');
+    var dg = delegCache;
+    if (!dg) { host.innerHTML = ''; return; }
+    var active = !!delegActive();
+    var toName = db.userName(dg.toId);
+    host.innerHTML =
+      '<div class="deleg">' +
+        '<span class="chip ' + (active ? 'chip--accent' : 'chip--idle') + '">' + (active ? '대결 진행 중' : '대결 예약됨') + '</span>' +
+        '<span class="deleg__txt">' +
+          U.fmtDate(dg.from) + ' ~ ' + U.fmtDate(dg.to) + ' 기간의 내 미결 건을 <strong>' + esc(toName) + '</strong>님이 대신 결재합니다.' +
+          (dg.note ? ' 사유: ' + esc(dg.note) + '.' : '') +
+          ' 이 위임은 <strong>이 데모 세션 안에서만</strong> 유지되며, 대리 결재자의 화면이나 저장된 데이터에는 반영되지 않습니다.' +
+        '</span>' +
+        '<span class="row gap-xs">' +
+          '<button class="btn btn--sm" type="button" id="delegEdit">기간 변경</button>' +
+          '<button class="btn btn--sm btn--ghost" type="button" id="delegOff">위임 해제</button>' +
+        '</span>' +
+      '</div>';
+  }
+
+  /* ── 표 ─────────────────────────────────────────────────────────────── */
+  function kindChip(ap) {
+    return ui.chip(ap.kind, ap.kind === '할인 승인' ? 'accent' : 'idle');
+  }
+  function targetCell(r) {
+    var label = esc(r.t.no);
+    var out = r.t.href
+      ? '<a class="link--quiet t-nowrap" href="' + r.t.href + '" title="' + esc(r.t.hint) + '">' + label + '</a>'
+      : '<span class="t-nowrap">' + label + '</span>';
+    return out + '<span class="t-mono" style="display:block;font-size:10px" class="t-faint">' + esc(r.t.hint.slice(0, 34)) + '</span>';
+  }
+  function statusChip(ap) {
+    var kind = ap.status === '승인' ? 'pos' : ap.status === '반려' ? 'neg' : ap.status === '회수' ? 'idle' : 'warn';
+    return ui.chip(ap.status, kind);
+  }
+  function elapsedCell(r) {
+    if (r.ap.status !== '대기') return '<span class="t-muted">' + esc(dur(r.spent)) + '</span>';
+    return r.over
+      ? '<span class="chip chip--neg">' + esc(dur(r.elapsed)) + '</span>'
+      : '<span class="t-muted">' + esc(dur(r.elapsed)) + '</span>';
+  }
+  function sizeCell(r) {
+    return r.t.amount !== null && r.t.amount !== undefined
+      ? U.won(r.t.amount)
+      : '<span class="t-muted">' + esc(r.t.size) + '</span>';
+  }
+
+  function columnsFor(tab) {
+    var cols = [
+      { key: 'kind', label: '종류', cell: function (r) {
+          var dg = delegActive();
+          var badge = (tab === 'pending' && dg && r.ap.approverId === me.id)
+            ? ' <span class="chip chip--warn" title="' + esc(db.userName(dg.toId)) + '님에게 위임된 기간입니다">위임됨</span>' : '';
+          return '<span class="t-nowrap">' + kindChip(r.ap) + badge + '</span>' +
+            '<span class="t-mono" style="display:block;font-size:10px">' + esc(r.ap.step) + '</span>';
+        } },
+      { key: 'target', label: '대상', cell: targetCell },
+      { key: 'detail', label: '상세', sortable: false, width: '24%', cell: function (r) {
+          return '<span class="t-small t-clamp-2">' + esc(r.ap.detail || '상세 없음') + '</span>';
+        } }
+    ];
+    if (tab === 'submitted') {
+      cols.push({ key: 'approver', label: '결재자', cell: function (r) { return ui.personCell(db.get('users', r.ap.approverId)); } });
+      cols.push({ key: 'status', label: '상태', cell: function (r) { return statusChip(r.ap); } });
+    } else {
+      cols.push({ key: 'requester', label: '상신자', cell: function (r) { return ui.personCell(db.get('users', r.ap.requesterId)); } });
+    }
+    if (tab === 'decided') {
+      cols.push({ key: 'status', label: '결과', cell: function (r) { return statusChip(r.ap); } });
+    }
+    cols.push({ key: 'submitted', label: '상신일시', align: 'right', cell: function (r) {
+      return '<span class="t-small">' + esc(U.fmtDateTime(r.ap.submittedAt)) + '</span>';
+    } });
+    if (tab === 'decided') {
+      cols.push({ key: 'decided', label: '처리일시', align: 'right', cell: function (r) {
+        return '<span class="t-small">' + esc(U.fmtDateTime(r.ap.decidedAt)) + '</span>';
+      } });
+      cols.push({ key: 'spent', label: '소요', align: 'right', cell: function (r) {
+        return '<span class="t-muted">' + esc(dur(r.spent)) + '</span>';
+      } });
+    } else {
+      cols.push({ key: 'elapsed', label: tab === 'pending' ? '경과' : '경과·소요', align: 'right', cell: elapsedCell });
+    }
+    cols.push({ key: 'amount', label: '금액·규모', align: 'right', cell: sizeCell });
+
+    if (tab === 'pending') {
+      cols.push({ key: 'act', label: '', sortable: false, tight: true, cell: function (r) {
+        if (!canDecide(r.ap)) return '<span class="t-faint t-nowrap">' + esc(db.userName(r.ap.approverId)) + ' 결재</span>';
+        return '<span class="row gap-xs t-nowrap">' +
+          '<button class="btn btn--sm btn--primary" type="button" data-approve="' + esc(r.id) + '">승인</button>' +
+          '<button class="btn btn--sm" type="button" data-reject="' + esc(r.id) + '">반려</button></span>';
+      } });
+    } else if (tab === 'decided') {
+      cols.push({ key: 'comment', label: '결재 의견', sortable: false, width: '20%', cell: function (r) {
+        return '<span class="t-small t-clamp-2">' + esc(r.ap.comment || '의견 없음') + '</span>';
+      } });
+    } else {
+      cols.push({ key: 'act', label: '', sortable: false, tight: true, cell: function (r) {
+        if (!canRecall(r.ap)) return '<span class="t-faint t-nowrap">' + esc(r.ap.status) + '</span>';
+        return '<button class="btn btn--sm" type="button" data-recall="' + esc(r.id) + '">회수</button>';
+      } });
+    }
+    return cols;
+  }
+
+  function emptyFor(tab, filtered) {
+    if (filtered) {
+      return ui.empty('조건에 맞는 결재 건이 없습니다', '검색어를 줄이거나 종류·상신자 필터를 비워 보세요.',
+        '<button class="btn btn--sm" type="button" id="emptyReset">필터 초기화</button>');
+    }
+    if (tab === 'pending') {
+      return ui.empty('결재할 건이 없습니다.',
+        '내 결재를 기다리는 요청이 없습니다. 상신함에서 내가 올린 건의 진행 상태를 확인할 수 있습니다.',
+        '<span class="chip chip--pos">✓ 미결 없음</span>' +
+        '<button class="btn btn--sm" type="button" data-goto="submitted">상신함 보기</button>');
+    }
+    if (tab === 'decided') {
+      return ui.empty('내가 처리한 결재가 없습니다',
+        '승인하거나 반려한 건이 여기에 기록으로 남습니다. 처리 의견과 소요 시간을 함께 볼 수 있습니다.',
+        '<button class="btn btn--sm" type="button" data-goto="pending">미결로 이동</button>');
+    }
+    return ui.empty('내가 올린 결재가 없습니다',
+      '할인율이 승인 기준을 넘는 견적을 발행하거나 공수를 신청하면 이 목록에 올라옵니다.',
+      '<a class="btn btn--sm" href="opportunities.html">영업기회 보기</a>');
+  }
+
+  function renderTable(rows) {
+    var host = $('#tableHost');
+    host.innerHTML = '';
+    var counts = state.tab === 'pending' ? pendingRows().length : state.tab === 'decided' ? decidedRows().length : submittedRows().length;
+    $('#count').textContent = rows.length + '건 / ' + counts + '건';
+
+    if (!rows.length) {
+      host.innerHTML = emptyFor(state.tab, counts > 0);
+      $('#selAll').disabled = true;
+      return;
+    }
+
+    host.appendChild(ui.table(columnsFor(state.tab), pageRows, {
+      selectable: state.tab === 'pending',
+      sort: sorts[state.tab],
+      onSort: function (key) {
+        if (!SORTS[key]) return;
+        var cur = sorts[state.tab];
+        sorts[state.tab] = cur.key === key
+          ? { key: key, dir: cur.dir === 'asc' ? 'desc' : 'asc' }
+          : { key: key, dir: SORTS[key].dir };
+        state.page[state.tab] = 1;
+        render();
+      },
+      onRow: function (r) { state.focusId = r.id; renderChain(); },
+      empty: { title: '표시할 결재 건이 없습니다', body: '필터를 넓혀 보세요.' }
+    }));
+    U.qsa('input[data-id]', host).forEach(function (n) {
+      n.checked = !!state.sel[n.dataset.id];
+      var row = n.closest('tr');
+      if (row && n.checked) row.classList.add('is-selected');
+    });
+    syncSelAll();
+  }
+
+  function renderPager(rows, from, pages) {
+    var to = Math.min(rows.length, from + PAGE_SIZE);
+    var page = state.page[state.tab];
+    var nums = '';
+    var lo = Math.max(1, page - 2), hi = Math.min(pages, lo + 4);
+    lo = Math.max(1, hi - 4);
+    if (lo > 1) nums += '<button class="pager__btn" type="button" data-page="1">1</button><span class="pager__btn t-faint">…</span>';
+    for (var i = lo; i <= hi; i++) {
+      nums += '<button class="pager__btn" type="button" data-page="' + i + '"' +
+        (i === page ? ' aria-current="page"' : '') + '>' + i + '</button>';
+    }
+    if (hi < pages) nums += '<span class="pager__btn t-faint">…</span><button class="pager__btn" type="button" data-page="' + pages + '">' + pages + '</button>';
+
+    $('#pagerHost').innerHTML =
+      '<span class="t-mono">' + (rows.length ? (from + 1) + '–' + to : 0) + ' / ' + rows.length + '건</span>' +
+      '<span class="pager">' +
+        '<button class="btn btn--sm btn--ghost" type="button" data-page="' + (page - 1) + '"' +
+          (page <= 1 ? ' disabled' : '') + '>이전</button>' + nums +
+        '<button class="btn btn--sm btn--ghost" type="button" data-page="' + (page + 1) + '"' +
+          (page >= pages ? ' disabled' : '') + '>다음</button>' +
+      '</span>';
+  }
+
+  /* ── 선택과 일괄 승인 ───────────────────────────────────────────────── */
+  function selectedIds() {
+    return Object.keys(state.sel).filter(function (k) {
+      var ap = db.get('approvals', k);
+      return state.sel[k] && ap && canDecide(ap);
+    });
+  }
+  function syncSelAll() {
+    var box = $('#selAll');
+    if (!box) return;
+    var usable = pageRows.filter(function (r) { return canDecide(r.ap); });
+    box.disabled = state.tab !== 'pending' || !usable.length;
+    box.checked = !!usable.length && usable.every(function (r) { return state.sel[r.id]; });
+  }
+  function renderBulk() {
+    var bar = $('#bulkbar');
+    var ids = state.tab === 'pending' ? selectedIds() : [];
+    if (!ids.length) { bar.hidden = true; bar.innerHTML = ''; return; }
+    var amt = U.sum(ids, function (id) {
+      var t = targetOf(db.get('approvals', id));
+      return t.amount || 0;
+    });
+    bar.hidden = false;
+    bar.innerHTML = '<span class="t-mono">' + ids.length + '건 선택됨' + (amt ? ' · ' + U.won(amt) : '') + '</span>' +
+      '<button class="btn btn--sm btn--primary" type="button" id="bulkApprove">선택 건 일괄 승인</button>' +
+      '<button class="btn btn--sm btn--ghost" type="button" id="bulkClear">선택 해제</button>' +
+      '<span class="t-micro">반려는 사유가 필요해 건별로 처리합니다.</span>';
+  }
+
+  /* ── 결재선 미리보기 ────────────────────────────────────────────────── */
+  function renderChain() {
+    var host = $('#chainHost');
+    var ap = state.focusId ? db.get('approvals', state.focusId) : null;
+    if (!ap) {
+      $('#chainNote').textContent = '';
+      host.innerHTML = ui.empty('미리볼 결재 건이 없습니다',
+        '목록에서 행을 고르면 그 대상의 할인율·금액으로 결정된 결재선이 여기에 그려집니다.');
+      return;
+    }
+    var cn = chainFor(ap);
+    $('#chainNote').textContent = ap.kind + ' · ' + cn.verdict;
+
+    var stepsHTML = cn.steps.map(function (st, i) {
+      var row = st.row;
+      var cls = 'path__step';
+      var mark = '대기 전';
+      if (row && row.status === '승인') { cls += ' is-done'; mark = '승인 · ' + dur(hoursBetween(row.submittedAt, row.decidedAt)); }
+      else if (row && row.status === '반려') { cls += ' is-lost'; mark = '반려 · ' + dur(hoursBetween(row.submittedAt, row.decidedAt)); }
+      else if (row && row.status === '회수') { mark = '회수됨'; }
+      else if (row && row.status === '대기') {
+        cls += ' is-current';
+        mark = '대기 ' + dur(hoursBetween(row.submittedAt, stamp()));
+      } else {
+        mark = st.extra ? '규칙상 추가 필요' : '앞 단계 승인 후 생성';
+      }
+      var arrow = i ? '<span class="chain__arrow" aria-hidden="true">→</span>' : '';
+      return arrow + '<div class="' + cls + '">' +
+        esc(st.name) +
+        '<span class="chain__who">' + esc(st.approver ? st.approver.name : '결재자 미지정') + '</span>' +
+        '<span class="path__pct">' + esc(mark) + '</span>' +
+      '</div>';
+    }).join('');
+
+    var elapsed = dur(hoursBetween(ap.submittedAt, ap.decidedAt || stamp()));
+    var t = cn.target;
+    host.innerHTML =
+      '<p class="t-small mb-sm">' + esc(cn.basis) + ' → <strong>' + esc(cn.verdict) + '</strong>' +
+        (cn.required > 1 ? ' · 단계 ' + cn.required + '개' : '') + '</p>' +
+      '<div class="path chain">' + stepsHTML + '</div>' +
+      '<div class="kv mt-md">' +
+        '<div class="kv__row"><span class="kv__k">대상</span><span class="kv__v">' +
+          (t.href ? '<a class="link" href="' + t.href + '">' + esc(t.no) + '</a>' : esc(t.no)) +
+          ' <span class="t-muted">' + esc(t.hint) + '</span></span></div>' +
+        '<div class="kv__row"><span class="kv__k">상신자</span><span class="kv__v">' + esc(db.userName(ap.requesterId)) +
+          ' · ' + esc(U.fmtDateTime(ap.submittedAt)) + '</span></div>' +
+        '<div class="kv__row"><span class="kv__k">현재 단계</span><span class="kv__v">' + esc(ap.step) + ' · ' +
+          statusChip(ap) + ' <span class="t-muted">' + esc(elapsed) + (ap.decidedAt ? ' 만에 처리' : ' 경과') + '</span></span></div>' +
+        '<div class="kv__row"><span class="kv__k">상세</span><span class="kv__v">' + esc(ap.detail || '상세 없음') + '</span></div>' +
+        (ap.comment ? '<div class="kv__row"><span class="kv__k">결재 의견</span><span class="kv__v">' + esc(ap.comment) + '</span></div>' : '') +
+      '</div>' +
+      '<div class="row gap-xs mt-md">' +
+        (canDecide(ap) ? '<button class="btn btn--sm btn--primary" type="button" data-approve="' + esc(ap.id) + '">이 건 승인</button>' +
+          '<button class="btn btn--sm" type="button" data-reject="' + esc(ap.id) + '">이 건 반려</button>' : '') +
+        (canRecall(ap) ? '<button class="btn btn--sm" type="button" data-recall="' + esc(ap.id) + '">상신 회수</button>' : '') +
+      '</div>' +
+      '<p class="t-micro mt-xs">결재 대기 중인 대상 레코드는 결재자와 관리자만 편집할 수 있습니다. ' +
+        '앞 단계가 승인되면 다음 단계의 대기 행이 그때 생성됩니다.</p>';
+  }
+
+  /* ── 차트 ───────────────────────────────────────────────────────────── */
+  var BUCKETS = [
+    { label: '4h 이내', test: function (h) { return h <= 4; } },
+    { label: '4–24h', test: function (h) { return h > 4 && h <= 24; } },
+    { label: '1–3일', test: function (h) { return h > 24 && h <= 72; } },
+    { label: '3–7일', test: function (h) { return h > 72 && h <= 168; } },
+    { label: '7일 초과', test: function (h) { return h > 168; } }
+  ];
+  function renderCharts() {
+    var flow = myFlow();
+    var done = flow.filter(function (r) { return r.spent !== null; });
+    var wait = flow.filter(function (r) { return r.ap.status === '대기'; });
+
+    if (!flow.length) {
+      $('#durNote').textContent = '';
+      $('#durChart').innerHTML = ui.empty('아직 결재 이력이 없습니다',
+        '내가 결재하거나 상신한 건이 생기면 소요 시간 분포가 여기에 그려집니다.');
+    } else {
+      var data = BUCKETS.map(function (b) {
+        return {
+          label: b.label,
+          parts: [
+            { name: b.label + ' · 처리 완료', value: done.filter(function (r) { return b.test(r.spent); }).length, series: 1 },
+            { name: b.label + ' · 대기 중', value: wait.filter(function (r) { return b.test(r.elapsed); }).length, series: 2 }
+          ]
+        };
+      });
+      $('#durNote').textContent = '내 결재 흐름 ' + flow.length + '건';
+      $('#durChart').innerHTML =
+        ch.stacked(data, { h: 200, fmt: function (v) { return U.num(v) + '건'; },
+          label: '결재 소요시간 구간별 건수' }) +
+        ch.legend([{ label: '처리 완료', series: 1 }, { label: '대기 중', series: 2 }]) +
+        '<p class="t-micro mt-xs">처리된 건은 상신부터 처리까지, 대기 중인 건은 상신부터 지금까지의 시간입니다. ' +
+        '대기 중 ' + wait.length + '건 · 처리 완료 ' + done.length + '건.</p>';
+    }
+
+    var rejected = flow.filter(function (r) { return r.ap.status === '반려'; });
+    if (!rejected.length) {
+      $('#rejNote').textContent = '';
+      $('#rejChart').innerHTML = ui.empty('반려된 건이 없습니다',
+        '반려할 때 고른 사유 코드가 여기에 쌓입니다. 반복되는 사유는 상신 양식에서 미리 막아야 할 항목입니다.');
+      return;
+    }
+    var codes = REJECT_CODES.concat(['코드 없음']);
+    var bars = codes.map(function (c) {
+      var n = rejected.filter(function (r) {
+        var code = r.ap.reasonCode || '코드 없음';
+        return REJECT_CODES.indexOf(code) > -1 ? code === c : c === '코드 없음';
+      }).length;
+      return { label: c, value: n, kind: n && c !== '코드 없음' ? 'neg' : null };
+    }).filter(function (b) { return b.value > 0 || b.label !== '코드 없음'; });
+    $('#rejNote').textContent = '반려 ' + rejected.length + '건';
+    $('#rejChart').innerHTML =
+      ch.bars(bars, { h: 200, fmt: function (v) { return U.num(v) + '건'; }, label: '반려 사유 코드별 건수' }) +
+      '<p class="t-micro mt-xs">“코드 없음”은 사유 코드 도입 전에 처리된 이력입니다. ' +
+      '내 결재 흐름 기준 반려 ' + rejected.length + '건.</p>';
+  }
+
+  /* ── 쓰기 동작 ──────────────────────────────────────────────────────── */
+  function nextStepFor(ap) {
+    if (ap.objectType !== 'quotes') return null;
+    var cn = chainFor(ap);
+    var n = stepNo(ap) + 1;
+    if (n > cn.required) return null;
+    var exists = db.where('approvals', function (x) {
+      return x.objectType === ap.objectType && x.objectId === ap.objectId && stepNo(x) === n;
+    });
+    if (exists.length) return null;
+    var rule = D.DISCOUNT_RULES[Math.min(n, D.DISCOUNT_RULES.length - 1)];
+    var who = rule.approver === '관리자' ? adminUser : leaderFor(ap.requesterId);
+    if (!who) return null;
+    return {
+      objectType: ap.objectType, objectId: ap.objectId, oppId: ap.oppId,
+      kind: ap.kind, step: STEP_NAME[n] || n + '차',
+      requesterId: ap.requesterId, approverId: who.id,
+      status: '대기', submittedAt: stamp(), decidedAt: null, comment: '', reasonCode: null,
+      detail: ap.detail
+    };
+  }
+
+  function decide(ids, verdict, comment, reasonCode) {
+    var undos = [];
+    ids.forEach(function (id) {
+      var ap = db.get('approvals', id);
+      if (!ap || !canDecide(ap)) return;
+      var u = { id: id, prev: { status: ap.status, decidedAt: ap.decidedAt, comment: ap.comment, reasonCode: ap.reasonCode || null }, created: null, target: null };
+      db.update('approvals', id, {
+        status: verdict, decidedAt: stamp(),
+        comment: comment, reasonCode: reasonCode || null
+      });
+
+      if (ap.objectType === 'quotes') {
+        var q = db.get('quotes', ap.objectId);
+        if (q) {
+          u.target = { entity: 'quotes', id: q.id, prev: { approvedBy: q.approvedBy } };
+          db.update('quotes', q.id, { approvedBy: verdict === '승인' ? me.id : null });
+        }
+        if (verdict === '승인') {
+          var seed = nextStepFor(ap);
+          if (seed) {
+            var rec = db.insert('approvals', seed);
+            u.created = rec.id;
+            db.notify(rec.approverId, '승인', db.userName(ap.requesterId) + '님의 ' + ap.kind + ' 다음 단계(' + rec.step + ')가 도착했습니다.',
+              'approvals.html?id=' + encodeURIComponent(rec.id));
+          }
+        }
+      } else if (ap.objectType === 'resourceRequests') {
+        var rr = db.get('resourceRequests', ap.objectId);
+        if (rr) {
+          u.target = { entity: 'resourceRequests', id: rr.id, prev: { status: rr.status, decidedAt: rr.decidedAt, note: rr.note } };
+          db.update('resourceRequests', rr.id, {
+            status: verdict, decidedAt: stamp(),
+            note: verdict === '반려' ? comment : rr.note
+          });
+        }
+      }
+
+      db.notify(ap.requesterId, '승인',
+        me.name + '님이 ' + ap.kind + '(' + targetOf(ap).no + ')을(를) ' + verdict + '했습니다.',
+        'approvals.html?tab=submitted&id=' + encodeURIComponent(ap.id));
+      undos.push(u);
+    });
+
+    if (!undos.length) { ui.toast('처리할 수 있는 건이 없습니다.', { kind: 'neg' }); return; }
+    state.sel = {};
+    render();
+    ui.toast(undos.length + '건을 ' + verdict + '했습니다. 상신자에게 알림이 갔습니다.', {
+      undo: function () { revert(undos); render(); }
+    });
+  }
+
+  function recall(id) {
+    var ap = db.get('approvals', id);
+    if (!ap || !canRecall(ap)) return;
+    var u = { id: id, prev: { status: ap.status, decidedAt: ap.decidedAt, comment: ap.comment, reasonCode: ap.reasonCode || null }, created: null, target: null };
+    db.update('approvals', id, { status: '회수', decidedAt: stamp(), comment: '상신자가 회수했습니다.' });
+    db.notify(ap.approverId, '승인', me.name + '님이 ' + ap.kind + '(' + targetOf(ap).no + ') 상신을 회수했습니다.', 'approvals.html');
+    render();
+    ui.toast('상신을 회수했습니다. 결재자 미결함에서 내려갔습니다.', {
+      undo: function () { revert([u]); render(); }
+    });
+  }
+
+  function revert(undos) {
+    undos.forEach(function (u) {
+      db.update('approvals', u.id, u.prev);
+      if (u.created) db.remove('approvals', u.created, { noTrash: true });
+      if (u.target) db.update(u.target.entity, u.target.id, u.target.prev);
+    });
+  }
+
+  /* ── 반려 모달 — 사유 코드 + 자유 텍스트, 둘 다 필수 ─────────────────── */
+  function rejectModal(id) {
+    var ap = db.get('approvals', id);
+    if (!ap) return;
+    var t = targetOf(ap);
+
+    var code = el('select', { class: 'select', 'data-autofocus': '', 'aria-label': '반려 사유 코드' });
+    REJECT_CODES.forEach(function (c) { code.appendChild(el('option', { value: c, text: c })); });
+
+    var text = el('textarea', { class: 'textarea', rows: '3',
+      placeholder: '상신자가 무엇을 고쳐서 다시 올려야 하는지 적어 주세요.' });
+    var textField = el('label', { class: 'field' }, [
+      el('span', { class: 'field__label', html: '반려 사유 <span class="req">*</span>' }),
+      text,
+      el('span', { class: 'field__error', text: '반려는 사유 없이 처리할 수 없습니다. 한 문장이라도 남겨 주세요.' })
+    ]);
+
+    ui.modal({
+      title: ap.kind + ' 반려',
+      body: el('div', { class: 'stack gap-sm' }, [
+        el('p', { class: 't-small', text:
+          t.no + ' · ' + (ap.detail || '') + ' · 상신자 ' + db.userName(ap.requesterId) +
+          ' (' + dur(hoursBetween(ap.submittedAt, stamp())) + ' 경과)' }),
+        el('label', { class: 'field' }, [el('span', { class: 'field__label', text: '사유 코드' }), code]),
+        textField,
+        el('p', { class: 't-micro', text: '반려하면 상신자에게 사유가 그대로 전달되고, 대상 레코드의 잠금이 풀립니다. 되돌리기는 처리 직후 토스트에서 가능합니다.' })
+      ]),
+      actions: [
+        { label: '취소' },
+        { label: '반려', kind: 'danger', onClick: function () {
+            var body = text.value.trim();
+            if (!body) { textField.classList.add('is-invalid'); text.focus(); return false; }
+            decide([id], '반려', code.value + ' — ' + body, code.value);
+          } }
+      ]
+    });
+  }
+
+  function approveModal(id) {
+    var ap = db.get('approvals', id);
+    if (!ap) return;
+    var cn = chainFor(ap);
+    var note = el('textarea', { class: 'textarea', rows: '2', 'data-autofocus': '',
+      placeholder: '남길 조건이 있으면 적어 주세요. 비워 두면 “승인합니다.”로 기록됩니다.' });
+    var next = nextStepFor(ap);
+    ui.modal({
+      title: ap.kind + ' 승인',
+      body: el('div', { class: 'stack gap-sm' }, [
+        el('p', { class: 't-small', text: cn.basis + ' → ' + cn.verdict }),
+        el('label', { class: 'field' }, [el('span', { class: 'field__label', text: '결재 의견' }), note]),
+        el('p', { class: 't-micro', text: next
+          ? '승인하면 ' + next.step + ' 대기 행이 ' + db.userName(next.approverId) + '님 앞으로 생성됩니다.'
+          : '이 단계가 마지막입니다. 승인하면 대상 레코드의 승인자가 ' + me.name + '(으)로 기록됩니다.' })
+      ]),
+      actions: [
+        { label: '취소' },
+        { label: '승인', kind: 'primary', onClick: function () {
+            decide([id], '승인', note.value.trim() || '승인합니다.', null);
+          } }
+      ]
+    });
+  }
+
+  /* ── 위임 설정 모달 ─────────────────────────────────────────────────── */
+  function delegModal() {
+    var cur = delegCache || {};
+    var candidates = U.sortBy(db.where('users', function (u) {
+      return u.active !== false && u.id !== me.id &&
+        ['영업관리자', '리소스매니저', '관리자'].indexOf(u.role) > -1;
+    }), 'name');
+
+    if (!candidates.length) {
+      ui.toast('대리 결재자로 지정할 수 있는 사용자가 없습니다.', { kind: 'neg' });
+      return;
+    }
+    var who = el('select', { class: 'select', 'data-autofocus': '', 'aria-label': '대리 결재자' });
+    candidates.forEach(function (u) {
+      who.appendChild(el('option', { value: u.id, text: u.name + ' · ' + (u.title || u.role) }));
+    });
+    if (cur.toId) who.value = cur.toId;
+
+    var from = el('input', { class: 'input', type: 'date', value: cur.from || U.iso(C.today), 'aria-label': '위임 시작일' });
+    var to = el('input', { class: 'input', type: 'date', value: cur.to || U.iso(U.addDays(C.today, 7)), 'aria-label': '위임 종료일' });
+    var note = el('input', { class: 'input', placeholder: '예: 하계 휴가', autocomplete: 'off', value: cur.note || '', 'aria-label': '위임 사유' });
+    var rangeField = el('div', { class: 'row gap-sm' }, [
+      el('label', { class: 'field grow' }, [el('span', { class: 'field__label', text: '시작일' }), from]),
+      el('label', { class: 'field grow' }, [el('span', { class: 'field__label', text: '종료일' }), to])
+    ]);
+    var err = el('p', { class: 't-neg t-small', text: '종료일이 시작일보다 빠릅니다.', style: 'display:none' });
+
+    ui.modal({
+      title: '대결(위임) 설정',
+      body: el('div', { class: 'stack gap-sm' }, [
+        el('p', { class: 't-small', text: '지정한 기간 동안 내 미결 건에 “위임됨” 배지와 대리 결재자 이름이 표시됩니다.' }),
+        el('label', { class: 'field' }, [el('span', { class: 'field__label', text: '대리 결재자' }), who]),
+        rangeField,
+        el('label', { class: 'field' }, [el('span', { class: 'field__label', text: '사유 (선택)' }), note]),
+        err,
+        el('p', { class: 't-micro', text: '이 위임은 이 데모 세션에만 저장됩니다. 대리 결재자의 승인함이나 저장된 레코드는 바뀌지 않으며, 결재 권한 자체는 이전되지 않습니다.' })
+      ]),
+      actions: [
+        { label: '취소' },
+        { label: '위임 설정', kind: 'primary', onClick: function () {
+            if (!from.value || !to.value || to.value < from.value) {
+              err.style.display = ''; from.focus(); return false;
+            }
+            writeDeleg({ toId: who.value, from: from.value, to: to.value, note: note.value.trim(), at: stamp() });
+            render();
+            ui.toast(db.userName(who.value) + '님에게 ' + U.fmtDate(from.value) + '부터 ' + U.fmtDate(to.value) + '까지 대결을 위임했습니다.');
+          } }
+      ]
+    });
+  }
+
+  /* ── 분석 의견 — 승인 관련 규칙만 ───────────────────────────────────── */
+  var WANT = ['approval-wait', 'approval-blocking'];
+  var opinions = C.insights.run(C.metrics.scope()).filter(function (x) { return WANT.indexOf(x.id) > -1; });
+  if (opinions.length) {
+    $('#opinionList').innerHTML = opinions.map(function (x) {
+      return ui.insight({ kind: x.kind, label: x.label, say: x.say, why: x.why });
+    }).join('');
+  } else {
+    $('#opinionSec').parentNode.removeChild($('#opinionSec'));
+  }
+
+  /* ── 이벤트 배선 ────────────────────────────────────────────────────── */
+  U.live($('#tabs'), 'click', '.tab', function (e, t) {
+    if (t.dataset.tab === state.tab) return;
+    state.tab = t.dataset.tab;
+    state.sel = {};
+    state.person = '';
+    state.focusId = '';
+    render();
+  });
+  U.live($('#tabs'), 'keydown', '.tab', function (e, t) {
+    if (e.isComposing || e.keyCode === 229) return;
+    if (e.key !== 'ArrowRight' && e.key !== 'ArrowLeft') return;
+    e.preventDefault();
+    var list = U.qsa('.tab', $('#tabs'));
+    var i = list.indexOf(t);
+    var nxt = list[(i + (e.key === 'ArrowRight' ? 1 : list.length - 1)) % list.length];
+    if (nxt) nxt.click();
+    var again = U.qsa('.tab', $('#tabs'))[(i + (e.key === 'ArrowRight' ? 1 : list.length - 1)) % list.length];
+    if (again) again.focus();
+  });
+
+  U.on($('#q'), 'input', U.debounce(function () {
+    state.q = $('#q').value; state.page[state.tab] = 1; render();
+  }, 180));
+  U.on($('#q'), 'keydown', function (e) {
+    if (e.isComposing || e.keyCode === 229) return;
+    if (e.key === 'Escape' && this.value) { e.stopPropagation(); this.value = ''; state.q = ''; render(); }
+  });
+  U.on($('#fKind'), 'change', function () { state.kind = this.value; state.page[state.tab] = 1; render(); });
+  U.on($('#fPerson'), 'change', function () { state.person = this.value; state.page[state.tab] = 1; render(); });
+  U.on($('#fOver'), 'change', function () { state.over = this.checked; state.page[state.tab] = 1; render(); });
+  U.on($('#reset'), 'click', function () {
+    state.q = ''; state.kind = ''; state.person = ''; state.over = false;
+    state.page[state.tab] = 1;
+    $('#q').value = '';
+    render();
+  });
+  U.live($('#scopeSeg'), 'click', '[data-scope]', function (e, t) {
+    state.scopeAll = t.dataset.scope === 'all';
+    state.sel = {}; state.page.pending = 1;
+    render();
+  });
+
+  U.on($('#selAll'), 'change', function () {
+    var on = this.checked;
+    pageRows.forEach(function (r) {
+      if (!canDecide(r.ap)) return;
+      if (on) state.sel[r.id] = true; else delete state.sel[r.id];
+    });
+    render();
+  });
+  U.live($('#tableHost'), 'change', 'input[data-id]', function (e, t) {
+    if (t.checked) state.sel[t.dataset.id] = true; else delete state.sel[t.dataset.id];
+    var row = t.closest('tr');
+    if (row) row.classList.toggle('is-selected', t.checked);
+    syncSelAll();
+    renderBulk();
+  });
+
+  U.live(document.body, 'click', '[data-approve]', function (e, t) {
+    e.stopPropagation(); approveModal(t.dataset.approve);
+  });
+  U.live(document.body, 'click', '[data-reject]', function (e, t) {
+    e.stopPropagation(); rejectModal(t.dataset.reject);
+  });
+  U.live(document.body, 'click', '[data-recall]', function (e, t) {
+    e.stopPropagation(); recall(t.dataset.recall);
+  });
+  U.live(document.body, 'click', '[data-goto]', function (e, t) {
+    state.tab = t.dataset.goto; state.sel = {}; state.focusId = ''; render();
+  });
+  U.live($('#tableHost'), 'click', '#emptyReset', function () {
+    state.q = ''; state.kind = ''; state.person = ''; state.over = false;
+    $('#q').value = ''; render();
+  });
+
+  U.live($('#bulkbar'), 'click', '#bulkApprove', function () {
+    var ids = selectedIds();
+    if (!ids.length) return;
+    decide(ids, '승인', '일괄 승인했습니다.', null);
+  });
+  U.live($('#bulkbar'), 'click', '#bulkClear', function () { state.sel = {}; render(); });
+
+  U.live($('#pagerHost'), 'click', '[data-page]', function (e, t) {
+    var p = Number(t.dataset.page);
+    if (!p || p === state.page[state.tab]) return;
+    state.page[state.tab] = p;
+    render();
+    $('#tableHost').scrollIntoView({ block: 'start' });
+  });
+
+  U.on($('#delegBtn'), 'click', delegModal);
+  U.live($('#delegHost'), 'click', '#delegEdit', delegModal);
+  U.live($('#delegHost'), 'click', '#delegOff', function () {
+    var prev = delegCache;
+    writeDeleg(null);
+    render();
+    ui.toast('대결 위임을 해제했습니다.', {
+      undo: function () { writeDeleg(prev); render(); }
+    });
+  });
+  U.on($('#exportBtn'), 'click', function () {
+    ui.tableToCSV(U.qs('#tableHost .table'), 'closer-승인함-' + state.tab + '.csv');
+  });
+
+  render();
+})();
+</script>
+</body>
+</html>

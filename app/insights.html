@@ -1,0 +1,636 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>분석 의견 · CLOSER</title>
+<meta name="description" content="CLOSER의 규칙 엔진이 만든 모든 분석 의견을 한 곳에서 봅니다. 각 의견의 판정 조건과 규칙 카탈로그를 함께 공개합니다." />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=IBM+Plex+Sans+KR:wght@400;500;600&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="../tokens.css" />
+<link rel="stylesheet" href="../assets/css/base.css" />
+<link rel="stylesheet" href="../assets/css/components.css" />
+<link rel="stylesheet" href="../assets/css/app.css" />
+<style>
+  /* 이 화면에만 필요한 조각. 모든 값은 토큰에서만 온다. */
+  .fb-label { white-space: nowrap; }
+  .filterbar--solo { border-bottom: var(--rule-hair) solid var(--color-rule); border-radius: var(--radius-md); }
+  .seg--scroll { max-width: 100%; overflow-x: auto; overscroll-behavior-x: contain; }
+  .seg__item[disabled] { opacity: 0.42; cursor: not-allowed; }
+  .seg__num { font-family: var(--font-mono); font-size: var(--text-2xs); margin-left: var(--space-2xs); color: var(--color-ink-4); }
+  .seg__item[aria-pressed="true"] .seg__num { color: var(--color-accent-press); }
+
+  .op-grid { display: grid; grid-template-columns: 340px minmax(0, 1fr); gap: var(--space-lg); align-items: start; }
+  @media (max-width: 1180px) { .op-grid { grid-template-columns: minmax(0, 1fr); } }
+
+  .op-list { display: grid; gap: var(--space-sm); }
+  .op-card {
+    background: var(--color-surface);
+    border: var(--rule-hair) solid var(--color-rule);
+    border-left: var(--rule-thick) solid var(--color-rule-3);
+    border-radius: var(--radius-md);
+    padding: var(--space-md);
+  }
+  .op-card--risk { border-left-color: var(--color-neg); }
+  .op-card--warn { border-left-color: var(--color-warn); }
+  .op-card--act  { border-left-color: var(--color-accent); }
+  .op-card--good { border-left-color: var(--color-pos); }
+  .op-card__top { display: flex; align-items: center; gap: var(--space-xs); flex-wrap: wrap; }
+  .op-card__label { font-family: var(--font-mono); font-size: var(--text-2xs); letter-spacing: var(--track-mono); text-transform: uppercase; color: var(--color-ink-4); }
+  .op-card__say { font-size: var(--text-md); line-height: 1.55; color: var(--color-ink); margin-top: var(--space-xs); }
+  .op-card__why { font-size: var(--text-sm); color: var(--color-ink-3); line-height: var(--leading-body); margin-top: var(--space-2xs); }
+
+  .op-why { margin-top: var(--space-sm); border-top: var(--rule-hair) solid var(--color-rule); padding-top: var(--space-xs); }
+  .op-why__sum {
+    display: inline-flex; align-items: center; gap: var(--space-2xs);
+    padding: var(--space-3xs) var(--space-2xs); border-radius: var(--radius-xs);
+    font-family: var(--font-mono); font-size: var(--text-2xs);
+    letter-spacing: var(--track-mono); text-transform: uppercase; color: var(--color-ink-3);
+    transition: color var(--dur-short) var(--ease-out), background-color var(--dur-short) var(--ease-out);
+  }
+  .op-why__sum:hover { color: var(--color-accent); background: var(--color-paper-2); }
+  .op-why__sum::after { content: "▾"; display: inline-block; transition: transform var(--dur-short) var(--ease-out); }
+  .op-why[open] > .op-why__sum { color: var(--color-accent); }
+  .op-why[open] > .op-why__sum::after { transform: rotate(180deg); }
+  .op-why .kv { grid-template-columns: minmax(0, 1fr); margin-top: var(--space-xs); }
+
+  .op-cat { max-height: 460px; overflow-y: auto; overscroll-behavior-y: contain; }
+  .op-muted-row {
+    display: flex; align-items: center; gap: var(--space-xs); flex-wrap: wrap;
+    padding: var(--space-2xs) 0; border-bottom: var(--rule-hair) solid var(--color-rule);
+  }
+  .op-muted-row:last-child { border-bottom: none; }
+</style>
+</head>
+<body class="app">
+<a class="skip-link" href="#main">본문으로 건너뛰기</a>
+
+<div class="app-main">
+  <main class="app-page" id="main">
+
+    <div class="page-head">
+      <div>
+        <h1 class="page-head__title">분석 의견</h1>
+        <p class="page-head__sub" id="subline"></p>
+      </div>
+      <div class="page-head__acts" id="headActs"></div>
+    </div>
+
+    <section class="filterbar filterbar--solo" aria-label="의견 필터">
+      <div class="seg seg--scroll" id="segKinds" role="group" aria-label="심각도 필터"></div>
+
+      <label class="t-mono fb-label" for="scopeSel">범위</label>
+      <select class="select" id="scopeSel" style="width:auto;min-width:132px"></select>
+
+      <label class="t-mono fb-label" for="periodSel">기간</label>
+      <select class="select" id="periodSel" style="width:auto;min-width:132px">
+        <option value="q">이번 분기</option>
+        <option value="lastq">지난 분기</option>
+        <option value="ytd">올해 누적</option>
+      </select>
+
+      <span class="grow"></span>
+      <span class="filterbar__count" id="fbCount"></span>
+    </section>
+
+    <p class="t-micro mt-xs" id="scopeNote"></p>
+
+    <section class="op-grid mt-lg">
+
+      <!-- 규칙 카탈로그 — 안 뜬 규칙까지 전부 보인다 -->
+      <div class="panel reveal">
+        <div class="panel__head">
+          <h2 class="panel__title">규칙 카탈로그</h2>
+          <span class="t-mono" id="ruleCount"></span>
+        </div>
+        <div class="op-cat" id="ruleCat" data-verify="rules"></div>
+        <div class="panel__foot row gap-xs">
+          <span class="t-micro grow">행을 누르면 판정 조건이 열립니다.</span>
+          <button class="btn btn--sm" type="button" id="catCsv">카탈로그 CSV</button>
+        </div>
+      </div>
+
+      <!-- 의견 카드 -->
+      <div class="stack gap-md">
+        <div class="op-list" id="cards" data-verify="cards"></div>
+
+        <div class="panel" id="mutedPanel" hidden>
+          <div class="panel__head">
+            <h2 class="panel__title">이 세션에서 숨긴 의견</h2>
+            <button class="btn btn--sm" type="button" id="unhideAll">모두 다시 표시</button>
+          </div>
+          <div class="panel__body" id="mutedList"></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="mt-lg panel reveal">
+      <div class="panel__head">
+        <h2 class="panel__title">단계별 전환율</h2>
+        <span class="t-mono" id="funnelPeriod"></span>
+      </div>
+      <div class="panel__body stack gap-md" id="funnelBox" data-verify="funnel"></div>
+    </section>
+
+    <section class="mt-lg" style="display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:var(--space-lg);align-items:start" id="lowerRow">
+      <div class="panel reveal">
+        <div class="panel__head">
+          <h2 class="panel__title">실주 사유 분포</h2>
+          <span class="t-mono" id="lossCount"></span>
+        </div>
+        <div class="panel__body stack gap-md" id="lossBox" data-verify="loss"></div>
+      </div>
+
+      <div class="panel reveal">
+        <div class="panel__head">
+          <h2 class="panel__title">단계별 평균 체류일</h2>
+          <span class="t-mono">기준선 대비</span>
+        </div>
+        <div class="panel__body stack gap-md" id="dwellBox" data-verify="dwell"></div>
+      </div>
+    </section>
+
+    <footer class="hairline mt-2xl" style="padding-block:var(--space-md)">
+      <p class="t-mono t-faint">CLOSER · 데모 데이터 · 모든 회사·인물·연락처는 가상입니다</p>
+    </footer>
+  </main>
+</div>
+
+<script src="../assets/js/seed.js"></script>
+<script src="../assets/js/util.js"></script>
+<script src="../assets/js/store.js"></script>
+<script src="../assets/js/domain.js"></script>
+<script src="../assets/js/metrics.js"></script>
+<script src="../assets/js/insights.js"></script>
+<script src="../assets/js/ui.js"></script>
+<script src="../assets/js/charts.js"></script>
+<script src="../assets/js/shell.js"></script>
+<script>
+(function () {
+  'use strict';
+  var C = window.CLOSER, U = C.util, db = C.db, D = C.domain, M = C.metrics, ui = C.ui, ch = C.charts;
+  C.shell.mount('insights');
+
+  var $ = U.qs, esc = U.esc;
+  var me = db.me();
+  var visible = db.visibleUserIds();
+  var RULES = C.insights.rules;
+
+  var KIND_LABEL = { risk: '위험', warn: '주의', act: '조치', good: '양호' };
+  var KIND_CHIP  = { risk: 'neg',  warn: 'warn', act: 'accent', good: 'pos' };
+  var KIND_ORDER = ['risk', 'warn', 'act', 'good'];
+
+  /* ── 판정 조건 사전 ───────────────────────────────────────────────────
+     insights.js 의 각 규칙이 실제로 검사하는 식을 사람이 읽는 문장으로 옮긴
+     것. 이 화면의 요지는 "왜 이 문장이 떴는가"를 숨기지 않는 것이다.
+     range: 'scoped' 선택한 범위·기간 · 'org' 전사 공통 · 'me' 로그인 사용자 */
+  var STAGE_CAPS = Object.keys(D.STAGE_MAX_DAYS).map(function (k) {
+    return k + ' ' + D.STAGE_MAX_DAYS[k] + '일';
+  }).join(' · ');
+
+  var COND = {
+    'coverage-low': { range: 'scoped', data: '영업기회 · 목표',
+      cond: '커버리지 = 진행 파이프라인 ÷ (기간 목표 − 확정 실적). 남은 목표가 0보다 크고 커버리지가 3.0배 미만이면 발화합니다.' },
+    'coverage-ok': { range: 'scoped', data: '영업기회 · 목표',
+      cond: '같은 커버리지 값이 3.5배 이상이면 발화합니다. 남은 목표가 0 이하이면 판정하지 않습니다.' },
+    'pace': { range: 'scoped', data: '영업기회 · 목표',
+      cond: '기간 목표가 있을 때 (달성률 − 기간 경과율)이 −8%p 이하이면 발화합니다.' },
+    'stalled': { range: 'scoped', data: '영업기회',
+      cond: '열려 있는 영업기회 중 현재 단계 체류일이 단계별 기준일을 넘는 건이 1건 이상이면 발화합니다. 기준일 — ' + STAGE_CAPS + '.' },
+    'overdue-close': { range: 'scoped', data: '영업기회',
+      cond: '열려 있는 영업기회 중 예상 마감일이 오늘보다 이전인 건이 1건 이상이면 발화합니다.' },
+    'no-activity': { range: 'scoped', data: '영업기회 · 활동',
+      cond: '열려 있는 영업기회 중 마지막 활동일(활동이 없으면 생성일)로부터 14일이 지난 건이 1건 이상이면 발화합니다.' },
+    'concentration': { range: 'scoped', data: '영업기회',
+      cond: '열려 있는 영업기회가 3건 이상이고, 금액이 가장 큰 한 건의 비중이 전체의 35% 이상이면 발화합니다.' },
+    'bottleneck': { range: 'scoped', data: '영업기회',
+      cond: '전환율이 0보다 큰 구간이 2개 이상일 때, 가장 낮은 구간의 전환율이 55% 이하이면 발화합니다.' },
+    'big-deal-loss': { range: 'scoped', data: '영업기회',
+      cond: '건수 성사율과 금액 성사율이 모두 계산될 때, (건수 성사율 − 금액 성사율)이 12%p 이상이면 발화합니다.' },
+    'loss-reason': { range: 'scoped', data: '영업기회',
+      cond: '기간 내 실주가 3건 이상이고, 가장 많은 실주 사유 하나가 전체 실주의 34% 이상을 차지하면 발화합니다.' },
+    'cycle-drift': { range: 'scoped', data: '영업기회',
+      cond: '이번 기간과 직전 3개월의 평균 영업 사이클이 모두 계산될 때, 차이가 +8일 이상이면 발화합니다.' },
+    'new-mix': { range: 'scoped', data: '영업기회',
+      cond: '기간 내 성사 건이 3건 이상이고, 유형이 “신규”인 건의 금액 비중이 25% 미만이면 발화합니다.' },
+    'at-risk': { range: 'scoped', data: '광고주 · 캠페인 · 티켓',
+      cond: '광고주 건강도(최근 접촉 · 집행 캠페인 · 진행 영업기회 · 최근 실주 · SLA 초과로 산출)가 55점 미만인 광고주가 1개사 이상이면 발화합니다.' },
+    'silent-account': { range: 'scoped', data: '광고주',
+      cond: '마지막 활동일이 45일을 넘긴 광고주가 1개사 이상이면 발화합니다.' },
+    'renewal': { range: 'org', data: '계약',
+      cond: '상태가 “유효”이고 종료일이 오늘부터 60일 이내인 계약이 1건 이상이면 발화합니다.' },
+    'cold-leads': { range: 'scoped', data: '리드',
+      cond: '상태가 “신규”이고 접수 후 3일이 지난 리드가 1건 이상이면 발화합니다.' },
+    'approval-wait': { range: 'me', data: '승인',
+      cond: '로그인한 사용자가 승인자이고 상태가 “대기”인 결재 요청이 1건 이상이면 발화합니다.' },
+    'approval-blocking': { range: 'scoped', data: '영업기회 · 승인',
+      cond: '단계가 “내부승인”이면서 대기 중인 승인 요청이 걸려 있는 딜이 1건 이상이면 발화합니다.' },
+    'sla-breach': { range: 'scoped', data: '제작 티켓',
+      cond: '진행 중인 제작 의뢰 가운데 약속 납기를 이미 넘긴(잔여 시간이 음수인) 건이 1건 이상이면 발화합니다.' },
+    'unassigned': { range: 'scoped', data: '제작 티켓',
+      cond: '진행 중인 제작 의뢰 가운데 담당자가 비어 있는 건이 1건 이상이면 발화합니다.' },
+    'rework': { range: 'scoped', data: '제작 티켓',
+      cond: '완료된 제작 의뢰 중 수정요청을 한 번 이상 거친 비율이 25% 이상이면 발화합니다.' },
+    'ticket-vs-close': { range: 'scoped', data: '영업기회 · 제작 티켓',
+      cond: '열려 있는 딜에 걸린 진행 중 제작 의뢰의 납기가 딜의 마감일보다 늦은 건이 1건 이상이면 발화합니다.' },
+    'overloaded': { range: 'org', data: '사용자 · 배정',
+      cond: '향후 4주 배정 공수 ÷ 가용 공수가 100%를 넘는 제작인력이 1명 이상이면 발화합니다.' },
+    'idle': { range: 'org', data: '사용자 · 배정',
+      cond: '같은 기준의 가동률이 45% 미만인 제작인력이 2명 이상이면 발화합니다.' },
+    'req-pending': { range: 'org', data: '공수 신청',
+      cond: '상태가 “대기”인 공수 신청이 1건 이상이면 발화합니다.' },
+    'roas-low': { range: 'org', data: '캠페인',
+      cond: '집행 중이고 소진액이 0보다 큰 캠페인 중 ROAS(매출 ÷ 소진액)가 180% 미만인 건이 1건 이상이면 발화합니다.' },
+    'pace-overspend': { range: 'org', data: '캠페인',
+      cond: '집행 중인 캠페인에서 (예산 소진율 − 기간 경과율)이 22%p를 넘는 건이 1건 이상이면 발화합니다.' },
+    'actual-missing': { range: 'me', data: '실적',
+      cond: '로그인한 사용자의 역할이 제작인력이 아니고, 이번 달 제출된 실적이 없거나 임시저장 상태의 실적이 남아 있으면 발화합니다.' },
+    'quota-hit': { range: 'scoped', data: '영업기회 · 목표',
+      cond: '기간 달성률(확정 실적 ÷ 목표)이 100% 이상이면 발화합니다.' }
+  };
+  var RANGE_TEXT = {
+    scoped: '아래에서 고른 범위·기간에 속한 레코드만 봅니다.',
+    org: '전사 공통 규칙입니다. 범위 선택과 무관하게 같은 결과가 나옵니다.',
+    me: '로그인한 사용자 본인 기준입니다. 범위 선택과 무관합니다.'
+  };
+
+  /* ── 화면 상태 ───────────────────────────────────────────────────── */
+  var SCOPES = [
+    { key: 'mine', label: '내 것', ok: true },
+    { key: 'team', label: '팀',    ok: visible.length > 1 },
+    { key: 'all',  label: '전체',  ok: me.role === '관리자' }
+  ];
+  function scopeOK(k) {
+    for (var i = 0; i < SCOPES.length; i++) if (SCOPES[i].key === k) return SCOPES[i].ok;
+    return false;
+  }
+  var defaultScope = me.role === '관리자' ? 'all' : visible.length > 1 ? 'team' : 'mine';
+
+  var state = {
+    kind: U.param('kind', 'all'),
+    scope: U.param('scope', defaultScope),
+    period: U.param('period', 'q')
+  };
+  if (state.kind !== 'all' && KIND_ORDER.indexOf(state.kind) < 0) state.kind = 'all';
+  if (!scopeOK(state.scope)) state.scope = 'mine';
+  if (['q', 'lastq', 'ytd'].indexOf(state.period) < 0) state.period = 'q';
+
+  var muted = {};   /* 세션 내 숨김 — 저장하지 않습니다. */
+
+  function syncURL() {
+    try {
+      window.history.replaceState(null, '',
+        'insights.html?kind=' + encodeURIComponent(state.kind) +
+        '&scope=' + encodeURIComponent(state.scope) +
+        '&period=' + encodeURIComponent(state.period));
+    } catch (e) { /* file:// 에서는 주소를 바꾸지 못할 수 있습니다. 화면은 그대로 동작합니다. */ }
+  }
+
+  /* ── 범위·기간 → 스코프 객체 ─────────────────────────────────────── */
+  function userIdsFor(key) {
+    if (key === 'all') return visible.slice();
+    if (key === 'team') {
+      return db.all('users').filter(function (u) {
+        return u.teamId === me.teamId && visible.indexOf(u.id) > -1;
+      }).map(function (u) { return u.id; });
+    }
+    return [me.id];
+  }
+  function periodFor(key) {
+    var t = C.today, q = Math.floor(t.getMonth() / 3);
+    if (key === 'lastq') {
+      var y = q === 0 ? t.getFullYear() - 1 : t.getFullYear();
+      var lq = q === 0 ? 3 : q - 1;
+      return { from: new Date(y, lq * 3, 1), to: new Date(y, lq * 3 + 3, 0), label: y + '-Q' + (lq + 1) };
+    }
+    if (key === 'ytd') {
+      return { from: new Date(t.getFullYear(), 0, 1), to: new Date(t.getFullYear(), t.getMonth() + 1, 0), label: t.getFullYear() + ' 누적' };
+    }
+    return { from: new Date(t.getFullYear(), q * 3, 1), to: new Date(t.getFullYear(), q * 3 + 3, 0), label: U.quarterOf(t) };
+  }
+  function currentScope() {
+    var p = periodFor(state.period);
+    return { userIds: userIdsFor(state.scope), from: p.from, to: p.to, label: p.label };
+  }
+
+  /* ── 상단 액션 — 권한 매트릭스가 그대로 버튼을 결정합니다 ────────── */
+  $('#headActs').innerHTML =
+    (D.can('actuals', 'C') ? '<a class="btn btn--sm" href="performance.html">실적 입력</a>' : '') +
+    (D.can('opportunities', 'C') ? '<a class="btn btn--sm btn--primary" href="opportunities.html?new=1">새 영업기회</a>' : '') +
+    '<a class="btn btn--sm" href="dashboard.html">홈 브리핑</a>';
+
+  /* ── 필터 컨트롤 ─────────────────────────────────────────────────── */
+  $('#scopeSel').innerHTML = SCOPES.map(function (s) {
+    return '<option value="' + s.key + '"' + (s.key === state.scope ? ' selected' : '') +
+      (s.ok ? '' : ' disabled') + '>' + esc(s.label + (s.ok ? '' : ' (권한 없음)')) + '</option>';
+  }).join('');
+  $('#periodSel').value = state.period;
+
+  U.on($('#scopeSel'), 'change', function () {
+    if (!scopeOK(this.value)) { this.value = state.scope; return; }
+    state.scope = this.value; syncURL(); render();
+  });
+  U.on($('#periodSel'), 'change', function () { state.period = this.value; syncURL(); render(); });
+
+  U.live(document, 'click', '[data-kind]', function (e, t) {
+    state.kind = t.dataset.kind; syncURL(); render();
+  });
+  U.live(document, 'click', '[data-mute]', function (e, t) {
+    var id = t.dataset.mute;
+    muted[id] = true;
+    render();
+    ui.toast('“' + ruleLabel(id) + '” 의견을 이 세션 동안 숨겼습니다.', {
+      undo: function () { delete muted[id]; render(); }
+    });
+  });
+  U.live(document, 'click', '[data-unmute]', function (e, t) {
+    delete muted[t.dataset.unmute]; render();
+  });
+  U.on($('#unhideAll'), 'click', function () { muted = {}; render(); });
+  U.on($('#catCsv'), 'click', function () {
+    ui.tableToCSV($('#ruleCat').querySelector('table'), 'closer-insight-rules.csv');
+  });
+
+  function ruleLabel(id) {
+    for (var i = 0; i < RULES.length; i++) if (RULES[i].id === id) return RULES[i].label;
+    return id;
+  }
+
+  /* ── 규칙 상세 — 카탈로그 행을 눌렀을 때 ─────────────────────────── */
+  function openRule(rule, fired) {
+    var c = COND[rule.id] || { cond: '이 규칙의 판정 조건이 아직 문서화되지 않았습니다.', data: '—', range: 'scoped' };
+    var hit = fired[rule.id];
+    var body =
+      '<div class="kv" style="grid-template-columns:minmax(0,1fr)">' +
+        '<div class="kv__row"><span class="kv__k">규칙 ID</span><span class="kv__v t-num">' + esc(rule.id) + '</span></div>' +
+        '<div class="kv__row"><span class="kv__k">심각도</span><span class="kv__v">' + ui.chip(KIND_LABEL[rule.kind] || rule.kind, KIND_CHIP[rule.kind]) + '</span></div>' +
+        '<div class="kv__row"><span class="kv__k">판정 조건</span><span class="kv__v">' + esc(c.cond) + '</span></div>' +
+        '<div class="kv__row"><span class="kv__k">읽는 데이터</span><span class="kv__v">' + esc(c.data) + '</span></div>' +
+        '<div class="kv__row"><span class="kv__k">적용 범위</span><span class="kv__v">' + esc(RANGE_TEXT[c.range]) + '</span></div>' +
+        '<div class="kv__row"><span class="kv__k">현재 판정</span><span class="kv__v">' +
+          (hit ? '<strong class="t-accent">발화</strong> — 아래 문장이 카드로 표시됩니다.' : '조건 미충족 — 지금 데이터로는 이 문장을 만들 근거가 없습니다.') +
+        '</span></div>' +
+      '</div>' +
+      (hit ? '<div class="mt-md">' + ui.insight({ kind: hit.kind, label: hit.label, say: hit.say, why: hit.why }) + '</div>' : '');
+
+    ui.modal({
+      title: '규칙 · ' + rule.label,
+      body: body,
+      actions: [{ label: '닫기', kind: 'primary' }]
+    });
+  }
+
+  /* ── 그리기 ──────────────────────────────────────────────────────── */
+  function render() {
+    var s = currentScope();
+    var all = C.insights.run(s);
+    var fired = {};
+    all.forEach(function (x) { fired[x.id] = x; });
+
+    paintHead(s, all);
+    paintSeg(all);
+    paintCards(all);
+    paintMuted(all);
+    paintCatalog(fired);
+    paintFunnel(s);
+    paintLoss(s);
+    paintDwell(s);
+    U.revealAll();
+  }
+
+  function paintHead(s, all) {
+    var names = s.userIds.length === 1 ? me.name + '님' : s.userIds.length + '명';
+    $('#subline').innerHTML =
+      '규칙 <strong>' + RULES.length + '개</strong>를 ' + esc(s.label) + ' 데이터에 적용해 <strong>' + all.length + '개</strong>가 발화했습니다. ' +
+      '대상 ' + esc(names) + ' · ' + U.fmtDate(s.from) + '–' + U.fmtDate(s.to) + '. ' +
+      '모든 문장은 왼쪽 카탈로그의 조건에서 나옵니다. 추정치나 외부 벤치마크는 쓰지 않습니다.';
+    $('#scopeNote').textContent = me.role === '관리자'
+      ? '관리자 권한이라 전체 사용자 데이터를 볼 수 있습니다.'
+      : visible.length > 1
+        ? '‘' + me.role + '’ 권한이라 같은 팀 ' + visible.length + '명까지 볼 수 있습니다. 전체 범위는 관리자만 열 수 있습니다.'
+        : '‘' + me.role + '’ 권한이라 본인 데이터만 조회됩니다. 팀·전체 범위는 선택할 수 없습니다.';
+    $('#funnelPeriod').textContent = s.label;
+  }
+
+  function paintSeg(all) {
+    var counts = { all: all.length };
+    KIND_ORDER.forEach(function (k) {
+      counts[k] = all.filter(function (x) { return x.kind === k; }).length;
+    });
+    var items = [{ key: 'all', label: '전체' }].concat(KIND_ORDER.map(function (k) {
+      return { key: k, label: KIND_LABEL[k] };
+    }));
+    $('#segKinds').innerHTML = items.map(function (it) {
+      return '<button class="seg__item" type="button" data-kind="' + it.key + '" aria-pressed="' +
+        (state.kind === it.key) + '">' + esc(it.label) +
+        '<span class="seg__num">' + counts[it.key] + '</span></button>';
+    }).join('');
+  }
+
+  function cardHTML(x) {
+    var c = COND[x.id] || { cond: '이 규칙의 판정 조건이 아직 문서화되지 않았습니다.', data: '—', range: 'scoped' };
+    return '<article class="op-card op-card--' + esc(x.kind) + ' reveal" id="op-' + esc(x.id) + '">' +
+      '<div class="op-card__top">' +
+        ui.chip(KIND_LABEL[x.kind] || x.kind, KIND_CHIP[x.kind]) +
+        '<span class="op-card__label">' + esc(x.label) + '</span>' +
+        '<span class="grow"></span>' +
+        '<button class="btn btn--sm" type="button" data-mute="' + esc(x.id) + '">무시하기</button>' +
+      '</div>' +
+      '<p class="op-card__say">' + x.say + '</p>' +
+      '<p class="op-card__why">' + x.why + '</p>' +
+      (x.actions ? '<div class="insight__do">' + x.actions + '</div>' : '') +
+      '<details class="op-why">' +
+        '<summary class="op-why__sum">이 의견이 뜬 이유</summary>' +
+        '<div class="op-why__body"><div class="kv">' +
+          '<div class="kv__row"><span class="kv__k">규칙 ID</span><span class="kv__v t-num">' + esc(x.id) + '</span></div>' +
+          '<div class="kv__row"><span class="kv__k">판정 조건</span><span class="kv__v">' + esc(c.cond) + '</span></div>' +
+          '<div class="kv__row"><span class="kv__k">읽는 데이터</span><span class="kv__v">' + esc(c.data) + '</span></div>' +
+          '<div class="kv__row"><span class="kv__k">적용 범위</span><span class="kv__v">' + esc(RANGE_TEXT[c.range]) + '</span></div>' +
+        '</div></div>' +
+      '</details>' +
+    '</article>';
+  }
+
+  function paintCards(all) {
+    var list = all.filter(function (x) {
+      return (state.kind === 'all' || x.kind === state.kind) && !muted[x.id];
+    });
+    var mutedCount = all.filter(function (x) { return muted[x.id]; }).length;
+    $('#fbCount').textContent = list.length + '건 표시' + (mutedCount ? ' · ' + mutedCount + '건 숨김' : '');
+
+    if (list.length) {
+      $('#cards').innerHTML = list.map(cardHTML).join('');
+      return;
+    }
+    $('#cards').innerHTML = all.length
+      ? (mutedCount && state.kind === 'all'
+          ? ui.empty('표시할 의견을 모두 숨겼습니다', '아래 “이 세션에서 숨긴 의견”에서 다시 꺼낼 수 있습니다.')
+          : ui.empty(esc(KIND_LABEL[state.kind] || '해당') + ' 등급 의견이 없습니다',
+              '지금 이 범위·기간에서는 이 등급의 규칙이 하나도 발화하지 않았습니다. 다른 등급을 눌러 보세요.'))
+      : ui.empty('발화한 의견이 없습니다',
+          '규칙 ' + RULES.length + '개 모두 조건을 채우지 못했습니다. 범위나 기간을 넓히면 판정 대상 레코드가 늘어납니다.');
+  }
+
+  function paintMuted(all) {
+    var list = all.filter(function (x) { return muted[x.id]; });
+    $('#mutedPanel').hidden = !list.length;
+    if (!list.length) {
+      $('#mutedList').innerHTML = '<p class="t-micro">숨긴 의견이 없습니다.</p>';
+      return;
+    }
+    $('#mutedList').innerHTML = list.map(function (x) {
+      return '<div class="op-muted-row">' +
+        ui.chip(KIND_LABEL[x.kind] || x.kind, KIND_CHIP[x.kind]) +
+        '<span class="grow t-small">' + esc(x.label) + ' · <span class="t-mono t-mono--plain">' + esc(x.id) + '</span></span>' +
+        '<button class="btn btn--sm" type="button" data-unmute="' + esc(x.id) + '">다시 표시</button>' +
+      '</div>';
+    }).join('');
+  }
+
+  function paintCatalog(fired) {
+    var rows = U.sortBy(RULES.slice(), function (r) {
+      return (fired[r.id] ? 0 : 1) + '-' + KIND_ORDER.indexOf(r.kind) + '-' + r.id;
+    });
+    var hits = Object.keys(fired).length;
+    $('#ruleCount').textContent = RULES.length + '개 중 ' + hits + '개 발화';
+
+    var box = $('#ruleCat');
+    box.innerHTML = '';
+    box.appendChild(ui.table([
+      { key: 'label', label: '규칙', cell: function (r) {
+          return '<span class="t-small t-ink">' + esc(r.label) + '</span>' +
+            '<br><span class="t-mono t-mono--plain" style="font-size:10px">' + esc(r.id) + '</span>';
+        } },
+      { key: 'kind', label: '심각도', cell: function (r) { return ui.chip(KIND_LABEL[r.kind] || r.kind, KIND_CHIP[r.kind]); } },
+      { key: 'fired', label: '판정', align: 'right', cell: function (r) {
+          return fired[r.id] ? ui.chip('발화', 'accent') : ui.chip('조건 미충족', 'idle');
+        } }
+    ], rows, {
+      compact: true,
+      onRow: function (r) { openRule(r, fired); },
+      empty: { title: '등록된 규칙이 없습니다', body: '규칙 엔진에 규칙이 정의되면 여기에 모두 나열됩니다.' }
+    }));
+  }
+
+  /* ── 하단 패널 1 · 단계별 전환율 ─────────────────────────────────── */
+  function paintFunnel(s) {
+    var f = M.stageFunnel(s);
+    var conv = M.stageConversion(s);
+    var box = $('#funnelBox');
+    box.innerHTML = '';
+
+    if (!U.sum(f, 'value')) {
+      box.innerHTML = ui.empty('판정할 영업기회가 없습니다', '선택한 범위에 최근 180일 안에 만들어진 영업기회가 없습니다.');
+      return;
+    }
+    var head = U.el('div', { html:
+      ch.funnel(f, { label: '단계별 통과 건수', fmt: function (v) { return U.num(v) + '건'; } }) +
+      '<p class="t-micro mt-xs">각 단계를 <strong>거쳐 간</strong> 건수입니다. 현재 단계가 그 단계 이상이면 통과한 것으로 셉니다. ' +
+      '괄호 안 숫자는 직전 단계 대비 전환율입니다.</p>'
+    });
+    box.appendChild(head);
+
+    box.appendChild(ui.table([
+      { key: 'from', label: '구간', cell: function (c) {
+          return '<span class="t-small">' + esc(c.from) + ' → ' + esc(c.to) + '</span>';
+        } },
+      { key: 'rate', label: '전환율', align: 'right', cell: function (c) { return U.pct(c.rate); } },
+      { key: 'bar', label: '분포', sortable: false, cell: function (c) {
+          return ui.meter(c.rate, 100, c.rate <= 55 ? 'warn' : null);
+        } },
+      { key: 'judge', label: '판정', align: 'right', cell: function (c) {
+          return c.rate <= 55 ? ui.chip('병목 후보', 'warn') : '<span class="t-faint">—</span>';
+        } }
+    ], conv, {
+      compact: true,
+      empty: { title: '전환 구간이 없습니다', body: '단계가 두 개 이상 채워져야 전환율을 계산할 수 있습니다.' }
+    }));
+    box.appendChild(U.el('p', { class: 't-micro', text: '전환율 55% 이하 구간을 병목 후보로 봅니다. 규칙 bottleneck 이 같은 기준을 씁니다.' }));
+  }
+
+  /* ── 하단 패널 2 · 실주 사유 분포 ────────────────────────────────── */
+  function paintLoss(s) {
+    var lost = M.lost(s);
+    var box = $('#lossBox');
+    box.innerHTML = '';
+    $('#lossCount').textContent = lost.length + '건 · ' + U.won(U.sum(lost, 'amount'));
+
+    if (!lost.length) {
+      box.innerHTML = ui.empty('이 기간에 실주가 없습니다', '실주 사유를 남기면 다음 분기 전략의 재료가 됩니다.');
+      return;
+    }
+    var g = U.groupBy(lost, function (o) { return o.lossReason || '미기재'; });
+    var rows = Object.keys(g).map(function (k) {
+      return { reason: k, count: g[k].length, amount: U.sum(g[k], 'amount') };
+    });
+    rows = U.sortBy(rows, 'amount', 'desc');
+    var totalAmt = U.sum(rows, 'amount');
+    var topAmt = rows[0].amount;
+
+    box.appendChild(U.el('div', { html:
+      ch.bars(rows.map(function (r) {
+        return { label: r.reason, value: r.amount, kind: r.amount === topAmt ? 'neg' : null };
+      }), { h: 190, label: '실주 사유별 금액', fmt: function (v) { return U.won(v, { unit: false }); } }) +
+      '<p class="t-micro mt-xs">막대는 사유별 잃은 금액 합계입니다. 가장 큰 사유를 붉게 표시했습니다.</p>'
+    }));
+
+    box.appendChild(ui.table([
+      { key: 'reason', label: '사유', cell: function (r) { return '<span class="t-small">' + esc(r.reason) + '</span>'; } },
+      { key: 'count', label: '건수', align: 'right', cell: function (r) { return U.num(r.count) + '건'; } },
+      { key: 'amount', label: '금액', align: 'right', cell: function (r) { return U.won(r.amount); } },
+      { key: 'share', label: '비중', align: 'right', cell: function (r) {
+          return totalAmt ? U.pct((r.amount / totalAmt) * 100) : '<span class="t-faint">—</span>';
+        } }
+    ], rows, { compact: true }));
+  }
+
+  /* ── 하단 패널 3 · 단계별 평균 체류일 ────────────────────────────── */
+  function paintDwell(s) {
+    var dwell = M.stageDwell(s);
+    var open = M.open(s);
+    var box = $('#dwellBox');
+    box.innerHTML = '';
+
+    var rows = D.OPEN_STAGES.map(function (st) {
+      var here = open.filter(function (o) { return o.stage === st.key; });
+      return {
+        stage: st.key,
+        avg: Math.round(dwell[st.key] || 0),
+        cap: D.STAGE_MAX_DAYS[st.key] || 14,
+        count: here.length,
+        stalled: here.filter(D.isStalled).length
+      };
+    });
+    if (!open.length) {
+      box.innerHTML = ui.empty('열려 있는 영업기회가 없습니다', '진행 중인 딜이 있어야 단계별 체류일을 잴 수 있습니다.');
+      return;
+    }
+
+    box.appendChild(U.el('div', { html:
+      ch.bars(rows.map(function (r) {
+        return { label: r.stage, value: r.avg, kind: r.avg > r.cap ? 'warn' : null };
+      }), { h: 190, label: '단계별 평균 체류일', fmt: function (v) { return Math.round(v) + '일'; } }) +
+      '<p class="t-micro mt-xs">기준일을 넘긴 단계를 주황으로 표시했습니다. 열려 있는 건이 없는 단계는 0일로 나옵니다.</p>'
+    }));
+
+    box.appendChild(ui.table([
+      { key: 'stage', label: '단계', cell: function (r) { return '<span class="t-small">' + esc(r.stage) + '</span>'; } },
+      { key: 'count', label: '진행', align: 'right', cell: function (r) { return U.num(r.count) + '건'; } },
+      { key: 'avg', label: '평균 체류', align: 'right', cell: function (r) {
+          return '<span class="' + (r.avg > r.cap ? 't-warn' : '') + '">' + U.num(r.avg) + '일</span>';
+        } },
+      { key: 'cap', label: '기준일', align: 'right', cell: function (r) { return '<span class="t-muted">' + U.num(r.cap) + '일</span>'; } },
+      { key: 'stalled', label: '정체', align: 'right', cell: function (r) {
+          return r.stalled ? ui.chip(r.stalled + '건', 'warn') : '<span class="t-faint">—</span>';
+        } }
+    ], rows, { compact: true }));
+    box.appendChild(U.el('p', { class: 't-micro', text: '기준일은 도메인 규칙(STAGE_MAX_DAYS)에 정의된 단계별 허용 체류일입니다. 이 값을 넘긴 건을 정체로 셉니다.' }));
+  }
+
+  render();
+  syncURL();
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,21 @@
+# 런타임 의존성은 없다. node_modules 는 검증 도구(jsdom) 전용이다.
+node_modules/
+
+# OS / 편집기 부산물
+.DS_Store
+Thumbs.db
+desktop.ini
+*.swp
+*~
+.vscode/
+.idea/
+
+# 작업 중 임시 파일 — 에이전트/스크립트가 남길 수 있다
+*.tmp
+*.tmp.*
+*.log
+.tmp/
+_*.html
+_*.js
+
+# 브라우저 상태는 저장소에 들어가지 않는다 (localStorage 에만 존재)

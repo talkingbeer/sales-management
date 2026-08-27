@@ -1,0 +1,885 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>내 실적 · CLOSER</title>
+<meta name="description" content="CLOSER 실적 화면. 월별 실적을 직접 입력·제출하고, 목표 대비 달성률과 팀 내 순위를 한 화면에서 모니터링합니다." />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=IBM+Plex+Sans+KR:wght@400;500;600&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="../tokens.css" />
+<link rel="stylesheet" href="../assets/css/base.css" />
+<link rel="stylesheet" href="../assets/css/components.css" />
+<link rel="stylesheet" href="../assets/css/app.css" />
+<style>
+  /* 이 화면에만 필요한 조각 — 모든 값은 토큰을 참조합니다. */
+
+  /* 필터바에 이어지는 입력 그리드 프레임 */
+  .grid-frame {
+    border: var(--rule-hair) solid var(--color-rule);
+    border-radius: 0 0 var(--radius-md) var(--radius-md);
+    background: var(--color-surface);
+    overflow: hidden;
+  }
+  .grid-frame .table-wrap { border: none; border-radius: 0; }
+  .grid-frame table { min-width: 1140px; }
+
+  /* 필터바 안의 라벨과 컨트롤 — 클릭 가능한 라벨은 절대 두 줄로 접히지 않습니다 */
+  .fbar__lab {
+    font-family: var(--font-mono); font-size: var(--text-2xs);
+    letter-spacing: var(--track-mono); text-transform: uppercase;
+    color: var(--color-ink-3); white-space: nowrap;
+  }
+  .fbar__sel { width: auto; min-width: 116px; }
+
+  /* 표 셀 안에 들어가는 축소형 입력 — 상태는 .input/.select 규칙을 그대로 물려받습니다 */
+  .input--cell, .select--cell {
+    min-height: 26px; height: 26px;
+    font-size: var(--text-xs);
+    padding-block: 0;
+    padding-inline: var(--space-2xs);
+  }
+  .select--cell {
+    padding-right: var(--space-lg);
+    background-position: calc(100% - 13px) 11px, calc(100% - 9px) 11px;
+  }
+  .cell-w-opp { max-width: 224px; }
+
+  /* 선택 행 일괄 작업 줄 */
+  .bulkbar {
+    display: flex; align-items: center; gap: var(--space-xs); flex-wrap: wrap;
+    padding: var(--space-xs) var(--space-md);
+    background: var(--color-accent-soft);
+    border-bottom: var(--rule-hair) solid var(--color-rule);
+  }
+  .bulkbar__count {
+    font-family: var(--font-mono); font-size: var(--text-2xs);
+    letter-spacing: var(--track-mono); color: var(--color-accent-press);
+  }
+
+  /* 순위표에서 내 행 */
+  .table tbody tr.is-me { background: var(--color-accent-soft); }
+  .table tbody tr.is-me:hover { background: var(--color-accent-soft-2); }
+
+  /* 링 + 추이 2단, 그리고 좁은 화면에서의 접힘 */
+  .perf-split { display: grid; grid-template-columns: minmax(0, 300px) minmax(0, 1fr); gap: var(--space-lg); align-items: start; }
+  @media (max-width: 900px) {
+    .perf-split { grid-template-columns: minmax(0, 1fr); }
+  }
+  @media (max-width: 640px) {
+    .fbar__sel { min-width: 0; flex: 1 1 130px; }
+  }
+</style>
+</head>
+<body class="app">
+<a class="skip-link" href="#main">본문으로 건너뛰기</a>
+
+<div class="app-main">
+  <main class="app-page" id="main">
+
+    <div class="page-head">
+      <div>
+        <h1 class="page-head__title">내 실적</h1>
+        <p class="page-head__sub" id="subline"></p>
+      </div>
+      <div class="page-head__acts" id="headActs"></div>
+    </div>
+
+    <!-- ── 입력 ────────────────────────────────────────────────────── -->
+    <section aria-labelledby="inputHead" id="inputSection">
+      <div class="row row--between row--wrap gap-sm mb-sm">
+        <h2 class="t-h4" id="inputHead">실적 입력</h2>
+        <p class="t-micro" id="gridSum"></p>
+      </div>
+
+      <div class="filterbar" id="fbar"></div>
+
+      <div class="grid-frame">
+        <div id="bulkHost"></div>
+        <div id="gridHost" data-verify></div>
+      </div>
+
+      <p class="t-micro mt-xs" id="gridNote"></p>
+    </section>
+
+    <!-- ── 모니터링 ────────────────────────────────────────────────── -->
+    <section class="mt-xl" aria-labelledby="monHead" id="monSection">
+      <h2 class="t-h4 mb-sm" id="monHead">목표 대비 모니터링</h2>
+
+      <div class="grid grid--4 reveal" id="tiles" data-verify></div>
+
+      <div class="perf-split mt-lg">
+        <div class="panel reveal">
+          <div class="panel__head">
+            <h3 class="panel__title">월간 달성률</h3>
+            <span class="t-mono" id="ringPeriod"></span>
+          </div>
+          <div class="panel__body stack gap-sm" id="ringHost"></div>
+        </div>
+        <div class="panel reveal">
+          <div class="panel__head">
+            <h3 class="panel__title">최근 12개월 실적 대 목표</h3>
+            <span class="t-mono" id="lineWho"></span>
+          </div>
+          <div class="panel__body" id="lineHost"></div>
+        </div>
+      </div>
+
+      <div class="grid grid--2 mt-lg">
+        <div class="panel reveal">
+          <div class="panel__head">
+            <h3 class="panel__title">유형별 구성</h3>
+            <span class="t-mono" id="kindPeriod"></span>
+          </div>
+          <div class="panel__body" id="kindHost"></div>
+        </div>
+        <div class="panel reveal">
+          <div class="panel__head">
+            <h3 class="panel__title">누적 진척</h3>
+            <span class="t-mono">직접 입력한 실적 기준</span>
+          </div>
+          <div class="panel__body" id="meterHost"></div>
+        </div>
+      </div>
+
+      <div class="grid grid--2 mt-lg">
+        <div class="panel reveal">
+          <div class="panel__head">
+            <h3 class="panel__title">달성률 순위</h3>
+            <span class="t-mono" id="rankScope"></span>
+          </div>
+          <div id="rankHost" data-verify></div>
+        </div>
+        <div class="panel reveal">
+          <div class="panel__head">
+            <h3 class="panel__title">실적·목표 분석 의견</h3>
+            <a class="link" href="insights.html" id="insightsLink">전체 보기</a>
+          </div>
+          <div class="panel__body stack gap-xs" id="insightHost"></div>
+        </div>
+      </div>
+    </section>
+
+    <footer class="hairline mt-2xl" style="padding-block:var(--space-md)">
+      <p class="t-mono t-faint">CLOSER · 데모 데이터 · 모든 회사·인물·연락처는 가상입니다</p>
+    </footer>
+  </main>
+</div>
+
+<script src="../assets/js/seed.js"></script>
+<script src="../assets/js/util.js"></script>
+<script src="../assets/js/store.js"></script>
+<script src="../assets/js/domain.js"></script>
+<script src="../assets/js/metrics.js"></script>
+<script src="../assets/js/insights.js"></script>
+<script src="../assets/js/ui.js"></script>
+<script src="../assets/js/charts.js"></script>
+<script src="../assets/js/shell.js"></script>
+<script>
+(function () {
+  'use strict';
+  var C = window.CLOSER, U = C.util, db = C.db, D = C.domain, M = C.metrics, ui = C.ui, ch = C.charts;
+  C.shell.mount('performance');
+
+  var me = db.me();
+  var $ = U.qs;
+
+  /* ── 권한 ─────────────────────────────────────────────────────────
+     실적 객체의 CRUD 매트릭스를 그대로 따릅니다. 제작인력·리소스매니저는
+     actuals 에 아무 권한이 없으므로 이 화면은 안내만 남기고 접힙니다. */
+  var canRead   = D.can('actuals', 'R');
+  var canCreate = D.can('actuals', 'C');
+  var canUpdate = D.can('actuals', 'U');
+  var canPurge  = D.can('actuals', 'D');
+
+  if (!canRead) {
+    $('#subline').textContent = U.fmtDate(C.today, 'long') + ' · ' + me.role;
+    $('#inputSection').parentNode.removeChild($('#inputSection'));
+    $('#monSection').parentNode.removeChild($('#monSection'));
+    var notice = U.el('section', { class: 'panel mt-lg' }, [
+      U.el('div', { class: 'panel__body', html: ui.empty(
+        '실적을 볼 권한이 없습니다',
+        me.role + ' 역할에는 실적 레코드 접근 권한이 없습니다. 필요하면 영업관리자에게 권한을 요청하세요.',
+        '<a class="btn btn--sm" href="' + db.linkAs('dashboard.html') + '">홈으로</a>') })
+    ]);
+    $('#main').insertBefore(notice, $('#main').lastElementChild);
+    U.revealAll();
+    return;
+  }
+
+  /* ── 기준월 목록 — 시드가 목표를 잡아 둔 구간(12개월 전 ~ 다음 달) ── */
+  var MONTHS = (function () {
+    var out = [];
+    for (var i = 11; i >= -1; i--) out.push(U.ymOf(new Date(C.today.getFullYear(), C.today.getMonth() - i, 1)));
+    return out;
+  })();
+
+  /* ── 담당자 목록 — 내가 볼 수 있는 사용자 중 매출 목표가 있는 사람 ── */
+  var visibleIds = db.visibleUserIds();
+  var ownerOpts = U.sortBy(db.all('users').filter(function (u) {
+    return visibleIds.indexOf(u.id) > -1 &&
+      db.where('targets', function (t) { return t.ownerId === u.id && t.type === '매출'; }).length > 0;
+  }), 'name');
+  if (!ownerOpts.some(function (u) { return u.id === me.id; })) ownerOpts.unshift(me);
+
+  function hasTargets(id) { return !!db.first('targets', function (t) { return t.ownerId === id && t.type === '매출'; }); }
+
+  /* ── 화면 상태 — URL 파라미터가 우선입니다 ──────────────────────── */
+  var FILTERS = [
+    { key: 'all', label: '전체' },
+    { key: 'draft', label: '임시저장', status: '임시저장' },
+    { key: 'submitted', label: '제출', status: '제출' },
+    { key: 'confirmed', label: '확정', status: '확정' }
+  ];
+  var state = {
+    period: MONTHS.indexOf(U.param('period')) > -1 ? U.param('period') : U.ymOf(C.today),
+    ownerId: (function () {
+      var p = U.param('owner');
+      if (p && ownerOpts.some(function (u) { return u.id === p; })) return p;
+      if (hasTargets(me.id)) return me.id;
+      /* 내게 매출 목표가 없는 역할(예: 본부 관리자)이면 목표가 잡힌 첫 담당자를 먼저 보여 줍니다. */
+      var withTarget = ownerOpts.filter(function (u) { return hasTargets(u.id); });
+      return withTarget.length ? withTarget[0].id : me.id;
+    })(),
+    filter: FILTERS.some(function (f) { return f.key === U.param('filter'); }) ? U.param('filter') : 'all',
+    sort: { key: 'enteredAt', dir: 'desc' }
+  };
+
+  var KIND_FROM_OPP = { '신규': '신규 수주', '기존 확대': '기존 확대', '갱신': '갱신', '재계약': '갱신' };
+
+  /* ── 행 규칙 ──────────────────────────────────────────────────────
+     임시저장만 편집·제출·삭제할 수 있고, 확정은 잠깁니다.
+     삭제: 확정·제출된 실적은 삭제 권한(D)이 있어야 지울 수 있고,
+     아직 제출하지 않은 내 임시저장 행은 생성 권한(C)만으로 지울 수 있습니다. */
+  function isDraft(r) { return r.status === '임시저장'; }
+  function editable(r) { return canUpdate && isDraft(r); }
+  function deletable(r) { return isDraft(r) && (canPurge || (canCreate && r.ownerId === me.id)); }
+
+  function periodRows() {
+    return db.where('actuals', function (a) { return a.ownerId === state.ownerId && a.period === state.period; });
+  }
+  function rows() {
+    var f = FILTERS.filter(function (x) { return x.key === state.filter; })[0];
+    var list = periodRows().filter(function (a) { return !f.status || a.status === f.status; });
+    return U.sortBy(list, function (r) {
+      var v = r[state.sort.key];
+      return v === null || v === void 0 ? '' : v;
+    }, state.sort.dir);
+  }
+
+  function oppsFor(accountId) {
+    return U.sortBy(db.where('opportunities', function (o) {
+      return o.accountId === accountId && o.ownerId === state.ownerId;
+    }), 'closeDate', 'desc');
+  }
+  function accountsSorted() {
+    var all = U.sortBy(db.all('accounts'), 'name');
+    var mine = all.filter(function (a) { return a.ownerId === state.ownerId; });
+    return mine.concat(all.filter(function (a) { return a.ownerId !== state.ownerId; }));
+  }
+
+  /* ── 금액 입력 — 입력 중에도 천 단위로 끊어 보여 줍니다 ─────────── */
+  function parseMoney(v) { var d = String(v).replace(/[^0-9]/g, ''); return d ? Number(d) : 0; }
+  function formatMoney(node) {
+    var digits = node.value.replace(/[^0-9]/g, '');
+    var tail = node.value.length - (node.selectionStart === null ? node.value.length : node.selectionStart);
+    var out = digits ? Number(digits).toLocaleString('ko-KR') : '';
+    node.value = out;
+    var pos = Math.max(0, out.length - tail);
+    try { node.setSelectionRange(pos, pos); } catch (e) { /* number 입력이 아닌 브라우저에서는 무시 */ }
+  }
+  function wireMoney(scope) {
+    U.qsa('[data-money]', scope).forEach(function (n) {
+      U.on(n, 'input', function () { formatMoney(n); });
+    });
+  }
+
+  /* ── 셀 컨트롤 ───────────────────────────────────────────────────── */
+  function optTags(items, sel) {
+    return items.map(function (o) {
+      return '<option value="' + U.esc(o.v) + '"' + (String(o.v) === String(sel) ? ' selected' : '') + '>' + U.esc(o.t) + '</option>';
+    }).join('');
+  }
+  function cellSelect(field, id, items, val, label, extra) {
+    return '<select class="select select--cell' + (extra || '') + '" data-edit="' + field + '" data-id="' + U.esc(id) +
+      '" aria-label="' + U.esc(label) + '">' + optTags(items, val) + '</select>';
+  }
+  function cellMoney(field, id, val, label) {
+    return '<input class="input input--num input--cell" type="text" inputmode="numeric" autocomplete="off" ' +
+      'data-money="1" data-edit="' + field + '" data-id="' + U.esc(id) + '" value="' + U.esc(U.num(val || 0)) +
+      '" aria-label="' + U.esc(label) + '" />';
+  }
+  function cellText(field, id, val, label, ph) {
+    return '<input class="input input--cell" type="text" autocomplete="off" data-edit="' + field + '" data-id="' + U.esc(id) +
+      '" value="' + U.esc(val || '') + '" placeholder="' + U.esc(ph || '') + '" aria-label="' + U.esc(label) + '" />';
+  }
+  function statusChip(s) {
+    return ui.chip(s, s === '확정' ? 'pos' : s === '제출' ? 'accent' : 'idle');
+  }
+
+  /* ── 그리드 ──────────────────────────────────────────────────────── */
+  var gridHost = $('#gridHost'), bulkHost = $('#bulkHost');
+  var selAllEl = null, selCountEl = null, bulkSubmitEl = null, bulkDelEl = null;
+
+  function columns() {
+    return [
+      { key: 'period', label: '기준월', width: '104px', cell: function (r) {
+          return editable(r)
+            ? cellSelect('period', r.id, MONTHS.map(function (m) { return { v: m, t: m }; }), r.period, '기준월')
+            : '<span class="t-mono t-mono--plain">' + U.esc(r.period) + '</span>';
+        } },
+      { key: 'accountId', label: '광고주', width: '190px', cell: function (r) {
+          var acc = db.get('accounts', r.accountId);
+          if (editable(r)) {
+            return cellSelect('accountId', r.id, accountsSorted().map(function (a) { return { v: a.id, t: a.name }; }), r.accountId, '광고주');
+          }
+          return acc
+            ? '<a class="link--quiet" href="' + db.linkAs('account.html?id=' + encodeURIComponent(acc.id)) + '">' + U.esc(acc.name) + '</a>'
+            : '<span class="t-faint">미지정</span>';
+        } },
+      { key: 'oppId', label: '영업기회', width: '236px', cell: function (r) {
+          var opp = r.oppId ? db.get('opportunities', r.oppId) : null;
+          if (editable(r)) {
+            var items = [{ v: '', t: '연결 안 함' }].concat(oppsFor(r.accountId).map(function (o) {
+              return { v: o.id, t: (D.isWon(o) ? '● ' : '○ ') + o.name };
+            }));
+            return cellSelect('oppId', r.id, items, r.oppId || '', '영업기회', ' cell-w-opp');
+          }
+          return opp
+            ? '<a class="link--quiet" href="' + db.linkAs('opportunity.html?id=' + encodeURIComponent(opp.id)) + '">' + U.esc(opp.name) + '</a>'
+            : '<span class="t-faint">연결 안 함</span>';
+        } },
+      { key: 'kind', label: '유형', width: '132px', cell: function (r) {
+          return editable(r)
+            ? cellSelect('kind', r.id, D.ACTUAL_KINDS.map(function (k) { return { v: k, t: k }; }), r.kind, '실적 유형')
+            : ui.chip(r.kind, 'plain');
+        } },
+      { key: 'amount', label: '매출액', align: 'right', width: '132px', cell: function (r) {
+          return editable(r) ? cellMoney('amount', r.id, r.amount, '매출액(원)')
+            : '<span title="' + U.esc(U.won(r.amount, { exact: true })) + '">' + U.won(r.amount) + '</span>';
+        } },
+      { key: 'netRevenue', label: '순매출', align: 'right', width: '124px', cell: function (r) {
+          return editable(r) ? cellMoney('netRevenue', r.id, r.netRevenue, '순매출(원)')
+            : '<span class="t-muted" title="' + U.esc(U.won(r.netRevenue, { exact: true })) + '">' + U.won(r.netRevenue) + '</span>';
+        } },
+      { key: 'status', label: '상태', width: '92px', cell: function (r) { return statusChip(r.status); } },
+      { key: 'note', label: '메모', cell: function (r) {
+          return editable(r) ? cellText('note', r.id, r.note, '메모', '정산 조건 등')
+            : (r.note ? '<span class="t-small">' + U.esc(r.note) + '</span>' : '');
+        } },
+      { key: 'act', label: '작업', align: 'right', width: '132px', sortable: false, cell: function (r) {
+          var out = [];
+          if (editable(r)) out.push('<button class="btn btn--sm" type="button" data-act="submit" data-id="' + U.esc(r.id) + '">제출</button>');
+          if (deletable(r)) out.push('<button class="btn btn--sm btn--danger" type="button" data-act="del" data-id="' + U.esc(r.id) + '">삭제</button>');
+          if (r.status === '제출') out.push('<span class="t-micro">확정 대기</span>');
+          if (r.status === '확정') out.push('<span class="chip chip--idle" title="확정된 실적은 수정할 수 없습니다">잠김</span>');
+          return '<span class="row row--end gap-2xs">' + out.join('') + '</span>';
+        } }
+    ];
+  }
+
+  function renderGrid() {
+    var list = rows();
+    var selectable = canUpdate || canCreate;
+
+    var node = ui.table(columns(), list, {
+      selectable: selectable,
+      sort: state.sort,
+      onSort: function (key) {
+        if (state.sort.key === key) state.sort.dir = state.sort.dir === 'desc' ? 'asc' : 'desc';
+        else state.sort = { key: key, dir: 'asc' };
+        renderGrid();
+      },
+      empty: {
+        title: state.filter === 'all' ? '이 기준월에 입력한 실적이 없습니다' : '조건에 맞는 행이 없습니다',
+        body: state.filter === 'all'
+          ? '행 추가로 첫 실적을 등록하세요. 임시저장으로 저장되고, 제출해야 달성률에 반영됩니다.'
+          : '상태 필터를 전체로 바꾸면 이 기준월의 모든 행이 보입니다.'
+      }
+    });
+
+    gridHost.innerHTML = '';
+    gridHost.appendChild(node);
+
+    /* 임시저장이 아닌 행은 선택할 수 없습니다 — 일괄 제출·삭제 대상이 아닙니다. */
+    if (selectable) {
+      U.qsa('input[type="checkbox"][data-id]', node).forEach(function (box) {
+        var rec = db.get('actuals', box.dataset.id);
+        if (!rec || !(editable(rec) || deletable(rec))) {
+          box.disabled = true;
+          box.setAttribute('aria-label', '선택 불가 — 임시저장 행만 일괄 작업할 수 있습니다');
+        }
+      });
+    }
+
+    renderBulk(list);
+    paintSelection();
+    refreshTotals();
+  }
+
+  function renderBulk(list) {
+    var pickable = list.filter(function (r) { return editable(r) || deletable(r); });
+    bulkHost.innerHTML = '';
+    if (!pickable.length) { selAllEl = selCountEl = bulkSubmitEl = bulkDelEl = null; return; }
+
+    var bar = U.el('div', { class: 'bulkbar' });
+    bar.innerHTML =
+      '<label class="check"><input type="checkbox" id="selAll" /><span>임시저장 전체 선택</span></label>' +
+      '<span class="bulkbar__count" id="selCount">선택 0건</span>' +
+      '<span class="grow"></span>' +
+      '<button class="btn btn--sm btn--primary" type="button" id="bulkSubmit">선택 제출</button>' +
+      '<button class="btn btn--sm btn--danger" type="button" id="bulkDelete">선택 삭제</button>';
+    bulkHost.appendChild(bar);
+
+    selAllEl = $('#selAll', bar); selCountEl = $('#selCount', bar);
+    bulkSubmitEl = $('#bulkSubmit', bar); bulkDelEl = $('#bulkDelete', bar);
+
+    U.on(selAllEl, 'change', function () {
+      boxes().forEach(function (b) { if (!b.disabled) b.checked = selAllEl.checked; });
+      paintSelection();
+    });
+    U.on(bulkSubmitEl, 'click', function () { submitRows(selectedIds()); });
+    U.on(bulkDelEl, 'click', function () { removeRows(selectedIds()); });
+  }
+
+  function boxes() { return U.qsa('input[type="checkbox"][data-id]', gridHost); }
+  function selectedIds() {
+    return boxes().filter(function (b) { return b.checked && !b.disabled; }).map(function (b) { return b.dataset.id; });
+  }
+  function paintSelection() {
+    if (!selCountEl) return;
+    var ids = selectedIds();
+    var amt = U.sum(ids.map(function (id) { var r = db.get('actuals', id); return r ? r.amount : 0; }));
+    selCountEl.textContent = ids.length ? '선택 ' + ids.length + '건 · ' + U.won(amt) : '선택 0건';
+    var live = boxes().filter(function (b) { return !b.disabled; });
+    bulkSubmitEl.disabled = !ids.some(function (id) { var r = db.get('actuals', id); return r && editable(r); });
+    bulkDelEl.disabled = !ids.some(function (id) { var r = db.get('actuals', id); return r && deletable(r); });
+    if (selAllEl) {
+      selAllEl.checked = live.length > 0 && ids.length === live.length;
+      selAllEl.indeterminate = ids.length > 0 && ids.length < live.length;
+    }
+  }
+
+  function refreshTotals() {
+    var list = rows();
+    $('#gridSum').innerHTML = list.length
+      ? list.length + '행 · 매출 합계 <strong class="t-ink">' + U.won(U.sum(list, 'amount')) + '</strong> · 순매출 ' + U.won(U.sum(list, 'netRevenue'))
+      : '표시할 행이 없습니다';
+    $('#gridNote').textContent = canUpdate
+      ? '임시저장 행만 편집·제출·삭제할 수 있습니다. 확정된 행은 잠깁니다. 값을 고치면 그 자리에서 저장되고, 새로 고쳐도 남습니다.'
+      : '읽기 전용입니다. 실적을 고치려면 실적 수정 권한이 필요합니다.';
+  }
+
+  /* ── 셀 편집 — 값이 바뀌는 즉시 저장 ──────────────────────────────── */
+  U.live(gridHost, 'input', '[data-money]', function (e, t) { formatMoney(t); });
+
+  U.live(gridHost, 'change', '[data-edit]', function (e, t) {
+    var rec = db.get('actuals', t.dataset.id);
+    if (!rec || !editable(rec)) return;
+    var field = t.dataset.edit;
+    var patch = {};
+
+    if (t.dataset.money) {
+      patch[field] = parseMoney(t.value);
+      t.value = U.num(patch[field]);
+      db.update('actuals', rec.id, patch);
+      refreshTotals(); paintSelection(); renderMonitor();
+      return;
+    }
+
+    if (field === 'accountId') {
+      patch.accountId = t.value;
+      var stillValid = rec.oppId && oppsFor(t.value).some(function (o) { return o.id === rec.oppId; });
+      if (!stillValid) patch.oppId = null;
+    } else if (field === 'oppId') {
+      patch.oppId = t.value || null;
+      var opp = t.value ? db.get('opportunities', t.value) : null;
+      if (opp) patch.accountId = opp.accountId;
+    } else {
+      patch[field] = t.value;
+    }
+    db.update('actuals', rec.id, patch);
+
+    /* 기준월·광고주·영업기회는 다른 셀의 선택지를 바꾸므로 그리드를 다시 그립니다. */
+    if (field === 'period' || field === 'accountId' || field === 'oppId') renderGrid();
+    else { refreshTotals(); }
+    renderMonitor();
+  });
+
+  U.live(gridHost, 'change', 'input[type="checkbox"][data-id]', function () { paintSelection(); });
+
+  U.live(gridHost, 'click', '[data-act]', function (e, t) {
+    if (t.dataset.act === 'submit') submitRows([t.dataset.id]);
+    else if (t.dataset.act === 'del') removeRows([t.dataset.id]);
+  });
+
+  /* ── 제출 — 되돌릴 수 있는 동작이므로 확인창 없이 토스트로 되돌립니다 ── */
+  function submitRows(ids) {
+    var targets = ids.filter(function (id) { var r = db.get('actuals', id); return r && editable(r); });
+    if (!targets.length) { ui.toast('제출할 임시저장 행이 없습니다.', { kind: 'neg' }); return; }
+    var now = new Date().toISOString();
+    targets.forEach(function (id) { db.update('actuals', id, { status: '제출', submittedAt: now }); });
+    renderGrid(); renderMonitor();
+    ui.toast(targets.length + '건을 제출했습니다. 제출한 실적부터 달성률에 반영됩니다.', {
+      undo: function () {
+        targets.forEach(function (id) { db.update('actuals', id, { status: '임시저장', submittedAt: null }); });
+        renderGrid(); renderMonitor();
+      }
+    });
+  }
+
+  /* ── 삭제 — 낙관적 삭제 + 되돌리기. 휴지통을 거치므로 복구가 확실합니다 ── */
+  function removeRows(ids) {
+    var targets = ids.filter(function (id) { var r = db.get('actuals', id); return r && deletable(r); });
+    if (!targets.length) { ui.toast('삭제할 수 있는 임시저장 행이 없습니다.', { kind: 'neg' }); return; }
+    var trashIds = [];
+    targets.forEach(function (id) {
+      db.remove('actuals', id);
+      var t0 = db.trashList()[0];
+      if (t0) trashIds.push(t0.id);
+    });
+    renderGrid(); renderMonitor();
+    ui.toast('실적 ' + targets.length + '건을 삭제했습니다.', {
+      undo: function () {
+        trashIds.forEach(function (tid) { db.untrash(tid); });
+        renderGrid(); renderMonitor();
+      }
+    });
+  }
+
+  /* ── 행 추가 ─────────────────────────────────────────────────────── */
+  function openAdd() {
+    var accs = accountsSorted();
+    if (!accs.length) { ui.toast('등록된 광고주가 없습니다.', { kind: 'neg' }); return; }
+    var firstAcc = accs[0].id;
+
+    var body = U.el('div', { class: 'stack gap-sm' });
+    body.innerHTML =
+      '<div class="grid grid--2" style="gap:var(--space-sm)">' +
+        '<label class="field"><span class="field__label">기준월</span>' +
+          '<select class="select" id="f_period" data-autofocus>' + optTags(MONTHS.map(function (m) { return { v: m, t: m }; }), state.period) + '</select></label>' +
+        '<label class="field"><span class="field__label">유형</span>' +
+          '<select class="select" id="f_kind">' + optTags(D.ACTUAL_KINDS.map(function (k) { return { v: k, t: k }; }), D.ACTUAL_KINDS[0]) + '</select></label>' +
+      '</div>' +
+      '<label class="field" id="fw_acc"><span class="field__label">광고주 <span class="req">*</span></span>' +
+        '<select class="select" id="f_acc">' + optTags(accs.map(function (a) { return { v: a.id, t: a.name }; }), firstAcc) + '</select>' +
+        '<span class="field__error">광고주를 선택하세요.</span></label>' +
+      '<label class="field"><span class="field__label">영업기회</span>' +
+        '<select class="select" id="f_opp"></select>' +
+        '<span class="field__help" id="f_opphelp">성사(계약체결)된 영업기회를 고르면 금액을 불러옵니다. 불러온 뒤에도 직접 고칠 수 있습니다.</span></label>' +
+      '<div class="grid grid--2" style="gap:var(--space-sm)">' +
+        '<label class="field" id="fw_amt"><span class="field__label">매출액 (원) <span class="req">*</span></span>' +
+          '<input class="input input--num" type="text" inputmode="numeric" autocomplete="off" data-money="1" id="f_amt" value="0" />' +
+          '<span class="field__error">0보다 큰 금액을 입력하세요.</span></label>' +
+        '<label class="field"><span class="field__label">순매출 (원)</span>' +
+          '<input class="input input--num" type="text" inputmode="numeric" autocomplete="off" data-money="1" id="f_net" value="0" /></label>' +
+      '</div>' +
+      '<label class="field"><span class="field__label">메모</span>' +
+        '<textarea class="textarea" id="f_note" placeholder="정산 시점, 집행 조건 등 확인이 필요한 내용"></textarea></label>';
+
+    var accSel = $('#f_acc', body), oppSel = $('#f_opp', body), amtEl = $('#f_amt', body),
+        netEl = $('#f_net', body), kindEl = $('#f_kind', body), helpEl = $('#f_opphelp', body);
+
+    function fillOpps() {
+      var items = [{ v: '', t: '연결 안 함' }].concat(oppsFor(accSel.value).map(function (o) {
+        return { v: o.id, t: (D.isWon(o) ? '● 성사 · ' : '○ ' + o.stage + ' · ') + o.name + ' · ' + U.won(o.amount) };
+      }));
+      oppSel.innerHTML = optTags(items, '');
+    }
+    fillOpps();
+
+    U.on(accSel, 'change', function () { fillOpps(); });
+    U.on(oppSel, 'change', function () {
+      var opp = oppSel.value ? db.get('opportunities', oppSel.value) : null;
+      if (!opp) { helpEl.textContent = '영업기회를 연결하지 않고 금액만 입력할 수도 있습니다.'; return; }
+      if (D.isWon(opp)) {
+        amtEl.value = U.num(opp.amount);
+        netEl.value = U.num(D.netRevenue(opp));
+        kindEl.value = KIND_FROM_OPP[opp.type] || D.ACTUAL_KINDS[3];
+        helpEl.textContent = '‘' + opp.name + '’의 성사 금액을 불러왔습니다. 그대로 두거나 직접 고치세요.';
+      } else {
+        helpEl.textContent = '아직 성사되지 않은 영업기회(' + opp.stage + ')입니다. 금액은 직접 입력하세요.';
+      }
+    });
+    wireMoney(body);
+
+    ui.modal({
+      title: '실적 행 추가',
+      body: body,
+      actions: [
+        { label: '취소' },
+        { label: '임시저장으로 추가', kind: 'primary', onClick: function () {
+            var amt = parseMoney(amtEl.value);
+            var okAcc = !!accSel.value, okAmt = amt > 0;
+            $('#fw_acc', body).classList.toggle('is-invalid', !okAcc);
+            $('#fw_amt', body).classList.toggle('is-invalid', !okAmt);
+            if (!okAcc || !okAmt) { ui.toast('입력을 확인하세요.', { kind: 'neg' }); return false; }
+
+            var rec = db.insert('actuals', {
+              ownerId: state.ownerId,
+              period: $('#f_period', body).value,
+              accountId: accSel.value,
+              oppId: oppSel.value || null,
+              amount: amt,
+              netRevenue: parseMoney(netEl.value),
+              kind: kindEl.value,
+              status: '임시저장',
+              enteredAt: new Date().toISOString(),
+              note: $('#f_note', body).value.trim()
+            });
+            state.period = rec.period;
+            if (state.filter !== 'all' && state.filter !== 'draft') state.filter = 'all';
+            renderAll();
+            ui.toast('임시저장으로 추가했습니다. 제출 전까지는 달성률에 반영되지 않습니다.');
+          } }
+      ]
+    });
+  }
+
+  /* ── 필터바 ──────────────────────────────────────────────────────── */
+  function renderFilterbar() {
+    var fbar = $('#fbar');
+    var ownerCtl = ownerOpts.length > 1
+      ? '<select class="select fbar__sel" id="ownerSel" aria-label="담당자 선택">' +
+          optTags(ownerOpts.map(function (u) { return { v: u.id, t: u.name + ' · ' + u.role }; }), state.ownerId) + '</select>'
+      : '<span class="t-small">' + U.esc(ownerOpts[0].name + ' · ' + ownerOpts[0].role) + '</span>';
+
+    fbar.innerHTML =
+      '<label class="fbar__lab" for="periodSel">기준월</label>' +
+      '<select class="select fbar__sel" id="periodSel" aria-label="기준월 선택">' +
+        optTags(MONTHS.map(function (m) { return { v: m, t: m }; }), state.period) + '</select>' +
+      (ownerOpts.length > 1
+        ? '<label class="fbar__lab" for="ownerSel">담당자</label>'
+        : '<span class="fbar__lab">담당자</span>') + ownerCtl +
+      '<div class="seg" role="group" aria-label="상태 필터" id="statusSeg"></div>' +
+      '<span class="grow"></span>' +
+      '<span class="filterbar__count" id="fcount"></span>';
+
+    if (ownerOpts.length > 1) {
+      U.on($('#ownerSel', fbar), 'change', function () {
+        state.ownerId = this.value;
+        syncUrl(); renderAll();
+      });
+    }
+    U.on($('#periodSel', fbar), 'change', function () {
+      state.period = this.value;
+      syncUrl(); renderAll();
+    });
+    U.live(fbar, 'click', '.seg__item', function (e, t) {
+      state.filter = t.dataset.filter;
+      syncUrl(); paintFilterCounts(); renderGrid();
+    });
+  }
+
+  function paintFilterCounts() {
+    var all = periodRows();
+    $('#statusSeg').innerHTML = FILTERS.map(function (f) {
+      var n = f.status ? all.filter(function (a) { return a.status === f.status; }).length : all.length;
+      return '<button class="seg__item" type="button" data-filter="' + f.key + '" aria-pressed="' + (state.filter === f.key) + '">' +
+        U.esc(f.label) + '<span class="seg__n t-mono">' + n + '</span></button>';
+    }).join('');
+    $('#fcount').textContent = all.length + '행 · 표시 ' + rows().length + '행';
+  }
+
+  function syncUrl() {
+    try {
+      var as = U.param('as');
+      var q = '?period=' + encodeURIComponent(state.period) + '&owner=' + encodeURIComponent(state.ownerId) +
+        '&filter=' + encodeURIComponent(state.filter) + (as ? '&as=' + encodeURIComponent(as) : '');
+      window.history.replaceState(null, '', q);
+    } catch (e) { /* file:// 에서는 주소를 고칠 수 없습니다 — 화면 상태는 그대로 유지됩니다. */ }
+  }
+
+  /* ── 모니터링 ────────────────────────────────────────────────────── */
+  function pDate(p) { var a = String(p).split('-'); return new Date(Number(a[0]), Number(a[1]) - 1, 1); }
+  function endOfMonth(d) { return new Date(d.getFullYear(), d.getMonth() + 1, 0); }
+  function sumActual(uid, periods) { return U.sum(periods.map(function (p) { return M.actualTotal(uid, p); })); }
+  function sumTarget(uid, periods) { return U.sum(periods.map(function (p) { return M.targetFor(uid, p); })); }
+  function rateOf(a, t) { return t > 0 ? (a / t) * 100 : null; }
+  function rateKind(r) { return r === null ? null : r >= 100 ? 'pos' : r >= 70 ? null : 'warn'; }
+
+  function renderMonitor() {
+    var uid = state.ownerId, p = state.period;
+    var who = db.get('users', uid);
+    var actual = M.actualTotal(uid, p);          // 제출 + 확정
+    var target = M.targetFor(uid, p);
+    var subs = M.actualsFor(uid, p);
+    var confirmed = subs.filter(function (a) { return a.status === '확정'; });
+    var drafts = M.draftsFor(uid, p), draftAmt = M.draftTotal(uid, p);
+    var rate = rateOf(actual, target);
+    var after = rateOf(actual + draftAmt, target);
+
+    /* ── 지표 타일 ── */
+    $('#tiles').innerHTML = [
+      { label: '제출·확정 실적', value: U.won(actual),
+        foot: '기준월 ' + p + ' · ' + subs.length + '행 (확정 ' + confirmed.length + '행)' },
+      { label: '이번 기준월 목표', value: target > 0 ? U.won(target) : '—',
+        foot: target > 0 ? '남은 목표 ' + U.won(Math.max(0, target - actual)) : '이 달의 매출 목표가 등록되지 않았습니다' },
+      { label: '달성률', value: rate === null ? '—' : Math.round(rate) + '<small>%</small>',
+        foot: rate === null ? '목표가 없어 계산할 수 없습니다'
+          : (drafts.length ? '임시저장까지 제출하면 ' + Math.round(after) + '%' : '임시저장으로 남은 실적 없음') },
+      { label: '임시저장 대기', value: U.won(draftAmt),
+        foot: drafts.length ? drafts.length + '행 미제출 · 달성률에 아직 반영되지 않음' : '미제출 행이 없습니다' }
+    ].map(function (t) {
+      return '<article class="stat"><p class="stat__label">' + U.esc(t.label) + '</p>' +
+        '<p class="stat__value">' + t.value + '</p><p class="stat__foot">' + t.foot + '</p></article>';
+    }).join('');
+
+    /* ── 달성 링 ── */
+    $('#ringPeriod').textContent = p;
+    $('#ringHost').innerHTML =
+      '<div class="row gap-md row--wrap">' +
+        ch.ring(actual, target, { caption: p, label: p + ' 월간 목표 달성률' }) +
+        '<div class="grow stack gap-xs" style="min-width:130px">' +
+          '<div><p class="t-mono">제출·확정</p><p class="t-h4 t-num t-ink">' + U.won(actual) + '</p></div>' +
+          '<div><p class="t-mono">목표</p><p class="t-body t-num">' + (target > 0 ? U.won(target) : '—') + '</p></div>' +
+        '</div>' +
+      '</div>' +
+      '<p class="t-micro">' + (drafts.length
+        ? '임시저장 <strong>' + drafts.length + '행 · ' + U.won(draftAmt) + '</strong>이 남아 있습니다. 모두 제출하면 달성률은 <strong class="t-accent">' +
+          (after === null ? '—' : Math.round(after) + '%') + '</strong>가 됩니다.'
+        : '이 기준월에는 미제출로 남은 실적이 없습니다.') + '</p>';
+
+    /* ── 12개월 추이 ── */
+    var series = M.monthlySeries(uid, 12);
+    $('#lineWho').textContent = who ? who.name : '—';
+    $('#lineHost').innerHTML = ch.line([
+      { name: '실적', points: series.map(function (x) { return { label: x.label, value: x.actual }; }) },
+      { name: '목표', ghost: true, points: series.map(function (x) { return { label: x.label, value: x.target }; }) }
+    ], { h: 210, area: true, fmt: function (v) { return U.won(v, { unit: false }); }, label: '최근 12개월 실적과 목표' }) +
+      ch.legend([{ label: '실적(제출·확정)', color: 'var(--color-accent)' }, { label: '목표', color: 'var(--color-rule-3)' }]) +
+      '<p class="t-micro mt-xs">임시저장 상태의 실적은 이 선에 포함되지 않습니다.</p>';
+
+    /* ── 유형별 구성 ── */
+    $('#kindPeriod').textContent = p;
+    var kinds = D.ACTUAL_KINDS.map(function (k) {
+      return { label: k, value: U.sum(subs.filter(function (a) { return a.kind === k; }), 'amount') };
+    });
+    var kindTotal = U.sum(kinds, 'value');
+    $('#kindHost').innerHTML = kindTotal > 0
+      ? ch.bars(kinds, { h: 190, fmt: function (v) { return U.won(v, { unit: false }); }, label: '실적 유형별 금액' }) +
+        '<p class="t-micro mt-xs">' + kinds.filter(function (k) { return k.value > 0; }).map(function (k) {
+          return U.esc(k.label) + ' ' + Math.round((k.value / kindTotal) * 100) + '%';
+        }).join(' · ') + '</p>'
+      : ui.empty('집계할 실적이 없습니다', '이 기준월에 제출·확정된 실적이 없어 유형별 구성을 그릴 수 없습니다.');
+
+    /* ── 누적 진척 ── */
+    var d0 = pDate(p), last = endOfMonth(d0);
+    var qStart = new Date(d0.getFullYear(), Math.floor(d0.getMonth() / 3) * 3, 1);
+    var qMonths = M.months(qStart, last);
+    var yMonths = M.months(new Date(d0.getFullYear(), 0, 1), last);
+    var bars = [
+      { label: '월간 · ' + p, a: actual, t: target },
+      { label: '분기 누적 · ' + U.quarterOf(d0), a: sumActual(uid, qMonths), t: sumTarget(uid, qMonths) },
+      { label: '연간 누적 · ' + d0.getFullYear() + '년 1~' + (d0.getMonth() + 1) + '월', a: sumActual(uid, yMonths), t: sumTarget(uid, yMonths) }
+    ];
+    $('#meterHost').innerHTML = '<div class="stack gap-md">' + bars.map(function (b) {
+      var r = rateOf(b.a, b.t);
+      return '<div><div class="row row--between gap-xs">' +
+        '<span class="t-mono">' + U.esc(b.label) + '</span>' +
+        '<span class="t-small t-num">' + (r === null ? '—' : Math.round(r) + '%') + ' · ' + U.won(b.a) + ' / ' + (b.t > 0 ? U.won(b.t) : '—') + '</span>' +
+        '</div><div class="mt-2xs">' + ui.meter(b.a, b.t, rateKind(r)) + '</div></div>';
+    }).join('') + '</div>' +
+      '<p class="t-micro mt-sm">누적은 선택한 기준월까지만 더합니다. 아직 오지 않은 달의 목표는 분모에 넣지 않습니다.</p>';
+
+    renderRank();
+    renderInsights();
+  }
+
+  /* ── 팀 내 달성률 순위 ───────────────────────────────────────────── */
+  function renderRank() {
+    var isAdmin = me.role === '관리자';
+    var myTeam = db.get('teams', me.teamId);
+    $('#rankScope').textContent = isAdmin ? '전체 영업' : (myTeam ? myTeam.name : '내 팀');
+
+    var people = db.where('users', function (u) {
+      if (u.active === false) return false;
+      if (u.role !== '영업사원' && u.role !== '영업관리자') return false;
+      return isAdmin ? true : u.teamId === me.teamId;
+    });
+    var list = U.sortBy(people.map(function (u) {
+      var a = M.actualTotal(u.id, state.period), t = M.targetFor(u.id, state.period);
+      return { user: u, actual: a, target: t, rate: rateOf(a, t) };
+    }), function (x) { return x.rate === null ? -1 : x.rate; }, 'desc');
+
+    var host = $('#rankHost');
+    host.innerHTML = '';
+    var node = ui.table([
+      { key: 'rank', label: '순위', width: '56px', sortable: false, cell: function (r) {
+          return '<span class="t-mono">' + (list.indexOf(r) + 1) + '</span>';
+        } },
+      { key: 'user', label: '담당자', sortable: false, cell: function (r) {
+          return '<span class="row gap-xs">' + ui.personCell(r.user) +
+            (r.user.id === me.id ? '<span class="chip chip--accent">나</span>' : '') + '</span>';
+        } },
+      { key: 'actual', label: '실적', align: 'right', sortable: false, cell: function (r) { return U.won(r.actual); } },
+      { key: 'target', label: '목표', align: 'right', sortable: false, cell: function (r) {
+          return '<span class="t-muted">' + (r.target > 0 ? U.won(r.target) : '—') + '</span>';
+        } },
+      { key: 'rate', label: '달성률', align: 'right', width: '150px', sortable: false, cell: function (r) {
+          if (r.rate === null) return '<span class="t-faint">—</span>';
+          return '<span class="row gap-xs" style="justify-content:flex-end">' +
+            '<span style="display:block;width:64px">' + ui.meter(r.actual, r.target, rateKind(r.rate)) + '</span>' +
+            '<span class="t-num">' + Math.round(r.rate) + '%</span></span>';
+        } }
+    ], list, {
+      compact: true,
+      empty: { title: '순위를 낼 대상이 없습니다', body: '이 기준월에 매출 목표가 등록된 담당자가 없습니다.' }
+    });
+    host.appendChild(node);
+
+    var idx = -1;
+    list.forEach(function (r, i) { if (r.user.id === me.id) idx = i; });
+    if (idx > -1) {
+      var trs = U.qsa('tbody tr', node);
+      if (trs[idx]) trs[idx].classList.add('is-me');
+    }
+  }
+
+  /* ── 실적·목표에 관한 분석 의견만 골라 보여 줍니다 ────────────────── */
+  var PERF_RULES = { 'actual-missing': 1, 'quota-hit': 1, 'pace': 1, 'coverage-low': 1, 'coverage-ok': 1 };
+  function renderInsights() {
+    var list = C.insights.run(M.scope({ userIds: [state.ownerId] })).filter(function (x) { return PERF_RULES[x.id]; });
+    $('#insightHost').innerHTML = list.length
+      ? list.map(function (x) { return ui.insight({ kind: x.kind, label: x.label, say: x.say, why: x.why, actions: x.actions }); }).join('')
+      : ui.empty('짚을 만한 신호가 없습니다', '목표와 실적이 기준선 안에 있습니다. 새 신호가 생기면 여기에 문장으로 표시됩니다.');
+  }
+
+  /* ── 상단 액션 · 요약 ────────────────────────────────────────────── */
+  function renderHead() {
+    var acts = [];
+    if (canCreate) acts.push('<button class="btn btn--primary btn--sm" type="button" id="addRow">행 추가</button>');
+    acts.push('<button class="btn btn--sm" type="button" id="exportBtn">CSV 내보내기</button>');
+    $('#headActs').innerHTML = acts.join('');
+    $('#insightsLink').href = db.linkAs('insights.html');
+    if (canCreate) U.on($('#addRow'), 'click', openAdd);
+    U.on($('#exportBtn'), 'click', function () {
+      ui.tableToCSV(U.qs('table', gridHost), 'closer-실적-' + state.period + '.csv');
+    });
+  }
+
+  function renderSubline() {
+    var who = db.get('users', state.ownerId);
+    var drafts = M.draftsFor(state.ownerId, state.period);
+    $('#subline').innerHTML =
+      U.fmtDate(C.today, 'long') + ' · ' + U.esc(me.role) + ' · 기준월 <strong>' + U.esc(state.period) + '</strong>' +
+      ' · 담당 ' + U.esc(who ? who.name : '—') +
+      (drafts.length ? ' · 제출 대기 <strong>' + drafts.length + '행</strong>' : '');
+  }
+
+  function renderAll() {
+    renderSubline();
+    paintFilterCounts();
+    renderGrid();
+    renderMonitor();
+  }
+
+  renderHead();
+  renderFilterbar();
+  renderAll();
+  U.revealAll();
+})();
+</script>
+</body>
+</html>

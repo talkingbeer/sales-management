@@ -1,0 +1,1161 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>견적 · CLOSER</title>
+<meta name="description" content="CLOSER 견적(CPQ) 화면. 견적 버전과 상태, 라인 단가와 할인율, 할인 승인 단계와 순매출을 한 표에서 다룹니다." />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=IBM+Plex+Sans+KR:wght@400;500;600&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="../tokens.css" />
+<link rel="stylesheet" href="../assets/css/base.css" />
+<link rel="stylesheet" href="../assets/css/components.css" />
+<link rel="stylesheet" href="../assets/css/app.css" />
+<style>
+  /* 이 화면에만 필요한 조각들 — 값은 모두 토큰을 참조합니다. */
+
+  /* 필터바 아래로 이어지는 리스트 프레임 */
+  .list-frame {
+    border: var(--rule-hair) solid var(--color-rule);
+    border-radius: 0 0 var(--radius-md) var(--radius-md);
+    background: var(--color-surface);
+    overflow: hidden;
+  }
+  .list-frame .table-wrap { border: none; border-radius: 0; }
+  .list-frame table { min-width: 1240px; }
+
+  /* 합계 행 — 목록과 견적 라인 표가 같은 규칙을 씁니다. */
+  .list-frame tfoot td, .q-lines tfoot td {
+    background: var(--color-paper-2);
+    border-top: var(--rule-thick) solid var(--color-rule-2);
+    border-bottom: none;
+    color: var(--color-ink);
+    font-weight: 500;
+  }
+
+  .list-foot {
+    display: flex; align-items: center; justify-content: space-between; gap: var(--space-sm);
+    flex-wrap: wrap;
+    padding: var(--space-xs) var(--space-md);
+    border-top: var(--rule-hair) solid var(--color-rule);
+    background: var(--color-paper-2);
+  }
+  .pager__gap { font-family: var(--font-mono); font-size: var(--text-2xs); color: var(--color-ink-4); padding-inline: var(--space-3xs); }
+  .pager__btn[disabled] { opacity: 0.4; cursor: not-allowed; }
+  .pager__btn[disabled]:hover { background: transparent; color: var(--color-ink-3); }
+
+  .seg__n { font-family: var(--font-mono); font-size: var(--text-2xs); color: var(--color-ink-4); margin-left: var(--space-2xs); }
+  .seg__item[aria-pressed="true"] .seg__n { color: var(--color-accent-press); }
+
+  .fbar__search { flex: 1 1 220px; min-width: 0; }
+  .fbar__sel { flex: 0 1 148px; min-width: 0; }
+
+  /* 견적 라인 표 — 셀 안에서 바로 고치는 CPQ 편집기 */
+  .q-lines table { min-width: 880px; }
+  .q-lines .input {
+    min-height: 26px;
+    padding: var(--space-3xs) var(--space-2xs);
+    font-size: var(--text-sm);
+  }
+  .q-lines td { vertical-align: middle; }
+  .q-lines .line-name { font-size: var(--text-sm); color: var(--color-ink); }
+  .q-lines .line-cat { display: block; font-family: var(--font-mono); font-size: 10px; letter-spacing: var(--track-mono); color: var(--color-ink-4); }
+
+  /* 결제·정산 조건 — 줄바꿈을 그대로 살립니다. */
+  .terms-body { font-size: var(--text-sm); color: var(--color-ink-2); white-space: pre-wrap; line-height: var(--leading-body); }
+
+  @media (max-width: 640px) {
+    .fbar__sel { flex: 1 1 44%; }
+  }
+</style>
+</head>
+<body class="app">
+<a class="skip-link" href="#main">본문으로 건너뛰기</a>
+
+<div class="app-main">
+  <main class="app-page" id="main">
+
+    <div class="page-head">
+      <div>
+        <h1 class="page-head__title">견적</h1>
+        <p class="page-head__sub" id="subline"></p>
+      </div>
+      <div class="page-head__acts" id="headActs">
+        <a class="btn btn--sm" href="opportunities.html">영업기회 목록</a>
+      </div>
+    </div>
+
+    <section class="grid grid--4 mb-lg" id="tiles" data-gated aria-label="견적 요약 지표"></section>
+
+    <section aria-label="저장된 리스트뷰" class="mb-md" data-gated>
+      <div class="scroll-x">
+        <div class="seg" id="views"></div>
+      </div>
+      <p class="t-micro mt-xs" id="viewNote"></p>
+    </section>
+
+    <section aria-label="견적 목록">
+      <div class="filterbar" data-gated>
+        <div class="fbar__search">
+          <input class="input" type="search" id="q" placeholder="견적번호 · 영업기회 · 광고주 검색" aria-label="견적번호·영업기회·광고주 검색" autocomplete="off" />
+        </div>
+        <select class="select fbar__sel" id="fStatus" aria-label="상태 필터"></select>
+        <select class="select fbar__sel" id="fOwner" aria-label="작성자 필터"></select>
+        <select class="select fbar__sel" id="fDisc" aria-label="할인율 구간 필터"></select>
+        <button class="btn btn--sm" type="button" id="clearBtn">필터 해제</button>
+        <span class="grow"></span>
+        <span class="filterbar__count" id="countText"></span>
+      </div>
+
+      <div class="list-frame">
+        <div id="tableHost" data-verify="tableHost"></div>
+        <div class="list-foot" data-gated>
+          <span class="t-mono" id="rangeInfo"></span>
+          <div class="pager" id="pager" role="group" aria-label="페이지 이동"></div>
+        </div>
+      </div>
+    </section>
+
+    <footer class="hairline mt-2xl" style="padding-block:var(--space-md)">
+      <p class="t-mono t-faint">CLOSER · 데모 데이터 · 모든 회사·인물·연락처는 가상입니다</p>
+    </footer>
+  </main>
+</div>
+
+<script src="../assets/js/seed.js"></script>
+<script src="../assets/js/util.js"></script>
+<script src="../assets/js/store.js"></script>
+<script src="../assets/js/domain.js"></script>
+<script src="../assets/js/metrics.js"></script>
+<script src="../assets/js/insights.js"></script>
+<script src="../assets/js/ui.js"></script>
+<script src="../assets/js/charts.js"></script>
+<script src="../assets/js/shell.js"></script>
+<script>
+(function () {
+  'use strict';
+  var C = window.CLOSER, U = C.util, db = C.db, D = C.domain, ui = C.ui;
+  C.shell.mount('quotes');
+
+  var $ = U.qs, esc = U.esc;
+  var me = db.me();
+  var canR = D.can('quotes', 'R');
+  var canC = D.can('quotes', 'C');
+  var canU = D.can('quotes', 'U');
+  var PER = 20;
+  var STATUSES = ['작성중', '발송', '수주', '만료'];
+  /** 승인 없이 발행할 수 있는 최대 할인율 — 규칙표의 첫 구간이 기준입니다. */
+  var FREE_DISCOUNT = D.DISCOUNT_RULES[0].max;
+
+  function option(v, label, sel) {
+    return '<option value="' + esc(v) + '"' + (sel ? ' selected' : '') + '>' + esc(label) + '</option>';
+  }
+
+  /* ── 권한 게이트 ────────────────────────────────────────────────────
+     PERMS 매트릭스에서 quotes 읽기 권한이 없는 역할(제작인력·리소스매니저)은
+     목록 자체를 볼 수 없습니다. 버튼만 감추는 것은 권한이 아닙니다. */
+  if (!canR) {
+    U.qsa('[data-gated]').forEach(function (n) { if (n.parentNode) n.parentNode.removeChild(n); });
+    $('#subline').textContent = U.fmtDate(C.today) + ' 기준 · ' + me.role + ' 역할';
+    $('#tableHost').innerHTML = ui.empty(
+      '견적을 볼 수 있는 권한이 없습니다',
+      me.role + ' 역할에는 견적 객체의 읽기 권한이 없습니다. 열람이 필요하면 영업관리자에게 요청하세요.',
+      '<a class="btn btn--sm" href="tickets.html">제작 의뢰로 이동</a>');
+    U.revealAll();
+    return;
+  }
+
+  /* ── 금액 정의 — 이 화면의 모든 숫자는 이 세 함수에서만 나옵니다 ────
+     정가(gross) = 수량 × 단가 × 개월
+     청구액(amount) = 정가 × (1 − 할인율)
+     순매출(net) = 청구액 × 수수료율. 매체비는 취급고로만 잡습니다. */
+  function lineGross(l) { return Math.round((Number(l.qty) || 0) * (Number(l.unitPrice) || 0) * (Number(l.months) || 1)); }
+  function lineAmount(l) { return Math.round(lineGross(l) * (1 - (Number(l.discountPct) || 0) / 100)); }
+  function lineNet(l) {
+    var rate = l.commissionRate === void 0 || l.commissionRate === null ? 15 : Number(l.commissionRate);
+    return Math.round(lineAmount(l) * rate / 100);
+  }
+  function sumLines(lines) {
+    lines = lines || [];
+    var gross = U.sum(lines, lineGross);
+    var total = U.sum(lines, lineAmount);
+    var net = U.sum(lines, lineNet);
+    var maxDisc = 0;
+    lines.forEach(function (l) { maxDisc = Math.max(maxDisc, Number(l.discountPct) || 0); });
+    return {
+      count: lines.length,
+      gross: gross,
+      total: total,
+      discount: gross - total,
+      discountRate: gross > 0 ? ((gross - total) / gross) * 100 : 0,
+      net: net,
+      commissionRate: total > 0 ? (net / total) * 100 : 0,
+      maxDisc: maxDisc
+    };
+  }
+  function linesOf(quoteId) {
+    return U.sortBy(db.where('quoteLines', function (l) { return l.quoteId === quoteId; }), 'id');
+  }
+  function totalsOf(quoteId) { return sumLines(linesOf(quoteId)); }
+
+  /** 라인이 바뀌면 견적 헤더의 합계 필드도 같은 값으로 다시 씁니다. */
+  function syncQuote(quoteId) {
+    var t = totalsOf(quoteId);
+    db.update('quotes', quoteId, { total: t.total, discountTotal: t.discount, maxDiscountPct: t.maxDisc });
+    return t;
+  }
+
+  /* ── 승인 상태 ─────────────────────────────────────────────────────── */
+  function approvalsOf(q) {
+    return U.sortBy(db.where('approvals', function (a) {
+      return a.objectType === 'quotes' && a.objectId === q.id;
+    }), 'submittedAt', 'desc');
+  }
+  function approvalState(q) {
+    var t = totalsOf(q.id);
+    var rule = D.approvalFor(t.maxDisc);
+    var list = approvalsOf(q);
+    var pending = null, approved = null, rejected = null;
+    list.forEach(function (a) {
+      if (a.status === '대기' && !pending) pending = a;
+      if (a.status === '승인' && !approved) approved = a;
+      if (a.status === '반려' && !rejected) rejected = a;
+    });
+    var state = 'none';
+    if (t.maxDisc > FREE_DISCOUNT) {
+      /* 결재가 진행 중이면 그것이 지금의 상태입니다 — 과거 승인 기록보다 앞섭니다. */
+      if (pending) state = 'pending';
+      else if (approved) state = 'ok';
+      else if (rejected) state = 'rejected';
+      else if (q.approvedBy) state = 'ok';
+      else state = 'need';
+    }
+    return { rule: rule, maxDisc: t.maxDisc, state: state, pending: pending, approved: approved, rejected: rejected };
+  }
+
+  /* ── 리스트뷰(세그먼트) ────────────────────────────────────────────── */
+  var VIEWS = {
+    all:      { label: '전체', note: '버전과 상태를 가리지 않은 모든 견적입니다. 이전 버전은 만료 상태로 남습니다.',
+      test: function () { return true; } },
+    mine:     { label: '내 견적', note: '내가 작성자로 지정된 견적입니다.',
+      test: function (q) { return q.ownerId === me.id; } },
+    approval: { label: '승인 필요', note: '할인율이 ' + FREE_DISCOUNT + '%를 넘는데 아직 승인 기록이 없는 견적입니다. 만료된 이전 버전은 제외했습니다.',
+      test: function (q) {
+        if (q.status === '만료') return false;
+        var a = approvalState(q);
+        return a.state === 'need' || a.state === 'rejected';
+      } },
+    sent:     { label: '발송됨', note: '광고주에게 발송한 뒤 아직 수주·만료로 정리되지 않은 견적입니다.',
+      test: function (q) { return q.status === '발송'; } }
+  };
+  var VIEW_KEYS = ['all', 'mine', 'approval', 'sent'];
+
+  var DISC_BANDS = {
+    '':     { label: '할인율 전체', test: function () { return true; } },
+    none:   { label: '할인 없음', test: function (d) { return d === 0; } },
+    low:    { label: '1–' + FREE_DISCOUNT + '% (승인 불필요)', test: function (d) { return d > 0 && d <= FREE_DISCOUNT; } },
+    mid:    { label: (FREE_DISCOUNT + 1) + '–20% (팀장 승인)', test: function (d) { return d > FREE_DISCOUNT && d <= 20; } },
+    high:   { label: '21% 이상 (본부장 승인)', test: function (d) { return d > 20; } }
+  };
+  var DISC_KEYS = ['', 'none', 'low', 'mid', 'high'];
+
+  /* ── 상태 ───────────────────────────────────────────────────────────── */
+  var urlView = U.param('view', '');
+  var state = {
+    view: VIEWS[urlView] ? urlView : 'all',
+    q: U.param('q', '') || '',
+    status: '',
+    owner: '',
+    disc: '',
+    opp: U.param('opp', '') || '',
+    sort: { key: 'createdAt', dir: 'desc' },
+    page: 1,
+    focusSort: false
+  };
+  if (state.opp && !db.get('opportunities', state.opp)) state.opp = '';
+
+  /* ── 표 정의 ────────────────────────────────────────────────────────── */
+  function statusChip(s) {
+    return ui.chip(s, s === '수주' ? 'pos' : s === '발송' ? 'accent' : s === '만료' ? 'idle' : null);
+  }
+  function approvalCell(q) {
+    var a = approvalState(q);
+    if (a.state === 'none') return '<span class="t-faint">' + esc(a.rule.label) + '</span>';
+    var chip = a.state === 'ok' ? ui.chip('승인 완료', 'pos')
+      : a.state === 'pending' ? ui.chip('대기', 'warn')
+      : a.state === 'rejected' ? ui.chip('반려', 'neg')
+      : ui.chip('미요청', 'warn');
+    return '<span class="row gap-2xs row--wrap"><span class="t-small">' + esc(a.rule.label) + '</span>' + chip + '</span>';
+  }
+
+  var cols = [
+    { key: 'no', label: '견적번호', cell: function (q) {
+        return '<span class="t-num t-ink">' + esc(q.no) + '</span>';
+      } },
+    { key: 'opp', label: '영업기회', cell: function (q) {
+        var o = db.get('opportunities', q.oppId);
+        return o ? '<a class="link--quiet" href="opportunity.html?id=' + encodeURIComponent(o.id) + '">' + esc(o.name) + '</a>' : '';
+      } },
+    { key: 'account', label: '광고주', cell: function (q) {
+        var a = db.get('accounts', q.accountId);
+        return a ? '<a class="link--quiet" href="account.html?id=' + encodeURIComponent(a.id) + '">' + esc(a.name) + '</a>' : '';
+      } },
+    { key: 'version', label: '버전', align: 'right', cell: function (q) {
+        return '<span class="t-muted t-num">v' + U.num(q.version || 1) + '</span>';
+      } },
+    { key: 'status', label: '상태', cell: function (q) { return statusChip(q.status); } },
+    { key: 'total', label: '총액', align: 'right', cell: function (q) {
+        return '<span class="t-num t-ink">' + U.won(totalsOf(q.id).total) + '</span>';
+      } },
+    { key: 'discount', label: '할인 총액', align: 'right', cell: function (q) {
+        var t = totalsOf(q.id);
+        return t.discount > 0
+          ? '<span class="t-num t-warn">' + U.won(t.discount) + '</span>'
+          : '<span class="t-faint t-num">0원</span>';
+      } },
+    { key: 'maxDisc', label: '최대 할인율', align: 'right', cell: function (q) {
+        var t = totalsOf(q.id);
+        return '<span class="t-num ' + (t.maxDisc > 20 ? 't-neg' : t.maxDisc > FREE_DISCOUNT ? 't-warn' : 't-muted') + '">' + U.pct(t.maxDisc) + '</span>';
+      } },
+    { key: 'approval', label: '필요 승인', cell: approvalCell },
+    { key: 'validUntil', label: '유효기간', align: 'right', cell: function (q) {
+        var left = U.days(C.today, q.validUntil);
+        var expired = left < 0;
+        var cls = q.status === '수주' || q.status === '만료' ? 't-muted' : expired ? 't-neg' : left <= 7 ? 't-warn' : 't-muted';
+        return '<span class="' + cls + ' t-num">' + U.fmtDate(q.validUntil) + '</span>';
+      } },
+    { key: 'owner', label: '작성자', cell: function (q) { return ui.personCell(db.get('users', q.ownerId)); } },
+    { key: 'createdAt', label: '작성일', align: 'right', cell: function (q) {
+        return '<span class="t-muted t-num">' + U.fmtDate(q.createdAt) + '</span>';
+      } }
+  ];
+
+  function sortVal(q, key) {
+    if (key === 'opp') { var o = db.get('opportunities', q.oppId); return o ? o.name : ''; }
+    if (key === 'account') { var a = db.get('accounts', q.accountId); return a ? a.name : ''; }
+    if (key === 'owner') { var u = db.get('users', q.ownerId); return u ? u.name : ''; }
+    if (key === 'total') return totalsOf(q.id).total;
+    if (key === 'discount') return totalsOf(q.id).discount;
+    if (key === 'maxDisc') return totalsOf(q.id).maxDisc;
+    if (key === 'approval') return approvalState(q).state;
+    if (key === 'status') return STATUSES.indexOf(q.status);
+    var v = q[key];
+    return (v === null || v === void 0) ? '' : v;
+  }
+
+  /* ── 필터링 ─────────────────────────────────────────────────────────── */
+  function filtered() {
+    var term = state.q.trim().toLowerCase();
+    var list = db.where('quotes', function (q) {
+      if (!(VIEWS[state.view] || VIEWS.all).test(q)) return false;
+      if (state.opp && q.oppId !== state.opp) return false;
+      if (state.status && q.status !== state.status) return false;
+      if (state.owner && q.ownerId !== state.owner) return false;
+      if (state.disc && !DISC_BANDS[state.disc].test(totalsOf(q.id).maxDisc)) return false;
+      if (term) {
+        var o = db.get('opportunities', q.oppId), a = db.get('accounts', q.accountId);
+        var hay = [q.no, o ? o.name : '', a ? a.name : ''].join(' ').toLowerCase();
+        if (hay.indexOf(term) === -1) return false;
+      }
+      return true;
+    });
+    return U.sortBy(list, function (q) { return sortVal(q, state.sort.key); }, state.sort.dir);
+  }
+  function hasFilter() { return !!(state.q.trim() || state.status || state.owner || state.disc || state.opp); }
+
+  /* ── 필터바 채우기 ──────────────────────────────────────────────────── */
+  $('#fStatus').innerHTML = option('', '상태 전체') + STATUSES.map(function (s) { return option(s, s); }).join('');
+  $('#fDisc').innerHTML = DISC_KEYS.map(function (k) { return option(k, DISC_BANDS[k].label); }).join('');
+  var ownerUsers = U.sortBy(U.uniq(db.all('quotes').map(function (q) { return q.ownerId; }))
+    .map(function (id) { return db.get('users', id); }).filter(Boolean), 'name');
+  $('#fOwner').innerHTML = option('', '작성자 전체') + ownerUsers.map(function (u) { return option(u.id, u.name); }).join('');
+
+  if (canC) {
+    $('#headActs').insertAdjacentHTML('beforeend',
+      '<button class="btn btn--primary btn--sm" type="button" id="newBtn">새 견적</button>');
+    U.on($('#newBtn'), 'click', function () { openNew(); });
+  }
+
+  /* ── 렌더 ───────────────────────────────────────────────────────────── */
+  function render() {
+    var rows = filtered();
+    var pages = Math.max(1, Math.ceil(rows.length / PER));
+    if (state.page > pages) state.page = pages;
+    var start = (state.page - 1) * PER;
+    var pageRows = rows.slice(start, start + PER);
+
+    renderTiles();
+    renderViews();
+    renderSubline();
+    $('#countText').textContent = U.num(rows.length) + '건' + (hasFilter() ? ' (필터 적용)' : '');
+    $('#clearBtn').disabled = !hasFilter();
+
+    var host = $('#tableHost');
+    host.innerHTML = '';
+    var wrap = ui.table(cols, pageRows, {
+      sort: state.sort,
+      onSort: setSort,
+      onRow: function (q) { openQuote(q.id); },
+      empty: {
+        title: '조건에 맞는 견적이 없습니다',
+        body: hasFilter() ? '검색어나 필터를 넓혀 보세요.' : '영업기회를 골라 새 견적을 만들면 여기에 쌓입니다.'
+      }
+    });
+    if (rows.length) addTotals(wrap, rows, pageRows);
+    host.appendChild(wrap);
+    renderFoot(rows.length, start, pageRows.length, pages);
+
+    if (state.focusSort) {
+      state.focusSort = false;
+      var th = $('#tableHost th[aria-sort]');
+      if (th) th.focus();
+    }
+  }
+
+  function renderTiles() {
+    var all = db.all('quotes');
+    /* 만료는 같은 딜의 이전 버전이므로 비율 지표에서 빼야 중복이 없습니다. */
+    var live = all.filter(function (q) { return q.status !== '만료'; });
+    var issued = all.filter(function (q) { return q.status === '발송' || q.status === '수주'; });
+    var drafts = all.filter(function (q) { return q.status === '작성중'; });
+    var expired = all.length - live.length;
+
+    var pending = db.where('approvals', function (a) { return a.objectType === 'quotes' && a.status === '대기'; });
+    var mine = pending.filter(function (a) { return a.approverId === me.id; });
+
+    var agg = sumLines(db.all('quoteLines').filter(function (l) {
+      var q = db.get('quotes', l.quoteId);
+      return q && q.status !== '만료';
+    }));
+    var maxAvg = live.length ? U.avg(live.map(function (q) { return totalsOf(q.id).maxDisc; })) : null;
+
+    /* 견적을 낸 딜 가운데 이미 마감된 건만 분모에 넣습니다 —
+       진행 중인 딜은 아직 결과가 없으므로 전환율을 왜곡합니다. */
+    var oppIds = U.uniq(all.map(function (q) { return q.oppId; }));
+    var opps = oppIds.map(function (id) { return db.get('opportunities', id); }).filter(Boolean);
+    var closed = opps.filter(function (o) { return !D.isOpen(o); });
+    var wonN = closed.filter(D.isWon).length;
+    var convRate = closed.length ? (wonN / closed.length) * 100 : null;
+
+    var tiles = [
+      { label: '발행 견적', value: U.num(issued.length) + '<small>건</small>',
+        foot: '작성중 ' + U.num(drafts.length) + '건 · 만료 ' + U.num(expired) + '건 · 전체 ' + U.num(all.length) + '건' },
+      { label: '승인 대기', value: U.num(pending.length) + '<small>건</small>',
+        foot: mine.length ? '이 중 내가 결재할 건 ' + U.num(mine.length) + '건' : '내가 결재할 건은 없습니다' },
+      { label: '평균 할인율', value: U.pct(agg.discountRate, 1),
+        foot: '금액 가중 기준 · 견적별 최대 할인율 평균 ' + (maxAvg === null ? '—' : U.pct(maxAvg, 1)) },
+      { label: '견적→수주 전환율', value: convRate === null ? '—' : U.pct(convRate),
+        foot: '견적을 낸 딜 ' + U.num(opps.length) + '건 중 마감된 ' + U.num(closed.length) + '건 기준 · 성사 ' + U.num(wonN) + '건 · ' +
+          '진행 중 ' + U.num(opps.length - closed.length) + '건은 결과가 없어 제외' }
+    ];
+    $('#tiles').innerHTML = tiles.map(function (t) {
+      return '<article class="stat"><p class="stat__label">' + esc(t.label) + '</p>' +
+        '<p class="stat__value">' + t.value + '</p>' +
+        '<p class="stat__foot">' + t.foot + '</p></article>';
+    }).join('');
+  }
+
+  function renderViews() {
+    $('#views').innerHTML = VIEW_KEYS.map(function (k) {
+      var v = VIEWS[k];
+      var n = db.where('quotes', v.test).length;
+      return '<button class="seg__item" type="button" data-view="' + esc(k) + '" aria-pressed="' + (k === state.view) + '">' +
+        esc(v.label) + '<span class="seg__n">' + U.num(n) + '</span></button>';
+    }).join('');
+    var note = (VIEWS[state.view] || VIEWS.all).note;
+    if (state.opp) {
+      var o = db.get('opportunities', state.opp);
+      note += ' 지금은 “' + (o ? o.name : state.opp) + '” 영업기회의 견적만 보고 있습니다.';
+    }
+    $('#viewNote').textContent = note;
+  }
+
+  function renderSubline() {
+    var all = db.all('quotes');
+    var live = all.filter(function (q) { return q.status !== '만료'; });
+    var agg = sumLines(db.all('quoteLines').filter(function (l) {
+      var q = db.get('quotes', l.quoteId);
+      return q && q.status !== '만료';
+    }));
+    $('#subline').innerHTML = U.fmtDate(C.today) + ' 기준 · 견적 <strong>' + U.num(all.length) + '건</strong> · ' +
+      '유효 <strong>' + U.num(live.length) + '건</strong> · 유효 견적 총액 ' + U.won(agg.total) +
+      ' · 예상 순매출 ' + U.won(agg.net);
+  }
+
+  function addTotals(wrap, rows, pageRows) {
+    var tbl = wrap.querySelector('table');
+    if (!tbl) return;
+    var keys = cols.map(function (c) { return c.key; });
+    var lead = keys.indexOf('total');
+    var trail = cols.length - (keys.indexOf('maxDisc') + 1);
+    var agg = sumLines(rows.reduce(function (a, q) { return a.concat(linesOf(q.id)); }, []));
+    var tf = U.el('tfoot', {}, [
+      U.el('tr', {}, [
+        U.el('td', { colspan: lead, class: 't-mono', text: '합계 · ' + U.num(rows.length) + '건' }),
+        U.el('td', { class: 'cell-num', text: U.won(agg.total) }),
+        U.el('td', { class: 'cell-num', text: U.won(agg.discount) }),
+        U.el('td', { class: 'cell-num', text: U.pct(agg.discountRate, 1) }),
+        U.el('td', { colspan: trail, class: 't-micro',
+          text: '이 페이지 ' + U.num(pageRows.length) + '건 · 예상 순매출 ' + U.won(agg.net) })
+      ])
+    ]);
+    tbl.appendChild(tf);
+  }
+
+  function renderFoot(total, start, shown, pages) {
+    $('#rangeInfo').textContent = total
+      ? (U.num(start + 1) + '–' + U.num(start + shown) + ' / ' + U.num(total) + '건')
+      : '표시할 레코드 없음';
+
+    var out = ['<button class="pager__btn" type="button" data-page="' + (state.page - 1) + '"' +
+      (state.page <= 1 ? ' disabled' : '') + '>이전</button>'];
+    var list = [];
+    for (var i = 1; i <= pages; i++) {
+      if (i === 1 || i === pages || Math.abs(i - state.page) <= 1) list.push(i);
+      else if (list[list.length - 1] !== '…') list.push('…');
+    }
+    list.forEach(function (p) {
+      if (p === '…') { out.push('<span class="pager__gap" aria-hidden="true">…</span>'); return; }
+      out.push('<button class="pager__btn" type="button" data-page="' + p + '"' +
+        (p === state.page ? ' aria-current="page"' : '') + ' aria-label="' + p + '페이지">' + p + '</button>');
+    });
+    out.push('<button class="pager__btn" type="button" data-page="' + (state.page + 1) + '"' +
+      (state.page >= pages ? ' disabled' : '') + '>다음</button>');
+    $('#pager').innerHTML = out.join('');
+  }
+
+  function setSort(key) {
+    if (state.sort.key === key) state.sort = { key: key, dir: state.sort.dir === 'asc' ? 'desc' : 'asc' };
+    else state.sort = { key: key, dir: 'asc' };
+    state.page = 1;
+    state.focusSort = true;
+    render();
+  }
+
+  /* ══ 견적 상세 ═══════════════════════════════════════════════════════ */
+  function openQuote(quoteId) {
+    var q = db.get('quotes', quoteId);
+    if (!q) { ui.toast('견적을 찾을 수 없습니다.', { kind: 'neg' }); return; }
+    var host = U.el('div', { class: 'stack gap-md' });
+
+    var layer = ui.modal({
+      title: '견적 ' + q.no, size: 'full', body: host,
+      actions: [{ label: '닫기' }],
+      onClose: function () { syncURL(); render(); }
+    });
+    syncURL(quoteId);
+    paint();
+
+    function paint() {
+      q = db.get('quotes', quoteId);
+      if (!q) { layer.close(); return; }
+      var lines = linesOf(quoteId);
+      var t = sumLines(lines);
+      var a = approvalState(q);
+      var opp = db.get('opportunities', q.oppId);
+      var acc = db.get('accounts', q.accountId);
+      var owner = db.get('users', q.ownerId);
+      var left = U.days(C.today, q.validUntil);
+
+      host.innerHTML = '';
+
+      /* ── 헤더 ─────────────────────────────────────────────────────── */
+      var acts = '';
+      if (canU) {
+        acts += '<label class="row gap-2xs"><span class="sr-only">견적 상태</span>' +
+          '<select class="select" data-sel="status" style="width:auto" aria-label="견적 상태 변경">' +
+          STATUSES.map(function (s) { return option(s, s, s === q.status); }).join('') + '</select></label>';
+        acts += '<button class="btn btn--sm" type="button" data-act="version">새 버전 만들기</button>';
+      }
+      var head = U.el('div', { class: 'rec-highlights' });
+      head.innerHTML =
+        '<div class="rec-top"><div>' +
+          '<p class="rec-type">견적 · 버전 v' + U.num(q.version || 1) + '</p>' +
+          '<p class="rec-name">' + esc(q.no) + ' ' + statusChip(q.status) + '</p>' +
+          '<p class="t-small mt-xs">' +
+            (opp ? '<a class="link" href="opportunity.html?id=' + encodeURIComponent(opp.id) + '">' + esc(opp.name) + '</a>' : '연결된 영업기회 없음') +
+            (acc ? ' · <a class="link--quiet" href="account.html?id=' + encodeURIComponent(acc.id) + '">' + esc(acc.name) + '</a>' : '') +
+          '</p>' +
+        '</div><div class="row gap-xs row--wrap">' + acts + '</div></div>' +
+        '<div class="rec-facts">' +
+          fact('총액', U.won(t.total)) +
+          fact('할인 합계', t.discount > 0 ? U.won(t.discount) + ' (' + U.pct(t.discountRate, 1) + ')' : '없음') +
+          fact('예상 순매출', U.won(t.net)) +
+          fact('평균 수수료율', U.pct(t.commissionRate, 1)) +
+          fact('유효기간', U.fmtDate(q.validUntil) + (q.status === '수주' || q.status === '만료' ? ''
+            : left < 0 ? ' · <span class="t-neg">' + U.num(-left) + '일 지남</span>'
+            : ' · <span class="' + (left <= 7 ? 't-warn' : 't-muted') + '">' + U.num(left) + '일 남음</span>')) +
+        '</div>';
+      host.appendChild(head);
+
+      /* ── 승인 배지 ────────────────────────────────────────────────── */
+      if (a.state !== 'none') {
+        var box = U.el('div');
+        if (a.state === 'need' || a.state === 'rejected') {
+          box.innerHTML = ui.insight({
+            kind: a.state === 'rejected' ? 'risk' : 'warn',
+            label: a.state === 'rejected' ? '반려됨' : '승인 필요',
+            say: '이 견적은 <strong>' + esc(a.rule.label) + '</strong>이 필요합니다.',
+            why: '최대 할인율 ' + esc(U.pct(a.maxDisc)) + ' · 사내 기준은 ' + FREE_DISCOUNT + '%까지 승인 없이 발행할 수 있습니다.' +
+              (a.rejected && a.rejected.comment ? ' 반려 의견: “' + esc(a.rejected.comment) + '”' : ''),
+            actions: canU ? '<button class="btn btn--sm btn--primary" type="button" data-act="approve-req">승인 요청</button>' : ''
+          });
+        } else if (a.state === 'pending') {
+          box.innerHTML = ui.insight({
+            kind: 'act', label: '승인 대기',
+            say: esc(a.pending.step) + ' 요청이 제출되어 <strong>' + esc(db.userName(a.pending.approverId)) + '</strong>님의 결재를 기다리고 있습니다.',
+            why: '할인 기준 ' + esc(a.rule.label) + ' · 최대 할인율 ' + esc(U.pct(a.maxDisc)) +
+              ' · 제출 ' + U.fmtDate(a.pending.submittedAt) + ' (' + U.ago(a.pending.submittedAt) + ')',
+            actions: '<a class="btn btn--sm" href="approvals.html">승인함에서 보기</a>'
+          });
+        } else {
+          var appr = a.approved;
+          box.innerHTML = ui.insight({
+            kind: 'good', label: '승인 완료',
+            say: esc(a.rule.label) + ' 절차가 끝났습니다. 이 할인율로 발행할 수 있습니다.',
+            why: '승인자 ' + esc(db.userName(appr ? appr.approverId : q.approvedBy)) +
+              (appr && appr.decidedAt ? ' · ' + U.fmtDate(appr.decidedAt) : '') +
+              (appr && appr.comment ? ' · “' + esc(appr.comment) + '”' : '')
+          });
+        }
+        host.appendChild(box);
+      }
+
+      /* ── 견적 라인 ────────────────────────────────────────────────── */
+      var panel = U.el('div', { class: 'panel q-lines' });
+      var phead = U.el('div', { class: 'panel__head' });
+      phead.innerHTML = '<h2 class="panel__title">견적 라인 <span class="t-mono">' + U.num(t.count) + '개</span></h2>' +
+        (canU ? '<button class="btn btn--sm" type="button" data-act="add-line">라인 추가</button>' : '');
+      panel.appendChild(phead);
+
+      var lineCols = [
+        { key: 'name', label: '상품', sortable: false, cell: function (l) {
+            var p = db.get('products', l.productId);
+            return '<span class="line-name">' + esc(l.name || (p ? p.name : '상품 미지정')) + '</span>' +
+              '<span class="line-cat">' + esc(p ? p.category + ' · ' + p.unit + ' 단위' : '카탈로그에 없는 상품') + '</span>';
+          } },
+        { key: 'qty', label: '수량', align: 'right', width: '82px', sortable: false, cell: function (l) {
+            return numCell(l, 'qty', 1, 999, 1);
+          } },
+        { key: 'months', label: '개월', align: 'right', width: '82px', sortable: false, cell: function (l) {
+            return numCell(l, 'months', 1, 36, 1);
+          } },
+        { key: 'unitPrice', label: '단가', align: 'right', width: '132px', sortable: false, cell: function (l) {
+            return numCell(l, 'unitPrice', 0, 999999999, 100000);
+          } },
+        { key: 'discountPct', label: '할인율(%)', align: 'right', width: '96px', sortable: false, cell: function (l) {
+            return numCell(l, 'discountPct', 0, 100, 1);
+          } },
+        { key: 'amount', label: '금액', align: 'right', sortable: false, cell: function (l) {
+            return '<span class="t-num t-ink">' + U.won(lineAmount(l)) + '</span>' +
+              (Number(l.discountPct) > 0 ? '<span class="line-cat">정가 ' + U.won(lineGross(l)) + '</span>' : '');
+          } },
+        { key: 'commissionRate', label: '수수료율', align: 'right', sortable: false, cell: function (l) {
+            var r = l.commissionRate === void 0 || l.commissionRate === null ? 15 : l.commissionRate;
+            return '<span class="t-muted t-num">' + U.pct(r) + '</span>';
+          } },
+        { key: 'net', label: '순매출', align: 'right', sortable: false, cell: function (l) {
+            return '<span class="t-num">' + U.won(lineNet(l)) + '</span>';
+          } }
+      ];
+      if (canU) {
+        lineCols.push({ key: 'del', label: '', tight: true, sortable: false, cell: function (l) {
+          return '<button class="btn btn--ghost btn--sm" type="button" data-act="del-line" data-line="' + esc(l.id) + '"' +
+            ' aria-label="' + esc(l.name || '라인') + ' 삭제">삭제</button>';
+        } });
+      }
+
+      var lineWrap = ui.table(lineCols, lines, {
+        compact: true,
+        empty: {
+          title: '견적 라인이 없습니다',
+          body: canU ? '상품을 추가하면 총액과 순매출이 자동으로 계산됩니다.' : '라인을 추가할 권한이 없습니다.'
+        }
+      });
+      if (lines.length) {
+        var ltbl = lineWrap.querySelector('table');
+        var ltf = U.el('tfoot', {}, [
+          U.el('tr', {}, [
+            U.el('td', { colspan: 5, class: 't-mono', text: '합계 · 라인 ' + U.num(t.count) + '개 · 할인 ' + U.won(t.discount) + ' (' + U.pct(t.discountRate, 1) + ')' }),
+            U.el('td', { class: 'cell-num', text: U.won(t.total) }),
+            U.el('td', { class: 'cell-num', text: U.pct(t.commissionRate, 1) }),
+            U.el('td', { class: 'cell-num', text: U.won(t.net) }),
+            canU ? U.el('td', { class: 'cell-tight' }) : null
+          ])
+        ]);
+        ltbl.appendChild(ltf);
+      }
+      panel.appendChild(lineWrap);
+      var pfoot = U.el('div', { class: 'panel__foot' });
+      pfoot.innerHTML = '<p class="t-micro">순매출은 청구액 × 상품별 수수료율입니다. 매체비는 취급고로만 잡고 순매출로 인식하지 않습니다.</p>';
+      panel.appendChild(pfoot);
+      host.appendChild(panel);
+
+      /* ── 결제·정산 조건 ───────────────────────────────────────────── */
+      var terms = U.el('div', { class: 'panel' });
+      terms.innerHTML = '<div class="panel__head"><h2 class="panel__title">결제·정산 조건</h2>' +
+        (canU ? '<button class="btn btn--sm" type="button" data-act="edit-terms">조건 수정</button>' : '') + '</div>' +
+        '<div class="panel__body"><p class="terms-body">' +
+        (q.terms ? esc(q.terms) : '<span class="t-faint">아직 조건을 입력하지 않았습니다.</span>') + '</p></div>';
+      host.appendChild(terms);
+
+      /* ── 기본 정보 ────────────────────────────────────────────────── */
+      var info = U.el('div', { class: 'panel' });
+      var others = U.sortBy(db.where('quotes', function (x) { return x.oppId === q.oppId && x.id !== q.id; }), 'version');
+      info.innerHTML = '<div class="panel__head"><h2 class="panel__title">기본 정보</h2>' +
+        '<span class="t-mono">' + esc(q.id) + '</span></div>' +
+        '<div class="panel__body"><div class="kv">' +
+          kv('영업기회', opp ? '<a class="link--quiet" href="opportunity.html?id=' + encodeURIComponent(opp.id) + '">' + esc(opp.name) + '</a> · ' + esc(opp.stage) : '—') +
+          kv('광고주', acc ? esc(acc.name) + ' · ' + esc(acc.tier) : '—') +
+          kv('작성자', owner ? esc(owner.name) + ' · ' + esc(owner.role) : '—') +
+          kv('작성일', U.fmtDate(q.createdAt) + ' (' + U.ago(q.createdAt) + ')') +
+          kv('유효기간', U.fmtDate(q.validUntil)) +
+          kv('버전', 'v' + U.num(q.version || 1) + (others.length
+            ? ' · 다른 버전 ' + others.map(function (x) { return 'v' + x.version + '(' + x.status + ')'; }).join(', ')
+            : ' · 단일 버전')) +
+          kv('필요 승인 단계', esc(a.rule.label) + ' · 최대 할인율 ' + U.pct(a.maxDisc)) +
+        '</div></div>';
+      host.appendChild(info);
+    }
+
+    function fact(k, v) {
+      return '<div><p class="rec-fact__k">' + esc(k) + '</p><p class="rec-fact__v">' + v + '</p></div>';
+    }
+    function kv(k, v) {
+      return '<div class="kv__row"><span class="kv__k">' + esc(k) + '</span><span class="kv__v">' + v + '</span></div>';
+    }
+    function numCell(l, field, min, max, step) {
+      if (!canU) {
+        var ro = field === 'unitPrice' ? U.won(l[field]) : field === 'discountPct' ? U.pct(l[field] || 0) : U.num(l[field] || 0);
+        return '<span class="t-num">' + ro + '</span>';
+      }
+      var label = { qty: '수량', months: '개월', unitPrice: '단가', discountPct: '할인율' }[field];
+      return '<input class="input input--num" type="number" inputmode="numeric"' +
+        ' value="' + esc(l[field] === void 0 || l[field] === null ? 0 : l[field]) + '"' +
+        ' min="' + min + '" max="' + max + '" step="' + step + '"' +
+        ' data-line="' + esc(l.id) + '" data-f="' + field + '"' +
+        ' aria-label="' + esc(l.name || '라인') + ' ' + label + '" autocomplete="off" />';
+    }
+
+    /* ── 라인 인라인 편집 ─────────────────────────────────────────────── */
+    var FIELD_LABEL = { qty: '수량', months: '개월', unitPrice: '단가', discountPct: '할인율' };
+    U.live(host, 'change', 'input[data-f]', function (e, input) {
+      if (!canU) return;
+      var id = input.dataset.line, field = input.dataset.f;
+      var l = db.get('quoteLines', id);
+      if (!l) return;
+      var val = Math.round(Number(input.value));
+      var min = Number(input.getAttribute('min')), max = Number(input.getAttribute('max'));
+      if (input.value === '' || isNaN(val) || val < min || val > max) {
+        input.classList.add('is-error');
+        ui.toast(FIELD_LABEL[field] + '은(는) ' + U.num(min) + '–' + U.num(max) + ' 사이의 숫자여야 합니다.', { kind: 'neg' });
+        input.value = l[field];
+        return;
+      }
+      if (Number(l[field]) === val) return;
+      var prev = l[field];
+      writeLine(id, field, val);
+      ui.toast('“' + (l.name || '라인') + '”의 ' + FIELD_LABEL[field] + '을(를) 바꿨습니다.', { undo: function () {
+        writeLine(id, field, prev);
+      } });
+    });
+
+    function writeLine(id, field, val) {
+      var patch = {};
+      patch[field] = val;
+      var l = db.get('quoteLines', id);
+      if (!l) return;
+      var next = Object.assign({}, l, patch);
+      patch.amount = lineAmount(next);
+      db.update('quoteLines', id, patch);
+      syncQuote(quoteId);
+      paint();
+      render();
+      var back = host.querySelector('input[data-line="' + id + '"][data-f="' + field + '"]');
+      if (back) back.focus();
+    }
+
+    /* ── 액션 ─────────────────────────────────────────────────────────── */
+    U.live(host, 'change', 'select[data-sel="status"]', function (e, sel) {
+      var q0 = db.get('quotes', quoteId);
+      var prev = q0.status, next = sel.value;
+      if (prev === next) return;
+      db.update('quotes', quoteId, { status: next });
+      paint(); render();
+      ui.toast('견적 상태를 ' + next + '(으)로 바꿨습니다.', { undo: function () {
+        db.update('quotes', quoteId, { status: prev });
+        paint(); render();
+      } });
+    });
+
+    U.live(host, 'click', 'button[data-act]', function (e, btn) {
+      var act = btn.dataset.act;
+      if (act === 'add-line') addLine();
+      else if (act === 'del-line') delLine(btn.dataset.line);
+      else if (act === 'version') newVersion();
+      else if (act === 'approve-req') requestApproval();
+      else if (act === 'edit-terms') editTerms();
+    });
+
+    function addLine() {
+      if (!canU) return;
+      var products = U.sortBy(db.where('products', function (p) { return p.active !== false; }), 'name');
+      if (!products.length) { ui.toast('등록된 광고상품이 없습니다.', { kind: 'neg' }); return; }
+      var pSel = U.el('select', { class: 'select', 'data-autofocus': '' });
+      pSel.innerHTML = products.map(function (p) {
+        return option(p.id, p.name + ' · ' + p.category + ' · ' + U.won(p.listPrice) + '/' + p.unit);
+      }).join('');
+      var qtyIn = U.el('input', { class: 'input input--num', type: 'number', min: '1', max: '999', step: '1', value: '1' });
+      var moIn = U.el('input', { class: 'input input--num', type: 'number', min: '1', max: '36', step: '1', value: '1' });
+      var priceIn = U.el('input', { class: 'input input--num', type: 'number', min: '0', step: '100000', value: String(products[0].listPrice) });
+      var discIn = U.el('input', { class: 'input input--num', type: 'number', min: '0', max: '100', step: '1', value: '0' });
+      var note = U.el('p', { class: 't-micro' });
+
+      function syncNote() {
+        var p = db.get('products', pSel.value) || {};
+        note.textContent = '단가 기본값은 정가입니다. 수수료율 ' + U.pct(p.commissionRate) +
+          (p.unit === '건' ? ' · 건 단위 상품이라 개월은 1로 두는 것이 보통입니다.' : ' · 월 단위 상품입니다.');
+      }
+      pSel.addEventListener('change', function () {
+        var p = db.get('products', pSel.value);
+        if (p) { priceIn.value = String(p.listPrice); moIn.value = p.unit === '건' ? '1' : moIn.value; }
+        syncNote();
+      });
+      syncNote();
+
+      var body = U.el('div', { class: 'stack gap-sm' }, [
+        field('상품', pSel, true),
+        U.el('div', { class: 'grid grid--2' }, [field('수량', qtyIn, true), field('개월', moIn, true)]),
+        U.el('div', { class: 'grid grid--2' }, [field('단가 (원)', priceIn, true), field('할인율 (%)', discIn)]),
+        note
+      ]);
+      var m = ui.modal({
+        title: '견적 라인 추가', body: body,
+        actions: [{ label: '취소' }, { label: '추가', kind: 'primary', onClick: function () { return save(); } }]
+      });
+
+      function save() {
+        var p = db.get('products', pSel.value);
+        var qty = Math.round(Number(qtyIn.value));
+        var mo = Math.round(Number(moIn.value));
+        var price = Math.round(Number(priceIn.value));
+        var disc = Math.round(Number(discIn.value));
+        var ok = mark(qtyIn, !(qty >= 1 && qty <= 999));
+        ok = mark(moIn, !(mo >= 1 && mo <= 36)) && ok;
+        ok = mark(priceIn, !(price >= 0)) && ok;
+        ok = mark(discIn, !(disc >= 0 && disc <= 100)) && ok;
+        if (!p || !ok) {
+          ui.toast('입력을 확인해 주세요. 표시된 항목의 값이 범위를 벗어났습니다.', { kind: 'neg' });
+          return false;
+        }
+        var draft = { qty: qty, months: mo, unitPrice: price, discountPct: disc };
+        var rec = db.insert('quoteLines', {
+          quoteId: quoteId, productId: p.id, name: p.name,
+          qty: qty, months: mo, unitPrice: price, discountPct: disc,
+          amount: lineAmount(draft), commissionRate: p.commissionRate
+        });
+        syncQuote(quoteId);
+        m.close();
+        paint(); render();
+        ui.toast('“' + p.name + '” 라인을 추가했습니다.', { undo: function () {
+          db.remove('quoteLines', rec.id, { noTrash: true });
+          syncQuote(quoteId); paint(); render();
+        } });
+      }
+    }
+
+    function delLine(lineId) {
+      if (!canU) return;
+      var l = db.get('quoteLines', lineId);
+      if (!l) return;
+      var name = l.name || '라인';
+      db.remove('quoteLines', lineId);
+      var t0 = db.trashList()[0];
+      syncQuote(quoteId);
+      paint(); render();
+      ui.toast('“' + name + '” 라인을 삭제했습니다.', { undo: function () {
+        if (t0) db.untrash(t0.id);
+        syncQuote(quoteId); paint(); render();
+      } });
+    }
+
+    function newVersion() {
+      if (!canU) return;
+      var src = db.get('quotes', quoteId);
+      var sameOpp = db.where('quotes', function (x) { return x.oppId === src.oppId; });
+      var maxV = 0;
+      sameOpp.forEach(function (x) { maxV = Math.max(maxV, Number(x.version) || 1); });
+      var t = totalsOf(src.id);
+      var copy = db.insert('quotes', {
+        oppId: src.oppId, accountId: src.accountId, ownerId: src.ownerId,
+        version: maxV + 1, no: nextQuoteNo(),
+        status: '작성중',
+        total: t.total, discountTotal: t.discount, maxDiscountPct: t.maxDisc,
+        createdAt: new Date(C.today).toISOString(),
+        validUntil: U.iso(U.addDays(C.today, 30)),
+        approvedBy: null,
+        terms: src.terms
+      });
+      linesOf(src.id).forEach(function (l) {
+        db.insert('quoteLines', {
+          quoteId: copy.id, productId: l.productId, name: l.name,
+          qty: l.qty, months: l.months, unitPrice: l.unitPrice,
+          discountPct: l.discountPct, amount: lineAmount(l), commissionRate: l.commissionRate
+        }, { silent: true });
+      });
+      var prevStatus = src.status;
+      db.update('quotes', src.id, { status: '만료' });
+      layer.close();
+      openQuote(copy.id);
+      ui.toast('v' + copy.version + ' 버전을 만들고 v' + src.version + '을(를) 만료 처리했습니다.', { undo: function () {
+        linesOf(copy.id).forEach(function (l) { db.remove('quoteLines', l.id, { noTrash: true }); });
+        db.remove('quotes', copy.id, { noTrash: true });
+        db.update('quotes', src.id, { status: prevStatus });
+        render();
+      } });
+    }
+
+    function requestApproval() {
+      if (!canU) return;
+      var q0 = db.get('quotes', quoteId);
+      var a = approvalState(q0);
+      if (a.state !== 'need' && a.state !== 'rejected') {
+        ui.toast('지금은 승인 요청이 필요하지 않습니다.', { kind: 'neg' });
+        return;
+      }
+      var approver = findApprover(a.rule.approver);
+      if (!approver) { ui.toast('결재할 ' + a.rule.approver + '를 찾지 못했습니다.', { kind: 'neg' }); return; }
+      var t = totalsOf(quoteId);
+      var rec = db.insert('approvals', {
+        objectType: 'quotes', objectId: q0.id, oppId: q0.oppId,
+        kind: '할인 승인',
+        step: approver.role === '관리자' ? '2차 (본부장)' : '1차 (팀장)',
+        requesterId: me.id, approverId: approver.id,
+        status: '대기',
+        submittedAt: new Date(C.today).toISOString(),
+        decidedAt: null, comment: '',
+        detail: '할인율 ' + a.maxDisc + '% · 견적 ' + q0.no + ' · 금액 ' + U.won(t.total, { exact: true })
+      });
+      db.notify(approver.id, '승인', me.name + '님이 할인 승인 요청을 제출했습니다. (' + q0.no + ')', 'approvals.html');
+      var ntf = db.all('notifications')[0];
+      paint(); render();
+      ui.toast(approver.name + '님에게 ' + a.rule.label + ' 요청을 보냈습니다.', { undo: function () {
+        db.remove('approvals', rec.id, { noTrash: true });
+        if (ntf) db.remove('notifications', ntf.id, { noTrash: true });
+        paint(); render();
+      } });
+    }
+
+    function editTerms() {
+      if (!canU) return;
+      var q0 = db.get('quotes', quoteId);
+      var ta = U.el('textarea', { class: 'textarea', 'data-autofocus': '', maxlength: '400' });
+      ta.value = q0.terms || '';
+      var body = U.el('div', { class: 'stack gap-sm' }, [
+        field('결제·정산 조건', ta),
+        U.el('p', { class: 't-micro', text: '선금 비율, 잔금 지급 시점, 세금계산서 발행일처럼 계약서에 그대로 옮길 문장을 적습니다.' })
+      ]);
+      var m = ui.modal({
+        title: '결제·정산 조건 수정', body: body,
+        actions: [{ label: '취소' }, { label: '저장', kind: 'primary', onClick: function () {
+          var prev = q0.terms || '';
+          var next = ta.value.trim();
+          if (next === prev) { m.close(); return; }
+          db.update('quotes', quoteId, { terms: next });
+          paint();
+          ui.toast('결제·정산 조건을 수정했습니다.', { undo: function () {
+            db.update('quotes', quoteId, { terms: prev });
+            paint();
+          } });
+        } }]
+      });
+    }
+  }
+
+  /* ── 공용 헬퍼 ──────────────────────────────────────────────────────── */
+  function field(labelText, control, required) {
+    return U.el('label', { class: 'field' }, [
+      U.el('span', { class: 'field__label', html: esc(labelText) + (required ? ' <span class="req">*</span>' : '') }),
+      control,
+      U.el('span', { class: 'field__error', text: '이 항목을 확인해 주세요.' })
+    ]);
+  }
+  function mark(control, bad) {
+    var f = control.closest('.field');
+    if (f) f.classList.toggle('is-invalid', bad);
+    return !bad;
+  }
+  /** 결재자 찾기 — 같은 팀 우선. 내가 이미 그 역할이면 스스로를 결재할 수 없으므로
+      한 단계 위(관리자)로 올립니다. */
+  function findApprover(role) {
+    if (!role) return null;
+    var need = me.role === role ? '관리자' : role;
+    var same = db.first('users', function (u) { return u.role === need && u.teamId === me.teamId && u.id !== me.id && u.active !== false; });
+    return same || db.first('users', function (u) { return u.role === need && u.id !== me.id && u.active !== false; });
+  }
+  /** 다음 견적번호 — 기존 번호의 마지막 숫자 뒤를 이어 붙입니다. */
+  function nextQuoteNo() {
+    var max = 100;
+    db.all('quotes').forEach(function (q) {
+      var m = /(\d+)\s*$/.exec(String(q.no || ''));
+      if (m) max = Math.max(max, Number(m[1]));
+    });
+    return 'Q-' + C.today.getFullYear() + '-' + (max + 1);
+  }
+
+  /* ── 새 견적 ────────────────────────────────────────────────────────── */
+  function openNew(preOppId) {
+    if (!canC) return;
+    var opps = U.sortBy(db.where('opportunities', D.isOpen), 'name');
+    if (!opps.length) {
+      ui.modal({
+        title: '새 견적',
+        body: ui.empty('견적을 붙일 진행 중 영업기회가 없습니다', '먼저 영업기회를 만들고 상품 라인을 넣어 주세요.',
+          '<a class="btn btn--sm btn--primary" href="opportunities.html?new=1">새 영업기회 만들기</a>'),
+        actions: [{ label: '닫기' }]
+      });
+      return;
+    }
+    var oSel = U.el('select', { class: 'select', 'data-autofocus': '' });
+    oSel.innerHTML = opps.map(function (o) {
+      return option(o.id, o.name + ' · ' + o.stage + ' · ' + U.won(o.amount));
+    }).join('');
+    if (preOppId && opps.some(function (o) { return o.id === preOppId; })) oSel.value = preOppId;
+    var validIn = U.el('input', { class: 'input', type: 'date', value: U.iso(U.addDays(C.today, 30)) });
+    var termsIn = U.el('textarea', { class: 'textarea', maxlength: '400' });
+    termsIn.value = '집행 개시 전 50% 선금, 종료 후 30일 이내 잔금. 세금계산서는 매월 말일 발행.';
+    var note = U.el('p', { class: 't-micro' });
+
+    function syncNote() {
+      var o = db.get('opportunities', oSel.value);
+      var lines = o ? db.linesOf(o.id) : [];
+      var t = sumLines(lines);
+      note.innerHTML = lines.length
+        ? '이 영업기회의 상품 라인 <strong>' + U.num(lines.length) + '개</strong>를 그대로 복사합니다. ' +
+          '총액 ' + U.won(t.total) + ' · 최대 할인율 ' + U.pct(t.maxDisc) + ' · 예상 순매출 ' + U.won(t.net) + '.'
+        : '이 영업기회에는 상품 라인이 없습니다. 빈 견적으로 만든 뒤 라인을 직접 추가하게 됩니다.';
+    }
+    oSel.addEventListener('change', syncNote);
+    syncNote();
+
+    var body = U.el('div', { class: 'stack gap-sm' }, [
+      field('영업기회', oSel, true),
+      field('유효기간', validIn, true),
+      field('결제·정산 조건', termsIn),
+      note
+    ]);
+    var m = ui.modal({
+      title: '새 견적', body: body,
+      actions: [{ label: '취소' }, { label: '만들기', kind: 'primary', onClick: function () { return save(); } }]
+    });
+
+    function save() {
+      var o = db.get('opportunities', oSel.value);
+      var ok = mark(validIn, !validIn.value || isNaN(new Date(validIn.value).getTime()));
+      if (!o || !ok) {
+        ui.toast('입력을 확인해 주세요. 유효기간이 날짜 형식이 아닙니다.', { kind: 'neg' });
+        return false;
+      }
+      var maxV = 0;
+      db.where('quotes', function (x) { return x.oppId === o.id; })
+        .forEach(function (x) { maxV = Math.max(maxV, Number(x.version) || 1); });
+      var srcLines = db.linesOf(o.id);
+      var t = sumLines(srcLines);
+      var rec = db.insert('quotes', {
+        oppId: o.id, accountId: o.accountId, ownerId: me.id,
+        version: maxV + 1, no: nextQuoteNo(),
+        status: '작성중',
+        total: t.total, discountTotal: t.discount, maxDiscountPct: t.maxDisc,
+        createdAt: new Date(C.today).toISOString(),
+        validUntil: U.iso(validIn.value),
+        approvedBy: null,
+        terms: termsIn.value.trim()
+      });
+      srcLines.forEach(function (l) {
+        var p = db.get('products', l.productId);
+        db.insert('quoteLines', {
+          quoteId: rec.id, productId: l.productId,
+          name: p ? p.name : '상품 미지정',
+          qty: l.qty, months: l.months, unitPrice: l.unitPrice,
+          discountPct: l.discountPct, amount: lineAmount(l),
+          commissionRate: p ? p.commissionRate : 15
+        }, { silent: true });
+      });
+      m.close();
+      state.view = 'all';
+      state.q = ''; $('#q').value = '';
+      state.status = ''; $('#fStatus').value = '';
+      state.owner = ''; $('#fOwner').value = '';
+      state.disc = ''; $('#fDisc').value = '';
+      state.page = 1;
+      render();
+      openQuote(rec.id);
+      ui.toast('견적 ' + rec.no + '을(를) 만들었습니다.', { undo: function () {
+        linesOf(rec.id).forEach(function (l) { db.remove('quoteLines', l.id, { noTrash: true }); });
+        db.remove('quotes', rec.id, { noTrash: true });
+        render();
+      } });
+    }
+  }
+
+  /* ── 필터바 · 리스트뷰 이벤트 ───────────────────────────────────────── */
+  U.live($('#views'), 'click', '[data-view]', function (e, b) {
+    state.view = b.dataset.view;
+    state.page = 1;
+    render();
+  });
+
+  U.on($('#q'), 'input', U.debounce(function () {
+    state.q = $('#q').value;
+    state.page = 1;
+    render();
+  }, 200));
+
+  ['fStatus', 'fOwner', 'fDisc'].forEach(function (id) {
+    U.on($('#' + id), 'change', function () {
+      state[id === 'fStatus' ? 'status' : id === 'fOwner' ? 'owner' : 'disc'] = this.value;
+      state.page = 1;
+      render();
+    });
+  });
+
+  U.on($('#clearBtn'), 'click', function () {
+    state.q = ''; state.status = ''; state.owner = ''; state.disc = ''; state.opp = '';
+    $('#q').value = ''; $('#fStatus').value = ''; $('#fOwner').value = ''; $('#fDisc').value = '';
+    state.page = 1;
+    render();
+  });
+
+  U.live($('#pager'), 'click', '[data-page]', function (e, b) {
+    if (b.disabled) return;
+    var p = Number(b.dataset.page);
+    if (!p || p === state.page) return;
+    state.page = p;
+    render();
+    var top = $('#tableHost');
+    if (top && top.scrollIntoView) top.scrollIntoView({ block: 'start' });
+  });
+
+  function syncURL(quoteId) {
+    try {
+      var qs = 'view=' + encodeURIComponent(state.view) +
+        (state.opp ? '&opp=' + encodeURIComponent(state.opp) : '') +
+        (quoteId ? '&id=' + encodeURIComponent(quoteId) : '');
+      window.history.replaceState(null, '', 'quotes.html?' + qs);
+    } catch (err) { /* file:// 에서는 주소를 못 바꿀 수 있습니다 — 화면 상태는 그대로 유지됩니다. */ }
+  }
+
+  /* ── 시작 ───────────────────────────────────────────────────────────── */
+  $('#q').value = state.q;
+  render();
+
+  var deepId = U.param('id', '');
+  if (deepId && db.get('quotes', deepId)) openQuote(deepId);
+  else if (U.param('new') === '1' && canC) openNew(state.opp);
+
+  U.revealAll();
+})();
+</script>
+</body>
+</html>

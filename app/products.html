@@ -1,0 +1,795 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>광고상품 · CLOSER</title>
+<meta name="description" content="CLOSER 광고상품과 단가표. 카테고리별 표준 단가와 대행 수수료율을 관리하고, 취급고가 아닌 순매출 기준으로 어떤 상품이 실제로 돈이 되는지 비교합니다." />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=IBM+Plex+Sans+KR:wght@400;500;600&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="../tokens.css" />
+<link rel="stylesheet" href="../assets/css/base.css" />
+<link rel="stylesheet" href="../assets/css/components.css" />
+<link rel="stylesheet" href="../assets/css/app.css" />
+<style>
+  /* 이 화면에만 필요한 조각. 색·간격·반경·이징은 모두 토큰만 사용합니다. */
+  .list-card {
+    border: var(--rule-hair) solid var(--color-rule);
+    border-top: none;
+    border-radius: 0 0 var(--radius-md) var(--radius-md);
+    background: var(--color-surface);
+  }
+  .filterbar .input, .filterbar .select { min-height: 28px; height: 28px; font-size: var(--text-xs); }
+  .filterbar__q { width: min(230px, 48vw); }
+  /* 카테고리 세그먼트는 좁은 화면에서 잘리는 대신 제 안에서 가로로 스크롤합니다. */
+  .seg-scroll { max-width: 100%; overflow-x: auto; overscroll-behavior-x: contain; }
+  .seg-scroll .seg { flex: 0 0 auto; }
+  .pname { white-space: nowrap; font-weight: 500; color: var(--color-ink); }
+  .chart-duo { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: var(--space-lg); align-items: start; }
+  .mediagrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(220px, 100%), 1fr)); gap: var(--space-md); }
+  .mediagrid__g { border: var(--rule-hair) solid var(--color-rule); border-radius: var(--radius-sm); padding: var(--space-sm); background: var(--color-paper-2); }
+  .mediagrid__h { display: flex; align-items: baseline; justify-content: space-between; gap: var(--space-xs); margin-bottom: var(--space-xs); }
+  .mediagrid__row { display: flex; align-items: baseline; justify-content: space-between; gap: var(--space-xs); padding: var(--space-3xs) 0; border-top: var(--rule-hair) solid var(--color-rule); }
+  .drawer-sec { border-top: var(--rule-hair) solid var(--color-rule); padding-top: var(--space-md); }
+  @media (max-width: 900px) { .chart-duo { grid-template-columns: minmax(0, 1fr); } }
+  @media (max-width: 860px) { #tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+  @media (max-width: 640px) {
+    .filterbar { padding-inline: var(--space-sm); }
+    #tiles { grid-template-columns: minmax(0, 1fr); }
+    /* 좁은 화면에서는 패널 머리말이 잘리는 대신 아래로 접힙니다. */
+    .panel__head { flex-wrap: wrap; }
+  }
+</style>
+</head>
+<body class="app">
+<a class="skip-link" href="#main">본문으로 건너뛰기</a>
+
+<div class="app-main">
+  <main class="app-page" id="main">
+
+    <div class="page-head">
+      <div>
+        <h1 class="page-head__title">광고상품과 단가표</h1>
+        <p class="page-head__sub" id="subline"></p>
+      </div>
+      <div class="page-head__acts" id="headActs"></div>
+    </div>
+
+    <section class="grid grid--4" id="tiles" data-verify aria-label="상품 요약 지표"></section>
+
+    <section class="mt-lg" aria-label="상품 목록">
+      <div class="filterbar" id="filterbar">
+        <div class="seg-scroll">
+          <div class="seg" id="cats" role="group" aria-label="카테고리 필터"></div>
+        </div>
+
+        <label class="field" style="flex:0 0 auto">
+          <span class="sr-only">상품 검색</span>
+          <input class="input filterbar__q" type="search" id="q" placeholder="상품명 · 매체 · 단위" autocomplete="off" />
+        </label>
+
+        <label class="check t-nowrap"><input type="checkbox" id="onlyActive" /><span>활성 상품만</span></label>
+        <button class="btn btn--sm btn--ghost" type="button" id="reset">필터 초기화</button>
+        <span class="grow"></span>
+        <span class="filterbar__count" id="count"></span>
+      </div>
+
+      <div class="list-card">
+        <div id="tableHost" data-verify></div>
+      </div>
+      <p class="t-micro mt-xs" id="tableNote"></p>
+    </section>
+
+    <section class="mt-lg chart-duo" aria-label="상품 매출 분석">
+      <div class="panel reveal">
+        <div class="panel__head">
+          <h2 class="panel__title">카테고리별 매출 구성</h2>
+          <div class="seg" id="basis" role="group" aria-label="집계 기준">
+            <button class="seg__item" type="button" data-basis="gross" aria-pressed="true">취급고</button>
+            <button class="seg__item" type="button" data-basis="net" aria-pressed="false">순매출</button>
+          </div>
+        </div>
+        <div class="panel__body" id="mixChart"></div>
+      </div>
+      <div class="panel reveal">
+        <div class="panel__head">
+          <h2 class="panel__title">순매출 기여 상위 10</h2>
+          <span class="t-mono">최근 12개월</span>
+        </div>
+        <div class="panel__body" id="netChart"></div>
+      </div>
+    </section>
+
+    <section class="mt-lg panel reveal" aria-label="순매출과 취급고 비교">
+      <div class="panel__head">
+        <h2 class="panel__title">많이 파는 상품과 돈이 되는 상품</h2>
+        <span class="t-mono">최근 12개월 · 상위 10</span>
+      </div>
+      <div class="panel__body panel__body--flush" id="compareHost"></div>
+      <div class="panel__foot"><p class="t-micro" id="compareNote"></p></div>
+    </section>
+
+    <section class="mt-lg panel reveal" aria-label="매체 채널">
+      <div class="panel__head">
+        <h2 class="panel__title">매체 채널</h2>
+        <span class="t-mono" id="channelNote"></span>
+      </div>
+      <div class="panel__body" id="channelHost"></div>
+    </section>
+
+    <footer class="hairline mt-2xl" style="padding-block:var(--space-md)">
+      <p class="t-mono t-faint">CLOSER · 데모 데이터 · 모든 회사·인물·연락처는 가상입니다</p>
+    </footer>
+  </main>
+</div>
+
+<script src="../assets/js/seed.js"></script>
+<script src="../assets/js/util.js"></script>
+<script src="../assets/js/store.js"></script>
+<script src="../assets/js/domain.js"></script>
+<script src="../assets/js/metrics.js"></script>
+<script src="../assets/js/insights.js"></script>
+<script src="../assets/js/ui.js"></script>
+<script src="../assets/js/charts.js"></script>
+<script src="../assets/js/shell.js"></script>
+<script>
+(function () {
+  'use strict';
+  var C = window.CLOSER, U = C.util, db = C.db, D = C.domain, ui = C.ui, ch = C.charts;
+  C.shell.mount('products');
+
+  var $ = U.qs, esc = U.esc, el = U.el;
+
+  /* 단가표는 견적의 원본이다 — 권한도 견적(quotes) 객체를 따른다.
+     제작인력·리소스매니저는 quotes 권한이 없어 단가를 볼 수만 있다. */
+  var canEdit = D.can('quotes', 'U');
+  var canCreate = D.can('quotes', 'C');
+
+  var CATS = D.MEDIA_GROUPS;
+  var UNITS = ['월', '건'];
+
+  /* ── 상태 — URL 파라미터가 초기값을 결정합니다 ───────────────────── */
+  var initCat = U.param('category', '') || '';
+  if (CATS.indexOf(initCat) === -1) initCat = '';
+  var state = {
+    cat: initCat,
+    q: U.param('q', '') || '',
+    onlyActive: U.param('active', '') === '1',
+    basis: 'gross',
+    sort: { key: 'net', dir: 'desc' }
+  };
+
+  /* ── 기간 창 — 최근 12개월(표·기여도)과 최근 6개월(구성) ─────────── */
+  function monthKeys(n) {
+    var out = [];
+    for (var i = n - 1; i >= 0; i--) {
+      var d = new Date(C.today.getFullYear(), C.today.getMonth() - i, 1);
+      out.push({ key: U.ymOf(d), label: (d.getMonth() + 1) + '월' });
+    }
+    return out;
+  }
+  var M12 = monthKeys(12), M6 = monthKeys(6);
+  var IN12 = {}; M12.forEach(function (m) { IN12[m.key] = true; });
+  var IN6 = {}; M6.forEach(function (m) { IN6[m.key] = true; });
+
+  /* ── 판매 집계 — 성사(계약체결)된 영업기회의 상품 라인만 셉니다 ─────
+     취급고는 라인 금액, 순매출은 domain.netRevenue와 같은 식으로
+     취급고 × 상품 수수료율입니다. */
+  function rateOf(p) { return p && typeof p.commissionRate === 'number' ? p.commissionRate : 15; }
+  function lineGross(l) {
+    if (typeof l.amount === 'number') return l.amount;
+    return Math.round((l.qty || 1) * (l.unitPrice || 0) * (1 - (l.discountPct || 0) / 100) * (l.months || 1));
+  }
+
+  var IDX = null;
+  function buildIndex() {
+    var wonById = {};
+    db.where('opportunities', D.isWon).forEach(function (o) { wonById[o.id] = o; });
+
+    var byProduct = {};
+    var mix = {};   // 'YYYY-MM' → { 카테고리: { gross, net } }
+    M6.forEach(function (m) {
+      mix[m.key] = {};
+      CATS.forEach(function (c) { mix[m.key][c] = { gross: 0, net: 0 }; });
+    });
+
+    db.all('products').forEach(function (p) {
+      byProduct[p.id] = { p: p, count: 0, gross: 0, net: 0, rows: [], months: {} };
+      M12.forEach(function (m) { byProduct[p.id].months[m.key] = { gross: 0, net: 0 }; });
+    });
+
+    db.all('opportunityLines').forEach(function (l) {
+      var o = wonById[l.oppId];
+      if (!o || !o.closeDate) return;
+      var e = byProduct[l.productId];
+      if (!e) return;
+      var key = U.ymOf(o.closeDate);
+      var gross = lineGross(l);
+      var net = Math.round(gross * rateOf(e.p) / 100);
+      if (IN12[key]) {
+        e.count += 1; e.gross += gross; e.net += net;
+        e.rows.push({ line: l, opp: o, gross: gross, net: net });
+        e.months[key].gross += gross; e.months[key].net += net;
+      }
+      if (IN6[key] && mix[key][e.p.category]) {
+        mix[key][e.p.category].gross += gross;
+        mix[key][e.p.category].net += net;
+      }
+    });
+    return { byProduct: byProduct, mix: mix };
+  }
+
+  function rowsAll() {
+    return db.all('products').map(function (p) {
+      var e = IDX.byProduct[p.id] || { count: 0, gross: 0, net: 0, rows: [], months: {} };
+      return {
+        id: p.id, p: p, channel: p.channelId ? db.get('mediaChannels', p.channelId) : null,
+        count: e.count, gross: e.gross, net: e.net
+      };
+    });
+  }
+
+  function channelName(r) { return r.channel ? r.channel.name : '자체 제작'; }
+
+  function matches(r) {
+    if (state.cat && r.p.category !== state.cat) return false;
+    if (state.onlyActive && r.p.active === false) return false;
+    if (state.q) {
+      var t = state.q.trim().toLowerCase();
+      if (t && (r.p.name + ' ' + r.p.category + ' ' + channelName(r) + ' ' + r.p.unit).toLowerCase().indexOf(t) === -1) return false;
+    }
+    return true;
+  }
+
+  var SORTS = {
+    name:       { get: function (r) { return r.p.name; }, dir: 'asc' },
+    category:   { get: function (r) { return CATS.indexOf(r.p.category); }, dir: 'asc' },
+    channel:    { get: function (r) { return channelName(r); }, dir: 'asc' },
+    unit:       { get: function (r) { return r.p.unit; }, dir: 'asc' },
+    listPrice:  { get: function (r) { return r.p.listPrice || 0; }, dir: 'desc' },
+    rate:       { get: function (r) { return rateOf(r.p); }, dir: 'desc' },
+    active:     { get: function (r) { return r.p.active === false ? 0 : 1; }, dir: 'desc' },
+    count:      { get: function (r) { return r.count; }, dir: 'desc' },
+    gross:      { get: function (r) { return r.gross; }, dir: 'desc' },
+    net:        { get: function (r) { return r.net; }, dir: 'desc' }
+  };
+
+  /* ── 카테고리 세그먼트 ───────────────────────────────────────────── */
+  function paintCats() {
+    var all = db.all('products');
+    var items = [{ key: '', label: '전체', n: all.length }].concat(CATS.map(function (c) {
+      return { key: c, label: c, n: all.filter(function (p) { return p.category === c; }).length };
+    }));
+    $('#cats').innerHTML = items.map(function (i) {
+      return '<button class="seg__item t-nowrap" type="button" data-cat="' + esc(i.key) + '" aria-pressed="' +
+        (state.cat === i.key) + '">' + esc(i.label) + ' <span class="t-faint">' + i.n + '</span></button>';
+    }).join('');
+  }
+
+  /* ── 지표 타일 ───────────────────────────────────────────────────── */
+  function renderTiles() {
+    var all = rowsAll();
+    var active = all.filter(function (r) { return r.p.active !== false; });
+    var rates = active.map(function (r) { return rateOf(r.p); });
+    var avgRate = rates.length ? U.avg(rates) : null;
+    var lo = rates.length ? Math.min.apply(null, rates) : null;
+    var hi = rates.length ? Math.max.apply(null, rates) : null;
+
+    var sold = all.filter(function (r) { return r.count > 0; });
+    var top = U.sortBy(sold, 'count', 'desc')[0] || null;
+
+    var netAll = U.sum(all, 'net');
+    var grossAll = U.sum(all, 'gross');
+    var makeNet = U.sum(all.filter(function (r) { return r.p.category === '제작'; }), 'net');
+    var makeGross = U.sum(all.filter(function (r) { return r.p.category === '제작'; }), 'gross');
+
+    var tiles = [
+      { label: '활성 상품', value: U.num(active.length) + '<small>종</small>',
+        foot: '전체 ' + all.length + '종 중 비활성 ' + (all.length - active.length) + '종' },
+      { label: '평균 수수료율', value: avgRate === null ? '—' : U.pct(avgRate, 1),
+        foot: rates.length ? '활성 상품 기준 · 최저 ' + U.pct(lo) + ' · 최고 ' + U.pct(hi) : '활성 상품이 없습니다' },
+      { label: '최근 12개월 최다 판매', value: top ? esc(top.p.name) : '—',
+        foot: top ? top.count + '건 · 취급고 ' + U.won(top.gross) + ' · 순매출 ' + U.won(top.net)
+                  : '최근 12개월에 성사된 상품 라인이 없습니다' },
+      { label: '제작 상품 순매출 비중', value: netAll > 0 ? U.pct((makeNet / netAll) * 100, 1) : '—',
+        foot: grossAll > 0
+          ? '취급고 비중은 ' + U.pct((makeGross / grossAll) * 100, 1) + ' · 제작 순매출 ' + U.won(makeNet)
+          : '최근 12개월 판매 기록이 없습니다' }
+    ];
+    $('#tiles').innerHTML = tiles.map(function (t) {
+      return '<article class="stat reveal"><p class="stat__label">' + esc(t.label) + '</p>' +
+        '<p class="stat__value" style="font-size:' + (t.label === '최근 12개월 최다 판매' ? 'var(--text-md)' : 'var(--text-2xl)') + '">' + t.value + '</p>' +
+        '<p class="stat__foot">' + t.foot + '</p></article>';
+    }).join('');
+  }
+
+  /* ── 표 ──────────────────────────────────────────────────────────── */
+  function switchCell(r) {
+    var on = r.p.active !== false;
+    return '<label class="switch t-nowrap">' +
+      '<input type="checkbox" data-toggle="' + esc(r.id) + '"' + (on ? ' checked' : '') +
+      (canEdit ? '' : ' disabled') + ' aria-label="' + esc(r.p.name) + ' 판매 활성 여부" />' +
+      '<span class="' + (on ? '' : 't-faint') + '">' + (on ? '활성' : '비활성') + '</span></label>';
+  }
+
+  function renderTable(rows) {
+    var cols = [
+      { key: 'name', label: '상품명', cell: function (r) {
+          return '<span class="pname">' + esc(r.p.name) + '</span>';
+        } },
+      { key: 'category', label: '카테고리', cell: function (r) { return ui.chip(r.p.category); } },
+      { key: 'channel', label: '연결 매체', cell: function (r) {
+          return r.channel
+            ? '<span class="t-small">' + esc(r.channel.name) + '</span>'
+            : '<span class="t-faint">자체 제작</span>';
+        } },
+      { key: 'unit', label: '단위', cell: function (r) {
+          return '<span class="t-mono">' + esc(r.p.unit === '월' ? '월 단위' : '건 단위') + '</span>';
+        } },
+      { key: 'listPrice', label: '표준 단가', align: 'right', cell: function (r) { return U.won(r.p.listPrice); } },
+      { key: 'rate', label: '수수료율', align: 'right', cell: function (r) { return U.pct(rateOf(r.p)); } },
+      { key: 'active', label: '판매', cell: switchCell },
+      { key: 'count', label: '12개월 판매', align: 'right', cell: function (r) {
+          return r.count ? '<span class="t-num">' + U.num(r.count) + '건</span>' : '<span class="t-faint">없음</span>';
+        } },
+      { key: 'gross', label: '취급고', align: 'right', cell: function (r) {
+          return r.gross ? U.won(r.gross) : '<span class="t-faint">—</span>';
+        } },
+      { key: 'net', label: '순매출', align: 'right', cell: function (r) {
+          return r.net ? '<strong>' + U.won(r.net) + '</strong>' : '<span class="t-faint">—</span>';
+        } }
+    ];
+
+    var host = $('#tableHost');
+    host.innerHTML = '';
+    host.appendChild(ui.table(cols, rows, {
+      sort: state.sort,
+      onSort: function (key) {
+        if (!SORTS[key]) return;
+        if (state.sort.key === key) state.sort = { key: key, dir: state.sort.dir === 'asc' ? 'desc' : 'asc' };
+        else state.sort = { key: key, dir: SORTS[key].dir };
+        render();
+      },
+      onRow: function (r) { openProduct(r.id); },
+      empty: {
+        title: '조건에 맞는 상품이 없습니다',
+        body: '카테고리를 전체로 바꾸거나 검색어를 지워 보세요.'
+      }
+    }));
+  }
+
+  /* ── 카테고리별 구성(최근 6개월) ─────────────────────────────────── */
+  function renderMix() {
+    var basis = state.basis;
+    var data = M6.map(function (m) {
+      return {
+        label: m.label,
+        parts: CATS.map(function (c, i) {
+          return { name: m.label + ' · ' + c, value: IDX.mix[m.key][c][basis], series: i + 1 };
+        })
+      };
+    });
+    var total = U.sum(data, function (d) { return U.sum(d.parts, 'value'); });
+    if (!total) {
+      $('#mixChart').innerHTML = ui.empty('최근 6개월 판매 기록이 없습니다',
+        '성사된 영업기회에 상품 라인이 붙으면 월별 구성이 그려집니다.');
+      return;
+    }
+    $('#mixChart').innerHTML =
+      ch.stacked(data, { h: 210, fmt: function (v) { return U.won(v, { unit: false }); },
+        label: '최근 6개월 카테고리별 ' + (basis === 'net' ? '순매출' : '취급고') + ' 누적 막대' }) +
+      ch.legend(CATS.map(function (c, i) { return { label: c, series: i + 1 }; })) +
+      '<p class="t-micro mt-xs">성사된 영업기회의 마감월 기준입니다. ' +
+      (basis === 'net'
+        ? '순매출은 취급고에 상품별 수수료율을 곱한 값입니다.'
+        : '취급고는 매체비를 포함한 계약 금액입니다.') +
+      ' 6개월 합계 ' + U.won(total) + '.</p>';
+  }
+
+  /* ── 순매출 기여 상위 10 ─────────────────────────────────────────── */
+  function shortName(s) { return s.length > 7 ? s.slice(0, 6) + '…' : s; }
+
+  function renderNet() {
+    var sold = rowsAll().filter(function (r) { return r.net > 0; });
+    if (!sold.length) {
+      $('#netChart').innerHTML = ui.empty('순매출 기록이 없습니다',
+        '최근 12개월 안에 성사된 상품 라인이 생기면 기여도가 표시됩니다.');
+      $('#compareHost').innerHTML = ui.empty('비교할 판매 기록이 없습니다',
+        '취급고와 순매출의 순위 차이는 판매 기록이 쌓인 뒤에 드러납니다.');
+      $('#compareNote').textContent = '';
+      return;
+    }
+    var byNet = U.sortBy(sold, 'net', 'desc').slice(0, 10);
+    $('#netChart').innerHTML =
+      ch.bars(byNet.map(function (r) {
+        return { label: shortName(r.p.name), value: r.net, kind: r.p.category === '제작' ? 'pos' : null };
+      }), { h: 210, fmt: function (v) { return U.won(v, { unit: false }); }, label: '상품별 최근 12개월 순매출 상위 10' }) +
+      ch.legend([{ label: '제작 상품', color: 'var(--color-pos)' }, { label: '매체 상품', color: 'var(--color-accent)' }]) +
+      '<p class="t-micro mt-xs">막대는 취급고가 아니라 대행 수수료로 남는 순매출입니다. 이름은 표에서 전체를 볼 수 있습니다.</p>';
+
+    renderCompare(sold, byNet);
+  }
+
+  function renderCompare(sold, byNet) {
+    var grossRank = {};
+    U.sortBy(sold, 'gross', 'desc').forEach(function (r, i) { grossRank[r.id] = i + 1; });
+
+    var rows = byNet.map(function (r, i) {
+      return { r: r, netRank: i + 1, grossRank: grossRank[r.id] || null };
+    });
+
+    var host = $('#compareHost');
+    host.innerHTML = '';
+    host.appendChild(ui.table([
+      { key: 'netRank', label: '순매출 순위', align: 'right', sortable: false, cell: function (x) { return '<span class="t-num">' + x.netRank + '</span>'; } },
+      { key: 'name', label: '상품', sortable: false, cell: function (x) {
+          return '<span class="pname">' + esc(x.r.p.name) + '</span> ' + ui.chip(x.r.p.category);
+        } },
+      { key: 'count', label: '판매', align: 'right', sortable: false, cell: function (x) { return U.num(x.r.count) + '건'; } },
+      { key: 'gross', label: '취급고', align: 'right', sortable: false, cell: function (x) { return U.won(x.r.gross); } },
+      { key: 'grossRank', label: '취급고 순위', align: 'right', sortable: false, cell: function (x) {
+          return x.grossRank ? '<span class="t-num">' + x.grossRank + '</span>' : '<span class="t-faint">—</span>';
+        } },
+      { key: 'net', label: '순매출', align: 'right', sortable: false, cell: function (x) { return '<strong>' + U.won(x.r.net) + '</strong>'; } },
+      { key: 'rate', label: '수수료율', align: 'right', sortable: false, cell: function (x) { return U.pct(rateOf(x.r.p)); } },
+      { key: 'gap', label: '순위 차', align: 'right', sortable: false, cell: function (x) {
+          if (!x.grossRank) return '<span class="t-faint">—</span>';
+          var gap = x.grossRank - x.netRank;
+          return gap === 0 ? '<span class="t-muted">동일</span>' : ui.delta(gap, function (n) { return U.num(n) + '계단'; });
+        } }
+    ], rows, {
+      compact: true,
+      onRow: function (x) { openProduct(x.r.id); },
+      empty: { title: '비교할 상품이 없습니다', body: '최근 12개월 판매 기록이 필요합니다.' }
+    }));
+
+    var topGross = U.sortBy(sold, 'gross', 'desc')[0];
+    var topNet = byNet[0];
+    var note;
+    if (topGross && topNet && topGross.id !== topNet.id) {
+      note = '취급고 1위는 ' + topGross.p.name + '(' + U.won(topGross.gross) + ', 수수료율 ' + U.pct(rateOf(topGross.p)) +
+        ')이지만, 순매출 1위는 ' + topNet.p.name + '(' + U.won(topNet.net) + ', 수수료율 ' + U.pct(rateOf(topNet.p)) +
+        ')입니다. 매체비가 큰 상품일수록 취급고는 커지고 남는 돈은 줄어듭니다.';
+    } else if (topNet) {
+      note = topNet.p.name + '이(가) 취급고와 순매출 모두 1위입니다. 취급고 ' + U.won(topNet.gross) +
+        ' · 순매출 ' + U.won(topNet.net) + ' · 수수료율 ' + U.pct(rateOf(topNet.p)) + '.';
+    } else {
+      note = '';
+    }
+    $('#compareNote').textContent = note;
+  }
+
+  /* ── 매체 채널 ───────────────────────────────────────────────────── */
+  function renderChannels() {
+    var chans = db.all('mediaChannels');
+    var prods = db.all('products');
+    if (!chans.length) {
+      $('#channelHost').innerHTML = ui.empty('등록된 매체 채널이 없습니다', '상품에 연결할 매체가 아직 없습니다.');
+      $('#channelNote').textContent = '';
+      return;
+    }
+    var byGroup = U.groupBy(chans, 'group');
+    var order = CATS.filter(function (g) { return byGroup[g] && byGroup[g].length; });
+    Object.keys(byGroup).forEach(function (g) { if (order.indexOf(g) === -1) order.push(g); });
+
+    $('#channelNote').textContent = chans.length + '개 채널 · ' + order.length + '개 그룹';
+    $('#channelHost').innerHTML = '<div class="mediagrid">' + order.map(function (g) {
+      var list = U.sortBy(byGroup[g], 'name');
+      var linked = prods.filter(function (p) { return p.channelId && byGroup[g].some(function (c) { return c.id === p.channelId; }); });
+      var gross = U.sum(linked, function (p) { return (IDX.byProduct[p.id] || { gross: 0 }).gross; });
+      return '<div class="mediagrid__g">' +
+        '<div class="mediagrid__h"><h3 class="t-h5">' + esc(g) + '</h3>' +
+        '<span class="t-mono">' + list.length + '채널</span></div>' +
+        '<p class="t-micro">연결 상품 ' + linked.length + '종 · 최근 12개월 취급고 ' + U.won(gross) + '</p>' +
+        list.map(function (c) {
+          var n = prods.filter(function (p) { return p.channelId === c.id; });
+          var active = n.filter(function (p) { return p.active !== false; }).length;
+          return '<div class="mediagrid__row"><span class="t-small">' + esc(c.name) + '</span>' +
+            '<span class="t-mono t-nowrap">' + (n.length ? active + '/' + n.length + '종' : '미연결') + '</span></div>';
+        }).join('') +
+        '</div>';
+    }).join('') + '</div>' +
+    '<p class="t-micro mt-sm">숫자는 이 채널에 연결된 활성 상품 수 / 전체 상품 수입니다. 제작 상품은 매체에 연결되지 않습니다.</p>';
+  }
+
+  /* ── 상세 드로어 ─────────────────────────────────────────────────── */
+  function openProduct(id) {
+    var p0 = db.get('products', id);
+    if (!p0) return;
+    var body = el('div', { class: 'panel__body stack gap-md' });
+    var dr = ui.drawer({ kicker: '광고상품 · ' + p0.category, title: p0.name, body: body });
+
+    U.live(body, 'click', '[data-save]', function () { save(); });
+    U.live(body, 'click', '[data-cancel]', function () { paint(); });
+
+    paint();
+
+    function paint() {
+      var p = db.get('products', id);
+      if (!p) { dr.close(); return; }
+      var e = IDX.byProduct[p.id] || { count: 0, gross: 0, net: 0, rows: [], months: {} };
+      var avgLine = e.count ? e.gross / e.count : null;
+
+      var head =
+        '<div class="row gap-xs row--wrap">' + ui.chip(p.category) +
+          ui.chip(p.unit === '월' ? '월 단위' : '건 단위', 'idle') +
+          (p.active === false ? ui.chip('판매 중지', 'neg') : ui.chip('판매 중', 'pos')) +
+        '</div>' +
+        '<p class="t-small">' + esc(p.note || '등록된 설명이 없습니다.') + '</p>';
+
+      var kv = '<div class="kv">' +
+        row('연결 매체', p.channelId && db.get('mediaChannels', p.channelId) ? esc(db.get('mediaChannels', p.channelId).name) : '자체 제작 · 매체 없음') +
+        row('표준 단가', U.won(p.listPrice) + ' <span class="t-faint">(' + U.won(p.listPrice, { exact: true }) + ')</span>') +
+        row('대행 수수료율', U.pct(rateOf(p))) +
+        row('최근 12개월 판매', e.count ? U.num(e.count) + '건' : '없음') +
+        row('최근 12개월 취급고', e.gross ? U.won(e.gross) : '—') +
+        row('최근 12개월 순매출', e.net ? U.won(e.net) : '—') +
+        row('건당 평균 취급고', avgLine ? U.won(avgLine) : '—') +
+        '</div>';
+
+      var edit;
+      if (canEdit) {
+        edit = '<div class="drawer-sec stack gap-sm">' +
+          '<h3 class="t-h5">단가와 수수료율</h3>' +
+          '<div class="row gap-sm row--wrap">' +
+            '<label class="field grow"><span class="field__label">표준 단가 (원)</span>' +
+              '<input class="input input--num" type="number" min="0" step="100000" value="' + (p.listPrice || 0) + '" data-f="price" aria-label="표준 단가(원)" /></label>' +
+            '<label class="field grow"><span class="field__label">대행 수수료율 (%)</span>' +
+              '<input class="input input--num" type="number" min="0" max="100" step="0.5" value="' + rateOf(p) + '" data-f="rate" aria-label="대행 수수료율(%)" /></label>' +
+          '</div>' +
+          '<label class="field"><span class="field__label">설명</span>' +
+            '<textarea class="textarea" data-f="note" placeholder="이 상품을 팔 때 알아야 할 조건을 적어 두세요.">' + esc(p.note || '') + '</textarea></label>' +
+          '<p class="field__error" data-err>단가는 0 이상, 수수료율은 0~100 사이여야 합니다.</p>' +
+          '<div class="row gap-xs">' +
+            '<button class="btn btn--primary btn--sm" type="button" data-save>단가 저장</button>' +
+            '<button class="btn btn--sm btn--ghost" type="button" data-cancel>되돌리기</button>' +
+          '</div>' +
+          '<p class="t-micro">저장하면 이후 견적과 이 화면의 순매출 계산에 바로 반영됩니다. 이미 성사된 계약 금액은 바뀌지 않습니다.</p>' +
+        '</div>';
+      } else {
+        edit = '<div class="drawer-sec">' +
+          '<h3 class="t-h5">단가와 수수료율</h3>' +
+          '<p class="t-micro mt-xs">단가와 수수료율은 견적 권한이 있는 역할만 수정할 수 있습니다. 현재 역할(' +
+          esc(db.me() ? db.me().role : '—') + ')에서는 조회만 가능합니다.</p></div>';
+      }
+
+      var series = M12.map(function (m) { return { label: m.label, g: e.months[m.key] ? e.months[m.key].gross : 0, n: e.months[m.key] ? e.months[m.key].net : 0 }; });
+      var hasTrend = series.some(function (x) { return x.g > 0; });
+      var trend = '<div class="drawer-sec"><h3 class="t-h5">월별 판매 추세</h3>' +
+        (hasTrend
+          ? ch.line([
+              { name: '취급고', points: series.map(function (x) { return { label: x.label, value: x.g }; }) },
+              { name: '순매출', series: 4, points: series.map(function (x) { return { label: x.label, value: x.n }; }) }
+            ], { h: 190, area: true, fmt: function (v) { return U.won(v, { unit: false }); }, label: '최근 12개월 월별 취급고와 순매출' }) +
+            ch.legend([{ label: '취급고', color: 'var(--color-accent)' }, { label: '순매출', series: 4 }])
+          : ui.empty('최근 12개월 판매가 없습니다', '이 상품이 포함된 영업기회가 성사되면 추세가 그려집니다.')) +
+        '</div>';
+
+      body.innerHTML = head + kv + edit + trend +
+        '<div class="drawer-sec"><h3 class="t-h5">이 상품이 팔린 영업기회</h3><div data-opp-host></div></div>';
+
+      var oppRows = U.sortBy(e.rows, function (x) { return x.opp.closeDate; }, 'desc').slice(0, 12);
+      U.qs('[data-opp-host]', body).appendChild(ui.table([
+        { key: 'opp', label: '영업기회', sortable: false, cell: function (x) {
+            return '<a class="link--quiet" href="opportunity.html?id=' + encodeURIComponent(x.opp.id) + '">' + esc(x.opp.name) + '</a>';
+          } },
+        { key: 'qty', label: '수량·기간', align: 'right', sortable: false, cell: function (x) {
+            return '<span class="t-mono">' + U.num(x.line.qty || 1) + (p.unit === '월' ? '건 · ' + U.num(x.line.months || 1) + '개월' : '건') + '</span>';
+          } },
+        { key: 'unitPrice', label: '적용 단가', align: 'right', sortable: false, cell: function (x) {
+            var d = x.line.discountPct || 0;
+            return U.won(x.line.unitPrice) + (d ? ' <span class="t-warn t-mono">−' + U.pct(d) + '</span>' : '');
+          } },
+        { key: 'gross', label: '취급고', align: 'right', sortable: false, cell: function (x) { return U.won(x.gross); } },
+        { key: 'net', label: '순매출', align: 'right', sortable: false, cell: function (x) { return '<strong>' + U.won(x.net) + '</strong>'; } },
+        { key: 'closeDate', label: '성사일', align: 'right', sortable: false, cell: function (x) { return U.fmtDate(x.opp.closeDate); } }
+      ], oppRows, {
+        compact: true,
+        empty: { title: '최근 12개월 판매 기록이 없습니다', body: '이 상품을 포함한 영업기회가 성사되면 여기에 쌓입니다.' }
+      }));
+
+      if (e.rows.length > oppRows.length) {
+        U.qs('[data-opp-host]', body).appendChild(
+          el('p', { class: 't-micro mt-xs', text: '최근 12개월 ' + e.rows.length + '건 중 최신 ' + oppRows.length + '건입니다.' }));
+      }
+
+      function row(k, v) { return '<div class="kv__row"><span class="kv__k">' + esc(k) + '</span><span class="kv__v">' + v + '</span></div>'; }
+    }
+
+    function save() {
+      var p = db.get('products', id);
+      if (!p) return;
+      var priceEl = U.qs('[data-f="price"]', body), rateEl = U.qs('[data-f="rate"]', body), noteEl = U.qs('[data-f="note"]', body);
+      var price = Number(priceEl.value), rate = Number(rateEl.value);
+      var errEl = U.qs('[data-err]', body);
+      if (!isFinite(price) || price < 0 || !isFinite(rate) || rate < 0 || rate > 100) {
+        errEl.style.display = 'block';
+        (!isFinite(price) || price < 0 ? priceEl : rateEl).focus();
+        return;
+      }
+      errEl.style.display = '';
+      var prev = { listPrice: p.listPrice, commissionRate: rateOf(p), note: p.note || '' };
+      var next = { listPrice: Math.round(price), commissionRate: rate, note: noteEl.value.trim() };
+      if (prev.listPrice === next.listPrice && prev.commissionRate === next.commissionRate && prev.note === next.note) {
+        ui.toast('바뀐 값이 없습니다.');
+        return;
+      }
+      db.update('products', id, next);
+      render();
+      paint();
+      ui.toast('“' + p.name + '”의 단가 정보를 저장했습니다.', {
+        undo: function () {
+          db.update('products', id, prev);
+          render();
+          paint();
+        }
+      });
+    }
+  }
+
+  /* ── 활성 토글 — 되돌릴 수 있는 변경이라 확인창 대신 토스트로 ────── */
+  function toggleActive(id, on) {
+    var p = db.get('products', id);
+    if (!p) return;
+    db.update('products', id, { active: on });
+    render(id);
+    ui.toast('“' + p.name + '”을(를) ' + (on ? '판매 목록에 다시 올렸습니다.' : '판매 중지로 바꿨습니다.'), {
+      undo: function () {
+        db.update('products', id, { active: !on });
+        render(id);
+      }
+    });
+  }
+
+  /* ── 새 상품 ─────────────────────────────────────────────────────── */
+  function newProductModal() {
+    var name = el('input', { class: 'input', 'data-autofocus': '', placeholder: '예: 리테일 미디어 배너 운영', autocomplete: 'off' });
+    var nameField = el('label', { class: 'field' }, [
+      el('span', { class: 'field__label', html: '상품명 <span class="req">*</span>' }), name,
+      el('span', { class: 'field__error', text: '상품명을 입력해 주세요.' })
+    ]);
+    var category = el('select', { class: 'select', 'aria-label': '카테고리' });
+    CATS.forEach(function (c) { category.appendChild(el('option', { value: c, text: c })); });
+    if (state.cat) category.value = state.cat;
+
+    var channel = el('select', { class: 'select', 'aria-label': '연결 매체' });
+    function fillChannels() {
+      var g = category.value;
+      var list = db.where('mediaChannels', function (c) { return c.group === g; });
+      channel.innerHTML = '';
+      channel.appendChild(el('option', { value: '', text: list.length ? '매체 연결 안 함' : '연결할 매체 없음 (자체 제작)' }));
+      list.forEach(function (c) { channel.appendChild(el('option', { value: c.id, text: c.name })); });
+      channel.disabled = !list.length;
+      if (list.length) channel.value = list[0].id;
+    }
+    fillChannels();
+    U.on(category, 'change', fillChannels);
+
+    var unit = el('select', { class: 'select', 'aria-label': '단위' });
+    UNITS.forEach(function (u) { unit.appendChild(el('option', { value: u, text: u === '월' ? '월 단위' : '건 단위' })); });
+    var price = el('input', { class: 'input input--num', type: 'number', min: '0', step: '100000', value: '5000000', 'aria-label': '표준 단가(원)' });
+    var rate = el('input', { class: 'input input--num', type: 'number', min: '0', max: '100', step: '0.5', value: '15', 'aria-label': '대행 수수료율(%)' });
+    var note = el('textarea', { class: 'textarea', placeholder: '단가 산정 기준이나 판매 조건을 적어 두세요. 비워 두어도 됩니다.' });
+
+    ui.modal({
+      title: '새 광고상품',
+      body: el('div', { class: 'stack gap-sm' }, [
+        nameField,
+        el('div', { class: 'row gap-sm row--wrap' }, [
+          el('label', { class: 'field grow' }, [el('span', { class: 'field__label', text: '카테고리' }), category]),
+          el('label', { class: 'field grow' }, [el('span', { class: 'field__label', text: '연결 매체' }), channel])
+        ]),
+        el('div', { class: 'row gap-sm row--wrap' }, [
+          el('label', { class: 'field grow' }, [el('span', { class: 'field__label', text: '단위' }), unit]),
+          el('label', { class: 'field grow' }, [el('span', { class: 'field__label', text: '표준 단가 (원)' }), price]),
+          el('label', { class: 'field grow' }, [el('span', { class: 'field__label', text: '수수료율 (%)' }), rate])
+        ]),
+        el('label', { class: 'field' }, [el('span', { class: 'field__label', text: '설명' }), note]),
+        el('p', { class: 't-micro', text: '등록한 상품은 곧바로 견적과 영업기회 라인에서 고를 수 있습니다.' })
+      ]),
+      actions: [
+        { label: '취소' },
+        { label: '등록', kind: 'primary', onClick: function () {
+            var nm = name.value.trim();
+            if (!nm) { nameField.classList.add('is-invalid'); name.focus(); return false; }
+            var pr = Number(price.value), rt = Number(rate.value);
+            if (!isFinite(pr) || pr < 0 || !isFinite(rt) || rt < 0 || rt > 100) {
+              ui.toast('단가는 0 이상, 수수료율은 0~100 사이로 입력해 주세요.', { kind: 'neg' });
+              return false;
+            }
+            var rec = db.insert('products', {
+              name: nm, category: category.value, channelId: channel.value || null,
+              unit: unit.value, listPrice: Math.round(pr), commissionRate: rt,
+              active: true, note: note.value.trim()
+            });
+            state.cat = rec.category; state.q = '';
+            $('#q').value = '';
+            paintCats();
+            render();
+            ui.toast('“' + rec.name + '”을(를) 단가표에 추가했습니다.', {
+              undo: function () { db.remove('products', rec.id); render(); paintCats(); }
+            });
+          } }
+      ]
+    });
+  }
+
+  /* ── 렌더 ────────────────────────────────────────────────────────── */
+  function render(focusId) {
+    IDX = buildIndex();
+    var all = rowsAll();
+    var rows = all.filter(matches);
+    var s = SORTS[state.sort.key] || SORTS.net;
+    rows = U.sortBy(rows, s.get, state.sort.dir);
+
+    renderTiles();
+    renderTable(rows);
+    renderMix();
+    renderNet();
+    renderChannels();
+
+    $('#count').textContent = rows.length + '종 / 전체 ' + all.length + '종';
+    $('#tableNote').textContent =
+      '판매 실적은 최근 12개월(' + M12[0].key + ' ~ ' + M12[M12.length - 1].key + ') 안에 성사된 영업기회의 상품 라인을 집계한 값입니다. ' +
+      '취급고는 계약 금액, 순매출은 취급고 × 수수료율입니다.';
+
+    if (focusId) {
+      var n = U.qs('input[data-toggle="' + focusId + '"]', $('#tableHost'));
+      if (n) n.focus();
+    }
+    U.revealAll();
+  }
+
+  /* ── 머리말과 액션 ───────────────────────────────────────────────── */
+  function paintHead() {
+    var all = db.all('products');
+    var active = all.filter(function (p) { return p.active !== false; });
+    var chans = db.all('mediaChannels');
+    $('#subline').innerHTML = '상품 <strong>' + all.length + '종</strong> · 판매 중 ' + active.length + '종 · ' +
+      '매체 채널 ' + chans.length + '개 · 카테고리 ' + CATS.length + '종. ' +
+      '표준 단가는 견적의 출발점이고, 실제 계약가는 할인율만큼 낮아집니다.';
+    $('#headActs').innerHTML =
+      '<a class="btn btn--sm" href="opportunities.html">영업기회</a>' +
+      (canCreate ? '<button class="btn btn--primary btn--sm" type="button" id="newProd">새 상품</button>' : '');
+    if (canCreate) U.on($('#newProd'), 'click', newProductModal);
+  }
+
+  /* ── 이벤트 배선 ─────────────────────────────────────────────────── */
+  U.live($('#cats'), 'click', '[data-cat]', function (e, t) {
+    state.cat = t.dataset.cat;
+    U.qsa('[data-cat]', $('#cats')).forEach(function (b) { b.setAttribute('aria-pressed', String(b === t)); });
+    render();
+  });
+  U.on($('#q'), 'input', U.debounce(function () { state.q = $('#q').value; render(); }, 180));
+  U.on($('#onlyActive'), 'change', function () { state.onlyActive = this.checked; render(); });
+  U.on($('#reset'), 'click', function () {
+    state.cat = ''; state.q = ''; state.onlyActive = false;
+    $('#q').value = ''; $('#onlyActive').checked = false;
+    U.qsa('[data-cat]', $('#cats')).forEach(function (b) { b.setAttribute('aria-pressed', String(b.dataset.cat === '')); });
+    render();
+  });
+  U.live($('#tableHost'), 'change', 'input[data-toggle]', function (e, t) {
+    if (!canEdit) { t.checked = !t.checked; return; }
+    toggleActive(t.dataset.toggle, t.checked);
+  });
+  U.live($('#basis'), 'click', '[data-basis]', function (e, t) {
+    state.basis = t.dataset.basis;
+    U.qsa('[data-basis]', $('#basis')).forEach(function (b) { b.setAttribute('aria-pressed', String(b === t)); });
+    renderMix();
+  });
+
+  /* ── 시작 ────────────────────────────────────────────────────────── */
+  $('#q').value = state.q;
+  $('#onlyActive').checked = state.onlyActive;
+  paintHead();
+  paintCats();
+  render();
+
+  var deepId = U.param('id', '');
+  if (deepId && db.get('products', deepId)) openProduct(deepId);
+  else if (U.param('new', '') === '1' && canCreate) newProductModal();
+})();
+</script>
+</body>
+</html>

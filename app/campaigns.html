@@ -1,0 +1,1007 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>집행 캠페인 성과 · CLOSER</title>
+<meta name="description" content="CLOSER 집행 캠페인 성과. 예산 소진 페이스와 기간 경과율을 나란히 놓고 CTR·CPC·CPA·ROAS를 매체 그룹별로 비교합니다." />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=IBM+Plex+Sans+KR:wght@400;500;600&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="../tokens.css" />
+<link rel="stylesheet" href="../assets/css/base.css" />
+<link rel="stylesheet" href="../assets/css/components.css" />
+<link rel="stylesheet" href="../assets/css/app.css" />
+<style>
+  /* 이 화면에만 필요한 조각. 색·간격·반경·이징은 전부 토큰을 참조합니다. */
+  .list-card {
+    border: var(--rule-hair) solid var(--color-rule);
+    border-top: none;
+    border-radius: 0 0 var(--radius-md) var(--radius-md);
+    background: var(--color-surface);
+  }
+  .pagerbar {
+    display: flex; align-items: center; justify-content: space-between;
+    gap: var(--space-sm); flex-wrap: wrap;
+    padding: var(--space-xs) var(--space-md);
+    border-top: var(--rule-hair) solid var(--color-rule);
+  }
+  .filterbar .input, .filterbar .select { min-height: 28px; height: 28px; font-size: var(--text-xs); }
+  .filterbar .select { max-width: 152px; }
+  .filterbar__q { width: min(220px, 46vw); }
+  /* 좁은 화면에서 세그먼트는 잘리는 대신 제 안에서 가로로 스크롤합니다. */
+  #views { max-width: 100%; overflow-x: auto; overscroll-behavior-x: contain; }
+
+  /* 기간과 페이스 — 표 안에서 절대 줄바꿈되지 않아야 읽힙니다. */
+  .period { white-space: nowrap; font-family: var(--font-mono); font-variant-numeric: tabular-nums; font-size: var(--text-xs); color: var(--color-ink-2); }
+  .period__sub { display: block; font-size: var(--text-2xs); color: var(--color-ink-4); }
+  .pace { display: flex; align-items: center; gap: var(--space-xs); min-width: 142px; }
+  .pace__n { font-family: var(--font-mono); font-variant-numeric: tabular-nums; font-size: var(--text-2xs); color: var(--color-ink-2); white-space: nowrap; }
+  /* 눈금(기간 경과율)은 막대 바깥으로 3px 넘치므로 바를 자르지 않는 겉면에 답니다. */
+  .pace__wrap { flex: 1 1 auto; min-width: 54px; display: block; }
+
+  /* 경고 목록 — 행 전체가 하나의 버튼입니다. */
+  .alert-row {
+    display: flex; align-items: flex-start; gap: var(--space-sm); width: 100%; text-align: left;
+    padding: var(--space-xs) var(--space-md); background: transparent;
+    border: 0; border-bottom: var(--rule-hair) solid var(--color-rule);
+    cursor: pointer; transition: background-color var(--dur-short) var(--ease-out);
+  }
+  .alert-row:last-child { border-bottom: 0; }
+  .alert-row:hover, .alert-row.is-hover { background: var(--color-paper-2); }
+  .alert-row:active { background: var(--color-paper-3); }
+  .alert-row__name { font-size: var(--text-sm); font-weight: 500; color: var(--color-ink); }
+  .alert-row__meta { font-size: var(--text-xs); color: var(--color-ink-3); margin-top: 2px; }
+  .alert-row__flags { display: flex; flex-wrap: wrap; gap: var(--space-2xs); margin-top: var(--space-2xs); }
+  .alert-row__rank { font-family: var(--font-mono); font-size: var(--text-2xs); color: var(--color-ink-4); padding-top: 3px; flex: 0 0 auto; }
+
+  /* 서랍 */
+  .drawer-body { padding: var(--space-md); display: flex; flex-direction: column; gap: var(--space-md); }
+  .perf-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(94px, 1fr)); gap: var(--space-xs); }
+  .perf { border: var(--rule-hair) solid var(--color-rule); border-radius: var(--radius-sm); padding: var(--space-xs); background: var(--color-paper-2); }
+  .perf__k { font-family: var(--font-mono); font-size: var(--text-2xs); letter-spacing: var(--track-mono); text-transform: uppercase; color: var(--color-ink-4); white-space: nowrap; }
+  .perf__v { font-family: var(--font-mono); font-variant-numeric: tabular-nums; font-size: var(--text-sm); color: var(--color-ink); margin-top: 2px; overflow-wrap: anywhere; }
+  .pacebar { display: flex; align-items: center; gap: var(--space-sm); }
+  .pacebar__k { font-family: var(--font-mono); font-size: var(--text-2xs); letter-spacing: var(--track-mono); text-transform: uppercase; color: var(--color-ink-4); width: 74px; flex: 0 0 auto; }
+  .pacebar__v { font-family: var(--font-mono); font-variant-numeric: tabular-nums; font-size: var(--text-xs); color: var(--color-ink-2); width: 54px; text-align: right; flex: 0 0 auto; }
+  .pacebar .meter { flex: 1 1 auto; min-width: 60px; }
+  .sec-title { font-family: var(--font-mono); font-size: var(--text-2xs); letter-spacing: var(--track-mono); text-transform: uppercase; color: var(--color-ink-4); }
+
+  .chart-duo { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: var(--space-lg); align-items: start; }
+  @media (max-width: 900px) { .chart-duo { grid-template-columns: minmax(0, 1fr); } }
+  @media (max-width: 1100px) { #tiles.grid--4 { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+  @media (max-width: 420px) { #tiles.grid--4 { grid-template-columns: minmax(0, 1fr); } }
+  @media (max-width: 640px) {
+    .filterbar { padding-inline: var(--space-sm); }
+    .filterbar .select { max-width: 44vw; }
+    .pagerbar, .alert-row { padding-inline: var(--space-sm); }
+  }
+</style>
+</head>
+<body class="app">
+<a class="skip-link" href="#main">본문으로 건너뛰기</a>
+
+<div class="app-main">
+  <main class="app-page" id="main">
+
+    <div class="page-head">
+      <div>
+        <h1 class="page-head__title">집행 캠페인 성과</h1>
+        <p class="page-head__sub" id="subline"></p>
+      </div>
+      <div class="page-head__acts" id="headActs"></div>
+    </div>
+
+    <section class="grid grid--4" id="tiles" data-gated data-verify aria-label="캠페인 요약 지표"></section>
+
+    <section class="mt-lg" id="alertSec" data-gated aria-label="점검이 필요한 캠페인" hidden>
+      <div class="panel reveal">
+        <div class="panel__head">
+          <h2 class="panel__title">점검이 필요한 캠페인</h2>
+          <span class="t-mono" id="alertCount"></span>
+        </div>
+        <div class="panel__body panel__body--flush" id="alertList"></div>
+        <div class="panel__foot" id="alertFoot"></div>
+      </div>
+    </section>
+
+    <section class="mt-lg" aria-label="캠페인 목록">
+      <div class="filterbar" id="filterbar" data-gated>
+        <div class="seg" id="views" role="group" aria-label="캠페인 보기"></div>
+
+        <label class="field" style="flex:0 0 auto">
+          <span class="sr-only">캠페인 검색</span>
+          <input class="input filterbar__q" type="search" id="q" placeholder="캠페인명 · 광고주 · 매체 · 목표" autocomplete="off" />
+        </label>
+
+        <label class="field" style="flex:0 0 auto">
+          <span class="sr-only">상태</span>
+          <select class="select" id="fStatus"></select>
+        </label>
+        <label class="field" style="flex:0 0 auto">
+          <span class="sr-only">매체 그룹</span>
+          <select class="select" id="fGroup"></select>
+        </label>
+        <label class="field" style="flex:0 0 auto">
+          <span class="sr-only">광고주</span>
+          <select class="select" id="fAccount"></select>
+        </label>
+        <label class="field" style="flex:0 0 auto">
+          <span class="sr-only">담당자</span>
+          <select class="select" id="fOwner"></select>
+        </label>
+
+        <button class="btn btn--sm btn--ghost" type="button" id="reset">필터 초기화</button>
+        <span class="grow"></span>
+        <span class="filterbar__count" id="count"></span>
+      </div>
+
+      <div class="list-card">
+        <div id="tableHost" data-verify></div>
+        <div class="pagerbar" id="pagerHost"></div>
+      </div>
+    </section>
+
+    <section class="mt-lg chart-duo" id="groupCharts" data-gated aria-label="매체 그룹별 성과">
+      <div class="panel reveal">
+        <div class="panel__head">
+          <h2 class="panel__title">매체 그룹별 소진액</h2>
+          <span class="t-mono" id="spendNote"></span>
+        </div>
+        <div class="panel__body" id="spendChart"></div>
+      </div>
+      <div class="panel reveal">
+        <div class="panel__head">
+          <h2 class="panel__title">매체 그룹별 ROAS</h2>
+          <span class="t-mono" id="roasNote"></span>
+        </div>
+        <div class="panel__body" id="roasChart"></div>
+      </div>
+    </section>
+
+    <section class="mt-lg" id="trendSec" data-gated aria-label="월별 집행액">
+      <div class="panel reveal">
+        <div class="panel__head">
+          <h2 class="panel__title">월별 집행액</h2>
+          <span class="t-mono" id="trendNote"></span>
+        </div>
+        <div class="panel__body" id="trendChart"></div>
+      </div>
+    </section>
+
+    <footer class="hairline mt-2xl" style="padding-block:var(--space-md)">
+      <p class="t-mono t-faint">CLOSER · 데모 데이터 · 모든 회사·인물·연락처는 가상입니다</p>
+    </footer>
+  </main>
+</div>
+
+<script src="../assets/js/seed.js"></script>
+<script src="../assets/js/util.js"></script>
+<script src="../assets/js/store.js"></script>
+<script src="../assets/js/domain.js"></script>
+<script src="../assets/js/metrics.js"></script>
+<script src="../assets/js/insights.js"></script>
+<script src="../assets/js/ui.js"></script>
+<script src="../assets/js/charts.js"></script>
+<script src="../assets/js/shell.js"></script>
+<script>
+(function () {
+  'use strict';
+  var C = window.CLOSER, U = C.util, db = C.db, D = C.domain, M = C.metrics, ui = C.ui, ch = C.charts;
+  C.shell.mount('campaigns');
+
+  var $ = U.qs, esc = U.esc, el = U.el;
+  var me = db.me();
+  var PAGE_SIZE = 12;
+  /** 효율 저조 판정선. 대행 수수료와 매체비를 함께 회수하려면 ROAS 180%가 손익분기입니다. */
+  var BREAKEVEN = 180;
+  var TODAY_ISO = U.iso(C.today);
+
+  /* ── 권한 게이트 ──────────────────────────────────────────────────
+     캠페인은 계약 이행 기록입니다. PERMS에서 contracts 읽기 권한이 없는
+     역할(제작인력·리소스매니저)에게는 예산·소진액을 보여주지 않습니다. */
+  var canRead = D.can('contracts', 'R');
+  var canLog = D.can('accounts', 'U');
+
+  if (!canRead) {
+    U.qsa('[data-gated]').forEach(function (n) { if (n.parentNode) n.parentNode.removeChild(n); });
+    $('#subline').textContent = U.fmtDate(C.today) + ' 기준 · ' + me.role + ' 역할';
+    $('#headActs').innerHTML = '<a class="btn btn--sm" href="tickets.html">제작 의뢰</a>';
+    $('#tableHost').innerHTML = ui.empty(
+      '집행 캠페인을 볼 수 있는 권한이 없습니다',
+      me.role + ' 역할에는 계약 객체의 읽기 권한이 없어 예산·소진액·성과 지표를 열람할 수 없습니다. 필요하면 영업관리자에게 요청하세요.',
+      '<a class="btn btn--sm" href="tickets.html">제작 의뢰로 이동</a>');
+    $('#pagerHost').innerHTML = '<span class="t-mono">0 / 0건</span>';
+    U.revealAll();
+    return;
+  }
+
+  /* ── 상태 — URL 파라미터가 초기값을 결정합니다 ────────────────────── */
+  var STATUSES = ['집행중', '예정', '종료'];
+  var FILTER_MAP = { running: '집행중', upcoming: '예정', ended: '종료', '집행중': '집행중', '예정': '예정', '종료': '종료' };
+
+  var state = {
+    status: '', eff: false,
+    q: U.param('q', '') || '',
+    group: U.param('group', '') || '',
+    account: U.param('account', '') || '',
+    owner: U.param('owner', '') || '',
+    sort: { key: 'spend', dir: 'desc' },
+    page: 1
+  };
+  var initFilter = U.param('filter', '') || '';
+  if (initFilter === 'low') state.eff = true;
+  else if (FILTER_MAP[initFilter]) state.status = FILTER_MAP[initFilter];
+
+  /* ── 파생 행 — 타일·표·차트·서랍이 모두 이 배열 하나를 봅니다 ────────
+     모든 파생 지표는 M.campaignPerf()에서만 나옵니다. */
+  function elapsedPct(c) {
+    var span = U.days(c.startDate, c.endDate);
+    if (span <= 0) return c.startDate > TODAY_ISO ? 0 : 100;
+    return U.clamp((U.days(c.startDate, TODAY_ISO) / span) * 100, 0, 100);
+  }
+
+  function build() {
+    return db.all('campaigns').map(function (c) {
+      var perf = M.campaignPerf(c);
+      var mc = db.get('mediaChannels', c.channelId);
+      var acc = db.get('accounts', c.accountId);
+      var elapsed = elapsedPct(c);
+      return {
+        id: c.id, c: c, perf: perf, mc: mc, acc: acc,
+        group: mc ? mc.group : '미지정',
+        chanName: mc ? mc.name : '미지정',
+        accName: acc ? acc.name : '—',
+        ownerName: db.userName(c.ownerId),
+        elapsed: elapsed,
+        gap: perf.pace === null ? null : perf.pace - elapsed,
+        leftDays: U.days(TODAY_ISO, c.endDate)
+      };
+    });
+  }
+  var allRows = build();
+
+  /* ── 필터 ─────────────────────────────────────────────────────────── */
+  function matchesBase(r) {
+    if (state.group && r.group !== state.group) return false;
+    if (state.account && r.c.accountId !== state.account) return false;
+    if (state.owner && r.c.ownerId !== state.owner) return false;
+    if (state.q) {
+      var t = state.q.trim().toLowerCase();
+      if (t) {
+        var hay = (r.c.name + ' ' + r.accName + ' ' + r.chanName + ' ' + r.group + ' ' + r.c.objective + ' ' + r.ownerName).toLowerCase();
+        if (hay.indexOf(t) === -1) return false;
+      }
+    }
+    return true;
+  }
+  function isLow(r) { return r.perf.roas !== null && r.perf.roas < BREAKEVEN; }
+  function viewOk(r) {
+    if (state.eff) return isLow(r);
+    if (state.status) return r.c.status === state.status;
+    return true;
+  }
+
+  /* ── 필터바 채우기 ────────────────────────────────────────────────── */
+  function fillSelect(node, placeholder, values, current) {
+    node.innerHTML = '<option value="">' + esc(placeholder) + '</option>' + values.map(function (v) {
+      return '<option value="' + esc(v.value) + '"' + (current === v.value ? ' selected' : '') + '>' + esc(v.label) + '</option>';
+    }).join('');
+  }
+  /* 매체 그룹은 D.MEDIA_GROUPS의 순서를 따르되, 집행 이력이 하나도 없는
+     그룹은 고르면 늘 0건이므로 목록에 넣지 않습니다. */
+  var liveGroups = D.MEDIA_GROUPS.filter(function (g) {
+    return allRows.some(function (r) { return r.group === g; });
+  });
+  var accountIds = U.uniq(allRows.map(function (r) { return r.c.accountId; }));
+  var ownerIds = U.uniq(allRows.map(function (r) { return r.c.ownerId; }));
+
+  fillSelect($('#fStatus'), '상태 전체', STATUSES.map(function (s) { return { value: s, label: s }; }), state.status);
+  fillSelect($('#fGroup'), '매체 그룹 전체', liveGroups.map(function (g) { return { value: g, label: g }; }), state.group);
+  fillSelect($('#fAccount'), '광고주 전체', U.sortBy(accountIds.map(function (id) {
+    var a = db.get('accounts', id);
+    return { value: id, label: a ? a.name : id };
+  }), 'label'), state.account);
+  fillSelect($('#fOwner'), '담당자 전체', U.sortBy(ownerIds.map(function (id) {
+    return { value: id, label: db.userName(id) };
+  }), 'label'), state.owner);
+  $('#q').value = state.q;
+
+  $('#headActs').innerHTML =
+    '<a class="btn btn--sm" href="accounts.html">광고주 목록</a>' +
+    '<a class="btn btn--sm" href="contracts.html">계약</a>' +
+    '<button class="btn btn--sm btn--primary" type="button" id="csv">CSV 내보내기</button>';
+
+  /* ── 정렬 정의 — 헤더 키 하나당 값 하나 ────────────────────────────── */
+  var SORTS = {
+    name:      { get: function (r) { return r.c.name; }, dir: 'asc' },
+    account:   { get: function (r) { return r.accName; }, dir: 'asc' },
+    channel:   { get: function (r) { return r.group + ' ' + r.chanName; }, dir: 'asc' },
+    objective: { get: function (r) { return r.c.objective; }, dir: 'asc' },
+    period:    { get: function (r) { return r.c.startDate; }, dir: 'desc' },
+    status:    { get: function (r) { return STATUSES.indexOf(r.c.status); }, dir: 'asc' },
+    budget:    { get: function (r) { return r.c.budget || 0; }, dir: 'desc' },
+    spend:     { get: function (r) { return r.c.spend || 0; }, dir: 'desc' },
+    pace:      { get: function (r) { return r.gap === null ? -999 : r.gap; }, dir: 'desc' },
+    impr:      { get: function (r) { return r.c.impressions || 0; }, dir: 'desc' },
+    clicks:    { get: function (r) { return r.c.clicks || 0; }, dir: 'desc' },
+    ctr:       { get: function (r) { return r.perf.ctr === null ? -1 : r.perf.ctr; }, dir: 'desc' },
+    cpc:       { get: function (r) { return r.perf.cpc === null ? -1 : r.perf.cpc; }, dir: 'asc' },
+    conv:      { get: function (r) { return r.c.conversions || 0; }, dir: 'desc' },
+    cpa:       { get: function (r) { return r.perf.cpa === null ? -1 : r.perf.cpa; }, dir: 'asc' },
+    roas:      { get: function (r) { return r.perf.roas === null ? -1 : r.perf.roas; }, dir: 'desc' }
+  };
+
+  /* ── 점검 규칙 — 경고 패널과 서랍 의견이 같은 규칙을 씁니다 ─────────
+     rank가 작을수록 먼저 봐야 하는 문제입니다. */
+  function flagsOf(r) {
+    var out = [], c = r.c, p = r.perf;
+    if (isLow(r)) {
+      out.push({ rank: 0, kind: 'neg', label: '효율 저조',
+        text: 'ROAS ' + U.pct(p.roas) + ' — 손익분기 ' + BREAKEVEN + '% 미만' });
+    }
+    if (c.status !== '예정' && (c.clicks || 0) > 0 && !(c.conversions || 0)) {
+      out.push({ rank: 0, kind: 'neg', label: '전환 없음',
+        text: '클릭 ' + U.num(c.clicks) + '회에 전환 0건' });
+    }
+    if (c.status === '집행중' && r.gap !== null && r.gap > 20) {
+      out.push({ rank: 1, kind: 'warn', label: '과소진',
+        text: '기간 ' + U.pct(r.elapsed) + ' 경과에 예산 ' + U.pct(p.pace) + ' 소진' });
+    }
+    if (c.status === '집행중' && r.gap !== null && r.gap < -20) {
+      out.push({ rank: 2, kind: 'warn', label: '미소진',
+        text: '기간 ' + U.pct(r.elapsed) + ' 경과에 예산 ' + U.pct(p.pace) + '만 소진' });
+    }
+    if (c.status === '종료' && p.pace !== null && p.pace > 105) {
+      out.push({ rank: 2, kind: 'warn', label: '예산 초과',
+        text: '종료 소진율 ' + U.pct(p.pace) + ' · 초과 ' + U.won(c.spend - c.budget) + ' 정산 확인' });
+    }
+    return out;
+  }
+
+  /* ── 매체 그룹 벤치마크 — 의견이 "낮다"고 말하려면 무엇보다 낮은지 ──
+     같은 그룹에서 실제로 소진이 일어난 캠페인들의 중앙값을 기준으로 씁니다. */
+  function median(list) {
+    var v = list.filter(function (x) { return x !== null && !isNaN(x); }).sort(function (a, b) { return a - b; });
+    if (!v.length) return null;
+    var m = Math.floor(v.length / 2);
+    return v.length % 2 ? v[m] : (v[m - 1] + v[m]) / 2;
+  }
+  var benchCache = {};
+  function benchOf(group) {
+    if (benchCache[group]) return benchCache[group];
+    var peers = allRows.filter(function (r) { return r.group === group && (r.c.spend || 0) > 0; });
+    benchCache[group] = {
+      n: peers.length,
+      roas: median(peers.map(function (r) { return r.perf.roas; })),
+      ctr: median(peers.map(function (r) { return r.perf.ctr; })),
+      cpc: median(peers.map(function (r) { return r.perf.cpc; })),
+      cpa: median(peers.map(function (r) { return r.perf.cpa; }))
+    };
+    return benchCache[group];
+  }
+
+  /* ── 렌더 ─────────────────────────────────────────────────────────── */
+  var pageRows = [];
+
+  function render() {
+    allRows = build();
+    benchCache = {};
+    var base = allRows.filter(matchesBase);
+    var rows = base.filter(viewOk);
+    var s = SORTS[state.sort.key] || SORTS.spend;
+    rows = U.sortBy(rows, s.get, state.sort.dir);
+
+    var pages = Math.max(1, Math.ceil(rows.length / PAGE_SIZE));
+    if (state.page > pages) state.page = pages;
+    if (state.page < 1) state.page = 1;
+    var from = (state.page - 1) * PAGE_SIZE;
+    pageRows = rows.slice(from, from + PAGE_SIZE);
+
+    renderSubline();
+    renderViews(base);
+    renderTiles(rows);
+    renderAlerts(base);
+    renderTable(rows);
+    renderPager(rows, from, pages);
+    renderCharts(rows);
+    $('#count').textContent = rows.length + '건 / 전체 ' + allRows.length + '건';
+    U.revealAll();
+  }
+
+  function renderSubline() {
+    var spend = U.sum(allRows, function (r) { return r.c.spend || 0; });
+    var rev = U.sum(allRows, function (r) { return r.c.revenue || 0; });
+    var byStatus = STATUSES.map(function (st) {
+      return st + ' ' + allRows.filter(function (r) { return r.c.status === st; }).length;
+    }).join(' · ');
+    $('#subline').innerHTML = '전체 <strong>' + allRows.length + '건</strong> · ' + esc(byStatus) +
+      ' · 누적 소진 ' + U.won(spend) + ' · 누적 전환매출 ' + U.won(rev);
+  }
+
+  function renderViews(base) {
+    var current = state.eff ? 'low' : (state.status || 'all');
+    var views = [{ key: 'all', label: '전체', n: base.length }];
+    STATUSES.forEach(function (st) {
+      views.push({ key: st, label: st, n: base.filter(function (r) { return r.c.status === st; }).length });
+    });
+    views.push({ key: 'low', label: '효율 저조', n: base.filter(isLow).length });
+    $('#views').innerHTML = views.map(function (v) {
+      return '<button class="seg__item t-nowrap" type="button" data-view="' + esc(v.key) + '" aria-pressed="' +
+        (current === v.key) + '">' + esc(v.label) + ' <span class="t-faint">' + v.n + '</span></button>';
+    }).join('');
+  }
+
+  function renderTiles(rows) {
+    var running = rows.filter(function (r) { return r.c.status === '집행중'; });
+    var budget = U.sum(rows, function (r) { return r.c.budget || 0; });
+    var spend = U.sum(rows, function (r) { return r.c.spend || 0; });
+    var rev = U.sum(rows, function (r) { return r.c.revenue || 0; });
+    var lowN = rows.filter(isLow).length;
+    var runBudget = U.sum(running, function (r) { return r.c.budget || 0; });
+
+    var tiles = [
+      { label: '집행 중', value: U.num(running.length) + '<small>건</small>',
+        foot: running.length ? '집행 예산 ' + U.won(runBudget) + ' · 예정 ' +
+              rows.filter(function (r) { return r.c.status === '예정'; }).length + '건 · 종료 ' +
+              rows.filter(function (r) { return r.c.status === '종료'; }).length + '건'
+            : '지금 조건에 집행 중인 캠페인이 없습니다' },
+      { label: '총 예산', value: U.won(budget),
+        foot: rows.length ? '캠페인 ' + rows.length + '건 · 1건 평균 ' + U.won(budget / rows.length)
+                          : '표시할 캠페인이 없습니다' },
+      { label: '총 소진', value: U.won(spend),
+        foot: budget > 0 ? '예산 대비 ' + U.pct((spend / budget) * 100) + ' · 잔여 ' + U.won(Math.max(0, budget - spend))
+                         : '예산이 등록된 캠페인이 없습니다' },
+      { label: '평균 ROAS', value: spend > 0 ? U.pct((rev / spend) * 100) : '—',
+        foot: spend > 0 ? '소진액 가중 · 손익분기 ' + BREAKEVEN + '% 기준 저조 ' + lowN + '건'
+                        : '소진액이 없어 계산할 수 없습니다' }
+    ];
+    $('#tiles').innerHTML = tiles.map(function (t) {
+      return '<article class="stat reveal"><p class="stat__label">' + esc(t.label) + '</p>' +
+        '<p class="stat__value">' + t.value + '</p>' +
+        '<p class="stat__foot">' + t.foot + '</p></article>';
+    }).join('');
+  }
+
+  /* 효율 저조가 가장 먼저 오도록 rank로 정렬한 뒤 상위 6건만 보여 줍니다. */
+  function renderAlerts(base) {
+    var flagged = base.map(function (r) { return { row: r, flags: flagsOf(r) }; })
+      .filter(function (x) { return x.flags.length; });
+    var sec = $('#alertSec');
+    if (!flagged.length) {
+      sec.hidden = true;
+      $('#alertList').innerHTML = '';
+      $('#alertFoot').innerHTML = '';
+      return;
+    }
+    sec.hidden = false;
+    flagged.sort(function (a, b) {
+      var ra = Math.min.apply(null, a.flags.map(function (f) { return f.rank; }));
+      var rb = Math.min.apply(null, b.flags.map(function (f) { return f.rank; }));
+      if (ra !== rb) return ra - rb;
+      return (b.row.c.spend || 0) - (a.row.c.spend || 0);
+    });
+    var show = flagged.slice(0, 6);
+    $('#alertCount').textContent = flagged.length + '건';
+    $('#alertList').innerHTML = show.map(function (x, i) {
+      var r = x.row;
+      return '<button class="alert-row" type="button" data-open="' + esc(r.id) + '">' +
+        '<span class="alert-row__rank">' + (i + 1) + '</span>' +
+        '<span class="grow">' +
+          '<span class="alert-row__name">' + esc(r.c.name) + '</span>' +
+          '<span class="alert-row__meta">' + esc(r.accName) + ' · ' + esc(r.chanName) +
+            ' · 소진 ' + U.won(r.c.spend) + ' / 예산 ' + U.won(r.c.budget) + '</span>' +
+          '<span class="alert-row__flags">' + x.flags.map(function (f) {
+            return '<span class="chip chip--' + f.kind + '">' + esc(f.label) + '</span>' +
+              '<span class="t-micro">' + esc(f.text) + '</span>';
+          }).join('') + '</span>' +
+        '</span></button>';
+    }).join('');
+    var lowN = flagged.filter(function (x) { return isLow(x.row); }).length;
+    $('#alertFoot').innerHTML = '<p class="t-micro">' +
+      (flagged.length > show.length ? '같은 조건에 걸린 캠페인이 ' + (flagged.length - show.length) + '건 더 있습니다. ' : '') +
+      'ROAS ' + BREAKEVEN + '% 미만 ' + lowN + '건 · 소진 페이스가 기간 경과율과 20%p 넘게 벌어진 건과 예산을 넘겨 종료된 건을 함께 모았습니다.</p>';
+  }
+
+  function paceCell(r) {
+    var p = r.perf;
+    if (p.pace === null) return '<span class="t-faint">예산 미등록</span>';
+    if (r.c.status === '예정') return '<span class="t-faint">집행 전</span>';
+    var gap = r.gap;
+    var kind = gap > 20 ? 'neg' : gap > 10 ? 'warn' : gap < -20 ? 'warn' : 'pos';
+    var fill = U.clamp(p.pace, 0, 100).toFixed(1);
+    var mark = U.clamp(r.elapsed, 0, 100).toFixed(1);
+    return '<span class="pace" title="' + esc('예산 소진 ' + U.pct(p.pace) + ' · 기간 경과 ' + U.pct(r.elapsed) + ' · 눈금은 기간 경과율') + '">' +
+      '<span class="pace__n">' + U.pct(p.pace) + ' / ' + U.pct(r.elapsed) + '</span>' +
+      '<span class="pace__wrap meter__marker" style="--marker:' + mark + '%">' +
+        '<span class="meter meter--' + kind + '" style="display:block">' +
+          '<span class="meter__fill" style="display:block;width:' + fill + '%"></span>' +
+        '</span>' +
+      '</span></span>';
+  }
+
+  function num(v) { return v === null || v === undefined ? '<span class="t-faint">—</span>' : U.num(v); }
+
+  function renderTable(rows) {
+    var cols = [
+      { key: 'name', label: '캠페인', width: '19%', cell: function (r) {
+          return '<span class="t-clamp-2">' + esc(r.c.name) + '</span>';
+        } },
+      { key: 'account', label: '광고주', cell: function (r) {
+          if (!r.acc) return '<span class="t-faint">—</span>';
+          return '<a class="link--quiet t-nowrap" href="account.html?id=' + encodeURIComponent(r.acc.id) + '">' + esc(r.acc.name) + '</a>';
+        } },
+      { key: 'channel', label: '매체', cell: function (r) {
+          return '<span class="t-small t-nowrap">' + esc(r.chanName) + '</span><br>' + ui.chip(r.group, 'idle');
+        } },
+      { key: 'objective', label: '목표', cell: function (r) {
+          return '<span class="t-small t-nowrap">' + esc(r.c.objective) + '</span>';
+        } },
+      { key: 'period', label: '기간', cell: function (r) {
+          var sub = r.c.status === '집행중'
+            ? (r.leftDays >= 0 ? 'D-' + r.leftDays : '오늘 종료')
+            : r.c.status === '예정' ? U.days(TODAY_ISO, r.c.startDate) + '일 후 시작'
+            : U.ago(r.c.endDate) + ' 종료';
+          return '<span class="period">' + esc(U.fmtDate(r.c.startDate) + ' – ' + U.fmtDate(r.c.endDate)) +
+            '<span class="period__sub">' + esc(sub) + '</span></span>';
+        } },
+      { key: 'status', label: '상태', cell: function (r) {
+          return ui.chip(r.c.status, r.c.status === '집행중' ? 'accent' : r.c.status === '예정' ? 'idle' : null);
+        } },
+      { key: 'budget', label: '예산', align: 'right', cell: function (r) { return U.won(r.c.budget); } },
+      { key: 'spend', label: '소진', align: 'right', cell: function (r) { return U.won(r.c.spend); } },
+      { key: 'pace', label: '소진 페이스', cell: paceCell },
+      { key: 'impr', label: '노출', align: 'right', cell: function (r) { return num(r.c.impressions); } },
+      { key: 'clicks', label: '클릭', align: 'right', cell: function (r) { return num(r.c.clicks); } },
+      { key: 'ctr', label: 'CTR', align: 'right', cell: function (r) {
+          return r.perf.ctr === null ? '<span class="t-faint">—</span>' : U.pct(r.perf.ctr, 2);
+        } },
+      { key: 'cpc', label: 'CPC', align: 'right', cell: function (r) {
+          return r.perf.cpc === null ? '<span class="t-faint">—</span>' : U.won(r.perf.cpc);
+        } },
+      { key: 'conv', label: '전환', align: 'right', cell: function (r) { return num(r.c.conversions); } },
+      { key: 'cpa', label: 'CPA', align: 'right', cell: function (r) {
+          return r.perf.cpa === null ? '<span class="t-faint">—</span>' : U.won(r.perf.cpa);
+        } },
+      { key: 'roas', label: 'ROAS', align: 'right', cell: function (r) {
+          if (r.perf.roas === null) return '<span class="t-faint">—</span>';
+          return '<span class="' + (r.perf.roas < BREAKEVEN ? 't-neg' : '') + '">' + U.pct(r.perf.roas) + '</span>';
+        } }
+    ];
+
+    var host = $('#tableHost');
+    host.innerHTML = '';
+    host.appendChild(ui.table(cols, pageRows, {
+      sort: state.sort,
+      onSort: function (key) {
+        if (!SORTS[key]) return;
+        if (state.sort.key === key) state.sort = { key: key, dir: state.sort.dir === 'asc' ? 'desc' : 'asc' };
+        else state.sort = { key: key, dir: SORTS[key].dir };
+        state.page = 1;
+        render();
+      },
+      onRow: function (r) { openDrawer(r.id); },
+      empty: state.eff
+        ? { title: 'ROAS ' + BREAKEVEN + '% 미만인 캠페인이 없습니다',
+            body: '지금 조건에서는 손익분기 아래로 떨어진 집행이 없습니다. 다른 보기로 바꿔 전체 성과를 확인해 보세요.' }
+        : { title: '조건에 맞는 캠페인이 없습니다',
+            body: '검색어를 줄이거나 매체 그룹·광고주 필터를 넓혀 보세요.' }
+    }));
+  }
+
+  function renderPager(rows, from, pages) {
+    var to = Math.min(rows.length, from + PAGE_SIZE);
+    var nums = '';
+    var lo = Math.max(1, state.page - 2), hi = Math.min(pages, lo + 4);
+    lo = Math.max(1, hi - 4);
+    if (lo > 1) nums += '<button class="pager__btn" type="button" data-page="1">1</button><span class="pager__btn t-faint">…</span>';
+    for (var i = lo; i <= hi; i++) {
+      nums += '<button class="pager__btn" type="button" data-page="' + i + '"' +
+        (i === state.page ? ' aria-current="page"' : '') + '>' + i + '</button>';
+    }
+    if (hi < pages) nums += '<span class="pager__btn t-faint">…</span><button class="pager__btn" type="button" data-page="' + pages + '">' + pages + '</button>';
+
+    $('#pagerHost').innerHTML =
+      '<span class="t-mono">' + (rows.length ? (from + 1) + '–' + to : 0) + ' / ' + rows.length + '건</span>' +
+      '<span class="pager">' +
+        '<button class="btn btn--sm btn--ghost" type="button" data-page="' + (state.page - 1) + '"' +
+          (state.page <= 1 ? ' disabled' : '') + '>이전</button>' +
+        nums +
+        '<button class="btn btn--sm btn--ghost" type="button" data-page="' + (state.page + 1) + '"' +
+          (state.page >= pages ? ' disabled' : '') + '>다음</button>' +
+      '</span>';
+  }
+
+  /* ── 차트 ─────────────────────────────────────────────────────────── */
+  function renderCharts(rows) {
+    var withSpend = rows.filter(function (r) { return (r.c.spend || 0) > 0; });
+    var groups = liveGroups.filter(function (g) {
+      return rows.some(function (r) { return r.group === g; });
+    });
+
+    if (!withSpend.length || !groups.length) {
+      $('#spendChart').innerHTML = ui.empty('소진액이 없습니다', '집행이 시작된 캠페인이 조건에 포함되면 매체 그룹별 소진액이 그려집니다.');
+      $('#roasChart').innerHTML = ui.empty('ROAS를 계산할 수 없습니다', '소진액이 0이면 ROAS는 정의되지 않습니다. 집행이 시작되면 채워집니다.');
+      $('#spendNote').textContent = '';
+      $('#roasNote').textContent = '';
+    } else {
+      var byGroup = groups.map(function (g) {
+        var here = rows.filter(function (r) { return r.group === g; });
+        var sp = U.sum(here, function (r) { return r.c.spend || 0; });
+        var rv = U.sum(here, function (r) { return r.c.revenue || 0; });
+        return { label: g, n: here.length, spend: sp, revenue: rv, roas: sp > 0 ? (rv / sp) * 100 : null };
+      });
+      var totalSpend = U.sum(byGroup, 'spend');
+      var top = U.sortBy(byGroup, 'spend', 'desc')[0];
+
+      $('#spendChart').innerHTML =
+        ch.bars(byGroup.map(function (g) { return { label: g.label, value: g.spend }; }),
+          { h: 200, fmt: function (v) { return U.won(v, { unit: false }); }, label: '매체 그룹별 소진액' }) +
+        '<p class="t-micro mt-xs">' + byGroup.map(function (g) {
+          return esc(g.label) + ' ' + g.n + '건 ' + (totalSpend > 0 ? U.pct((g.spend / totalSpend) * 100) : '—');
+        }).join(' · ') + '</p>';
+      $('#spendNote').textContent = '소진 합계 ' + U.won(totalSpend);
+
+      var roasData = byGroup.map(function (g) {
+        return { label: g.label, value: g.roas === null ? 0 : g.roas,
+          kind: g.roas !== null && g.roas < BREAKEVEN ? 'neg' : null };
+      });
+      var best = U.sortBy(byGroup.filter(function (g) { return g.roas !== null; }), 'roas', 'desc')[0];
+      var worst = U.sortBy(byGroup.filter(function (g) { return g.roas !== null; }), 'roas')[0];
+      $('#roasChart').innerHTML =
+        ch.bars(roasData, { h: 200, fmt: function (v) { return U.pct(v); }, target: BREAKEVEN, label: '매체 그룹별 ROAS' }) +
+        '<p class="t-micro mt-xs">막대는 그룹 안의 전환매출 합계를 소진액 합계로 나눈 값입니다. 점선은 손익분기 ' + BREAKEVEN + '%입니다. ' +
+        (best && worst && best.label !== worst.label
+          ? esc(best.label) + ' ' + U.pct(best.roas) + ' 대 ' + esc(worst.label) + ' ' + U.pct(worst.roas) + '로 가장 크게 벌어집니다.'
+          : best ? esc(best.label) + ' ' + U.pct(best.roas) + ' 한 그룹만 계산할 수 있습니다.' : '') + '</p>';
+      $('#roasNote').textContent = top ? '소진 1위 ' + top.label : '';
+    }
+
+    /* 월별 집행액 — 캠페인 소진액을 집행 일수에 비례해 달에 나눕니다. */
+    var series = monthlySpend(rows, 12);
+    var hasAny = series.some(function (x) { return x.value > 0; });
+    if (!hasAny) {
+      $('#trendChart').innerHTML = ui.empty('월별 집행액이 없습니다', '소진액이 기록된 캠페인이 조건에 포함되면 최근 12개월 추이가 그려집니다.');
+      $('#trendNote').textContent = '';
+    } else {
+      var peak = U.sortBy(series.slice(), 'value', 'desc')[0];
+      var thisMonth = series[series.length - 1];
+      var prevMonth = series[series.length - 2];
+      $('#trendChart').innerHTML =
+        ch.line([{ name: '집행액', points: series }],
+          { h: 200, area: true, fmt: function (v) { return U.won(v, { unit: false }); }, label: '최근 12개월 월별 집행액' }) +
+        '<p class="t-micro mt-xs">각 캠페인의 소진액을 집행 일수에 비례해 달에 나눈 값입니다. ' +
+        '최대는 ' + esc(peak.label) + ' ' + U.won(peak.value) + ', 이번 달은 ' + U.won(thisMonth.value) +
+        (prevMonth && prevMonth.value > 0
+          ? '으로 지난달 대비 ' + U.signed(((thisMonth.value - prevMonth.value) / prevMonth.value) * 100, function (v) { return U.pct(v); }) + '입니다.'
+          : '입니다.') + ' 이번 달은 아직 진행 중이라 월말까지 더 늘어납니다.</p>';
+      $('#trendNote').textContent = '최근 12개월 · 일할 배분';
+    }
+  }
+
+  function monthlySpend(rows, count) {
+    var out = [];
+    for (var i = count - 1; i >= 0; i--) {
+      var d0 = new Date(C.today.getFullYear(), C.today.getMonth() - i, 1);
+      var d1 = new Date(C.today.getFullYear(), C.today.getMonth() - i + 1, 0);
+      var lo = U.iso(d0), hi = U.iso(d1), total = 0;
+      rows.forEach(function (r) {
+        var c = r.c;
+        if (!(c.spend > 0)) return;
+        var span = U.days(c.startDate, c.endDate) + 1;
+        if (span <= 0) return;
+        var from = c.startDate > lo ? c.startDate : lo;
+        var to = c.endDate < hi ? c.endDate : hi;
+        var overlap = U.days(from, to) + 1;
+        if (overlap <= 0) return;
+        total += c.spend * (overlap / span);
+      });
+      out.push({ label: (d0.getMonth() + 1) + '월', value: Math.round(total) });
+    }
+    return out;
+  }
+
+  /* ── 개선 의견 — 이 화면의 규칙으로 만든 문장. 근거 수치를 반드시 붙입니다.
+        심각도 순으로 정렬해 위에서 2~3개만 씁니다. ─────────────────── */
+  function opinionsFor(r) {
+    var c = r.c, p = r.perf, b = benchOf(r.group), out = [];
+
+    if (p.roas === null) {
+      out.push({ sev: 2, kind: 'act', label: '집행 전',
+        say: '아직 소진액이 없어 효율 지표를 계산할 수 없습니다.',
+        why: U.fmtDate(c.startDate) + ' 시작까지 ' + Math.max(0, U.days(TODAY_ISO, c.startDate)) + '일 남았고, 배정된 예산은 ' +
+             U.won(c.budget) + '입니다. 시작 후 첫 주 소진 페이스부터 확인하세요.' });
+    } else if (p.roas < BREAKEVEN) {
+      out.push({ sev: 0, kind: 'risk', label: '효율',
+        say: 'ROAS ' + U.pct(p.roas) + '로 손익분기 ' + BREAKEVEN + '%를 밑돕니다. 소진 속도를 줄이거나 소재를 교체할 시점입니다.',
+        why: '소진 ' + U.won(c.spend) + '에 전환매출 ' + U.won(c.revenue) + ' — 차액 ' + U.won(c.revenue - c.spend) + '.' });
+    } else if (b.roas !== null && b.n > 1 && p.roas < b.roas) {
+      out.push({ sev: 1, kind: 'warn', label: '효율',
+        say: 'ROAS ' + U.pct(p.roas) + '는 손익분기는 넘겼지만 같은 ' + r.group + ' 그룹 중앙값 ' + U.pct(b.roas) + '에는 못 미칩니다.',
+        why: '비교 대상은 소진이 일어난 ' + r.group + ' 캠페인 ' + b.n + '건입니다. 예산을 늘리기 전에 그룹 평균까지 끌어올리는 편이 안전합니다.' });
+    } else if (b.roas !== null && b.n > 1) {
+      out.push({ sev: 3, kind: 'good', label: '효율',
+        say: 'ROAS ' + U.pct(p.roas) + '로 같은 ' + r.group + ' 그룹 중앙값 ' + U.pct(b.roas) + '를 넘어섭니다. 예산을 더 실을 후보입니다.',
+        why: '소진 ' + U.won(c.spend) + '에 전환매출 ' + U.won(c.revenue) + ' · 비교 대상 ' + b.n + '건.' });
+    }
+
+    if (c.status === '집행중' && r.gap !== null) {
+      var restDays = Math.max(0, r.leftDays);
+      var restBudget = Math.max(0, (c.budget || 0) - (c.spend || 0));
+      if (r.gap > 20) {
+        out.push({ sev: 0, kind: 'risk', label: '페이스',
+          say: '기간은 ' + U.pct(r.elapsed) + ' 지났는데 예산은 ' + U.pct(p.pace) + ' 썼습니다. 지금 페이스면 남은 ' + restDays + '일을 채우기 전에 예산이 바닥납니다.',
+          why: '잔여 예산 ' + U.won(restBudget) + ' · 하루 상한을 ' + (restDays > 0 ? U.won(restBudget / restDays) : U.won(restBudget)) + ' 아래로 낮춰야 종료일까지 버팁니다.' });
+      } else if (r.gap < -20) {
+        out.push({ sev: 1, kind: 'warn', label: '페이스',
+          say: '기간은 ' + U.pct(r.elapsed) + ' 지났는데 예산은 ' + U.pct(p.pace) + '만 썼습니다. 이대로면 예산을 남긴 채 종료됩니다.',
+          why: '잔여 예산 ' + U.won(restBudget) + '을 남은 ' + restDays + '일에 쓰려면 하루 ' +
+               (restDays > 0 ? U.won(restBudget / restDays) : U.won(restBudget)) + ' 페이스가 필요합니다.' });
+      } else {
+        out.push({ sev: 3, kind: 'good', label: '페이스',
+          say: '기간 ' + U.pct(r.elapsed) + ' 경과에 예산 ' + U.pct(p.pace) + ' 소진으로 페이스는 정상 범위입니다.',
+          why: '괴리 ' + U.pct(Math.abs(r.gap)) + 'p · 잔여 예산 ' + U.won(restBudget) + ' · 남은 ' + restDays + '일.' });
+      }
+    } else if (c.status === '종료' && p.pace !== null && p.pace > 105) {
+      out.push({ sev: 1, kind: 'warn', label: '정산',
+        say: '종료 시점 소진율이 ' + U.pct(p.pace) + '로 예산을 넘겼습니다. 초과분 정산 근거를 계약서와 맞춰 두세요.',
+        why: '예산 ' + U.won(c.budget) + ' 대비 소진 ' + U.won(c.spend) + ' — 초과 ' + U.won(c.spend - c.budget) + '.' });
+    }
+
+    if (c.status !== '예정' && (c.clicks || 0) > 0 && !(c.conversions || 0)) {
+      out.push({ sev: 0, kind: 'risk', label: '전환',
+        say: '클릭 ' + U.num(c.clicks) + '회가 발생했는데 전환은 0건입니다. 매체보다 랜딩 쪽을 먼저 보세요.',
+        why: '소진 ' + U.won(c.spend) + ' · CPC ' + (p.cpc === null ? '—' : U.won(p.cpc)) + ' — 유입 단가는 붙었지만 전환 경로가 끊겨 있습니다.' });
+    } else if (p.ctr !== null && b.ctr !== null && b.n > 1 && p.ctr < b.ctr) {
+      out.push({ sev: 2, kind: 'warn', label: '소재',
+        say: 'CTR ' + U.pct(p.ctr, 2) + '가 같은 ' + r.group + ' 그룹 중앙값 ' + U.pct(b.ctr, 2) + '보다 낮습니다. 소재와 타깃부터 점검하세요.',
+        why: '노출 ' + U.num(c.impressions) + '에 클릭 ' + U.num(c.clicks) + ' · CPC ' + (p.cpc === null ? '—' : U.won(p.cpc)) +
+             ' (그룹 중앙값 ' + (b.cpc === null ? '—' : U.won(b.cpc)) + ').' });
+    } else if (p.cpa !== null && b.cpa !== null && b.n > 1 && p.cpa > b.cpa) {
+      out.push({ sev: 2, kind: 'warn', label: '전환 단가',
+        say: 'CPA는 ' + U.won(p.cpa) + '으로 같은 ' + r.group + ' 그룹 중앙값 ' + U.won(b.cpa) + '보다 높습니다. 전환 경로를 줄이는 편이 빠릅니다.',
+        why: '전환 ' + U.num(c.conversions) + '건 · 소진 ' + U.won(c.spend) + ' · CTR ' + (p.ctr === null ? '—' : U.pct(p.ctr, 2)) + '.' });
+    }
+
+    out.sort(function (a, b2) { return a.sev - b2.sev; });
+    return out.slice(0, 3);
+  }
+
+  /* ── 서랍 — ?id=cp01 로 열린 채 시작할 수 있습니다 ─────────────────── */
+  var openId = U.param('id', '') || null;
+
+  function kvRow(k, v) {
+    return '<div class="kv__row"><span class="kv__k">' + esc(k) + '</span><span class="kv__v">' + v + '</span></div>';
+  }
+  function perfTile(k, v) {
+    return '<div class="perf"><p class="perf__k">' + esc(k) + '</p><p class="perf__v">' + v + '</p></div>';
+  }
+
+  function drawerHTML(r) {
+    var c = r.c, p = r.perf;
+    var contract = c.contractId ? db.get('contracts', c.contractId) : null;
+    var span = U.days(c.startDate, c.endDate) + 1;
+    var lastAct = r.acc && r.acc.lastActivityDate ? U.ago(r.acc.lastActivityDate) : null;
+
+    var kv = '<div class="kv">' +
+      kvRow('광고주', r.acc
+        ? '<a class="link" href="account.html?id=' + encodeURIComponent(r.acc.id) + '">' + esc(r.acc.name) + '</a>'
+        : '<span class="t-faint">연결된 광고주 없음</span>') +
+      kvRow('담당 AE', esc(r.ownerName)) +
+      kvRow('매체', esc(r.chanName) + ' ' + ui.chip(r.group, 'idle')) +
+      kvRow('목표', esc(c.objective)) +
+      kvRow('기간', '<span class="period">' + esc(U.fmtDate(c.startDate) + ' – ' + U.fmtDate(c.endDate)) + '</span> <span class="t-muted">총 ' + span + '일</span>') +
+      kvRow('상태', ui.chip(c.status, c.status === '집행중' ? 'accent' : c.status === '예정' ? 'idle' : null)) +
+      kvRow('계약', contract
+        ? '<a class="link" href="contracts.html?id=' + encodeURIComponent(contract.id) + '">' + esc(contract.no) + '</a> <span class="t-muted">' + esc(contract.status) + '</span>'
+        : '<span class="t-faint">연결된 계약 없음</span>') +
+      kvRow('예산 / 소진', U.won(c.budget) + ' <span class="t-muted">/</span> ' + U.won(c.spend) +
+        (c.budget > 0 ? ' <span class="t-muted">(' + U.pct((c.spend / c.budget) * 100) + ')</span>' : '')) +
+      kvRow('광고주 최근 활동', lastAct ? esc(lastAct) : '<span class="t-faint">기록 없음</span>') +
+      '</div>';
+
+    var tiles = '<div>' +
+      '<p class="sec-title">성과 지표</p>' +
+      '<div class="perf-grid mt-xs">' +
+        perfTile('노출', c.impressions ? U.num(c.impressions) : '—') +
+        perfTile('클릭', c.clicks ? U.num(c.clicks) : '—') +
+        perfTile('CTR', p.ctr === null ? '—' : U.pct(p.ctr, 2)) +
+        perfTile('CPC', p.cpc === null ? '—' : U.won(p.cpc)) +
+        perfTile('전환', c.conversions ? U.num(c.conversions) : (c.status === '예정' ? '—' : '0')) +
+        perfTile('CPA', p.cpa === null ? '—' : U.won(p.cpa)) +
+        perfTile('ROAS', p.roas === null ? '—' : '<span class="' + (p.roas < BREAKEVEN ? 't-neg' : 't-pos') + '">' + U.pct(p.roas) + '</span>') +
+      '</div></div>';
+
+    var paceBlock;
+    if (p.pace === null) {
+      paceBlock = '<div><p class="sec-title">예산 소진 대 기간 경과</p>' +
+        '<p class="t-micro mt-xs">예산이 등록되지 않아 소진율을 계산할 수 없습니다.</p></div>';
+    } else {
+      var gapText;
+      if (c.status === '예정') gapText = '아직 집행 전입니다. 시작일 ' + U.fmtDate(c.startDate) + '부터 페이스를 봅니다.';
+      else if (r.gap > 20) gapText = '예산이 기간보다 ' + U.pct(r.gap) + 'p 앞서 나갑니다 — 과소진입니다.';
+      else if (r.gap < -20) gapText = '예산이 기간보다 ' + U.pct(Math.abs(r.gap)) + 'p 뒤처집니다 — 미소진입니다.';
+      else gapText = '괴리 ' + U.pct(Math.abs(r.gap)) + 'p로 정상 범위(±20%p) 안입니다.';
+      var kind = r.gap > 20 ? 'neg' : (r.gap > 10 || r.gap < -20) ? 'warn' : 'pos';
+      paceBlock = '<div><p class="sec-title">예산 소진 대 기간 경과</p>' +
+        '<div class="stack gap-xs mt-xs">' +
+          '<div class="pacebar"><span class="pacebar__k">기간 경과</span>' +
+            ui.meter(r.elapsed, 100, null) +
+            '<span class="pacebar__v">' + U.pct(r.elapsed) + '</span></div>' +
+          '<div class="pacebar"><span class="pacebar__k">예산 소진</span>' +
+            ui.meter(U.clamp(p.pace, 0, 100), 100, kind) +
+            '<span class="pacebar__v">' + U.pct(p.pace) + '</span></div>' +
+        '</div>' +
+        '<p class="t-micro mt-xs">' + esc(gapText) + ' 소진 ' + U.won(c.spend) + ' / 예산 ' + U.won(c.budget) + '.</p></div>';
+    }
+
+    var ops = opinionsFor(r);
+    var opinionBlock = '<div><p class="sec-title">개선 의견</p><div class="stack gap-xs mt-xs">' +
+      ops.map(function (o) {
+        return ui.insight({ kind: o.kind, label: o.label, say: esc(o.say), why: esc(o.why) });
+      }).join('') + '</div></div>';
+
+    var acts = '<div class="row row--wrap gap-xs hairline" style="padding-top:var(--space-md)">' +
+      (r.acc ? '<a class="btn btn--sm" href="account.html?id=' + encodeURIComponent(r.acc.id) + '">광고주 열기</a>' : '') +
+      (contract ? '<a class="btn btn--sm" href="contracts.html?id=' + encodeURIComponent(contract.id) + '">계약 보기</a>' : '') +
+      (canLog && r.acc ? '<button class="btn btn--sm btn--primary" type="button" id="logReview">성과 리뷰 기록</button>' : '') +
+      '</div>';
+
+    return kv + tiles + paceBlock + opinionBlock + acts;
+  }
+
+  function paintDrawer(host, r) {
+    host.innerHTML = drawerHTML(r);
+    var btn = U.qs('#logReview', host);
+    if (btn) U.on(btn, 'click', function () { reviewModal(r, host); });
+  }
+
+  function openDrawer(id) {
+    var r = null;
+    allRows.forEach(function (x) { if (x.id === id) r = x; });
+    if (!r) return;
+    openId = id;
+    var host = el('div', { class: 'drawer-body' });
+    paintDrawer(host, r);
+    ui.drawer({
+      kicker: '집행 캠페인 · ' + r.c.id,
+      title: r.c.name,
+      body: host
+    });
+  }
+
+  /* ── 성과 리뷰 기록 — 되돌릴 수 있는 쓰기이므로 확인 모달 대신 되돌리기 ─ */
+  function reviewModal(r, host) {
+    if (!r.acc) return;
+    var subject = el('input', {
+      class: 'input', 'data-autofocus': '', autocomplete: 'off',
+      value: '캠페인 성과 리뷰 — ' + r.c.name
+    });
+    var date = el('input', { class: 'input', type: 'date', value: TODAY_ISO, 'aria-label': '리뷰 일자' });
+    var p = r.perf;
+    var note = el('textarea', {
+      class: 'textarea',
+      value: '소진 ' + U.won(r.c.spend) + ' / 예산 ' + U.won(r.c.budget) +
+             ' · ROAS ' + (p.roas === null ? '—' : U.pct(p.roas)) +
+             ' · CPA ' + (p.cpa === null ? '—' : U.won(p.cpa))
+    });
+    var subjField = el('label', { class: 'field' }, [
+      el('span', { class: 'field__label', html: '제목 <span class="req">*</span>' }), subject,
+      el('span', { class: 'field__error', text: '제목을 입력해야 활동을 남길 수 있습니다.' })
+    ]);
+
+    ui.modal({
+      title: '성과 리뷰 기록',
+      body: el('div', { class: 'stack gap-sm' }, [
+        el('p', { class: 't-small', text: '“' + r.acc.name + '” 광고주 활동으로 기록됩니다. 캠페인 지표는 바뀌지 않습니다.' }),
+        subjField,
+        el('label', { class: 'field' }, [el('span', { class: 'field__label', text: '일자' }), date]),
+        el('label', { class: 'field' }, [el('span', { class: 'field__label', text: '메모' }), note])
+      ]),
+      actions: [
+        { label: '취소' },
+        { label: '기록', kind: 'primary', onClick: function () {
+            var text = subject.value.trim();
+            if (!text) { subjField.classList.add('is-invalid'); subject.focus(); return false; }
+            saveReview(r, host, text, date.value || TODAY_ISO, note.value.trim());
+          } }
+      ]
+    });
+  }
+
+  function saveReview(r, host, subject, dateStr, note) {
+    var past = U.days(dateStr, TODAY_ISO) >= 0;
+    var rec = db.insert('activities', {
+      type: 'task', subject: subject, relatedType: 'account', relatedId: r.acc.id,
+      ownerId: me.id, dueDate: dateStr, doneAt: past ? new Date().toISOString() : null,
+      status: past ? '완료' : '예정', priority: '보통', note: note || ''
+    });
+    var prevLast = r.acc.lastActivityDate;
+    if (past && (!prevLast || dateStr > prevLast)) db.update('accounts', r.acc.id, { lastActivityDate: dateStr });
+    r.acc = db.get('accounts', r.acc.id);
+    paintDrawer(host, r);
+    ui.toast('“' + r.c.name + '” 성과 리뷰를 ' + r.acc.name + ' 활동으로 남겼습니다.', {
+      undo: function () {
+        db.remove('activities', rec.id);
+        db.update('accounts', r.acc.id, { lastActivityDate: prevLast });
+        r.acc = db.get('accounts', r.acc.id);
+        paintDrawer(host, r);
+      }
+    });
+  }
+
+  /* ── CSV — 화면의 필터와 정렬이 그대로 나갑니다 ───────────────────── */
+  function exportRows() {
+    var rows = allRows.filter(matchesBase).filter(viewOk);
+    var s = SORTS[state.sort.key] || SORTS.spend;
+    rows = U.sortBy(rows, s.get, state.sort.dir);
+    if (!rows.length) { ui.toast('내보낼 캠페인이 없습니다.', { kind: 'neg' }); return; }
+    var head = ['캠페인', '광고주', '매체', '매체그룹', '목표', '시작일', '종료일', '상태',
+      '예산(원)', '소진액(원)', '소진율(%)', '기간경과율(%)', '노출', '클릭', 'CTR(%)', 'CPC(원)', '전환', 'CPA(원)', 'ROAS(%)', '담당 AE'];
+    function n1(v, d) { return v === null || v === undefined || isNaN(v) ? '' : Number(v).toFixed(d === undefined ? 0 : d); }
+    var body = rows.map(function (r) {
+      var c = r.c, p = r.perf;
+      return [c.name, r.accName, r.chanName, r.group, c.objective, c.startDate, c.endDate, c.status,
+        n1(c.budget), n1(c.spend), n1(p.pace, 1), n1(r.elapsed, 1),
+        n1(c.impressions), n1(c.clicks), n1(p.ctr, 3), n1(p.cpc, 1), n1(c.conversions), n1(p.cpa), n1(p.roas, 1), r.ownerName];
+    });
+    ui.exportCSV('closer-campaigns-' + TODAY_ISO + '.csv', [head].concat(body));
+    ui.toast(rows.length + '건을 CSV로 내보냈습니다.');
+  }
+
+  /* ── 이벤트 배선 ──────────────────────────────────────────────────── */
+  U.live($('#views'), 'click', '[data-view]', function (e, t) {
+    var v = t.dataset.view;
+    if (v === 'low') { state.eff = true; state.status = ''; }
+    else if (v === 'all') { state.eff = false; state.status = ''; }
+    else { state.eff = false; state.status = v; }
+    $('#fStatus').value = state.status;
+    state.page = 1;
+    render();
+  });
+
+  U.on($('#q'), 'input', U.debounce(function () { state.q = $('#q').value; state.page = 1; render(); }, 180));
+  U.on($('#q'), 'keydown', function (e) {
+    if (e.isComposing || e.keyCode === 229) return;   /* 한글 조합 중에는 반응하지 않습니다 */
+    if (e.key === 'Escape' && this.value) { e.preventDefault(); this.value = ''; state.q = ''; state.page = 1; render(); }
+  });
+  U.on($('#fStatus'), 'change', function () { state.status = this.value; state.eff = false; state.page = 1; render(); });
+  U.on($('#fGroup'), 'change', function () { state.group = this.value; state.page = 1; render(); });
+  U.on($('#fAccount'), 'change', function () { state.account = this.value; state.page = 1; render(); });
+  U.on($('#fOwner'), 'change', function () { state.owner = this.value; state.page = 1; render(); });
+  U.on($('#reset'), 'click', function () {
+    state.status = ''; state.eff = false; state.q = ''; state.group = ''; state.account = ''; state.owner = '';
+    state.page = 1;
+    $('#q').value = ''; $('#fStatus').value = ''; $('#fGroup').value = ''; $('#fAccount').value = ''; $('#fOwner').value = '';
+    render();
+  });
+
+  U.live($('#alertList'), 'click', '[data-open]', function (e, t) { openDrawer(t.dataset.open); });
+
+  U.live($('#pagerHost'), 'click', '[data-page]', function (e, t) {
+    var p = Number(t.dataset.page);
+    if (!p || p === state.page) return;
+    state.page = p;
+    render();
+    $('#tableHost').scrollIntoView({ block: 'start' });
+  });
+
+  U.on($('#csv'), 'click', exportRows);
+
+  /* ── 첫 렌더 ──────────────────────────────────────────────────────── */
+  if (!db.count('campaigns')) {
+    U.qsa('[data-gated]').forEach(function (n) { if (n.parentNode) n.parentNode.removeChild(n); });
+    $('#subline').textContent = U.fmtDate(C.today) + ' 기준';
+    $('#tableHost').innerHTML = ui.empty('성과 데이터가 아직 없습니다',
+      '계약이 유효로 바뀌면 집행 캠페인이 만들어지고, 집행이 시작되면 지표가 채워집니다.',
+      '<a class="btn btn--sm" href="contracts.html">계약 목록</a>');
+    $('#pagerHost').innerHTML = '<span class="t-mono">0 / 0건</span>';
+    U.revealAll();
+    return;
+  }
+  render();
+  if (openId) openDrawer(openId);
+})();
+</script>
+</body>
+</html>

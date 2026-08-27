@@ -1,0 +1,1248 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>제작 의뢰 · CLOSER</title>
+<meta name="description" content="영상·디자인·랜딩페이지 제작 의뢰를 상태 보드로 관리합니다. 카드를 끌어 상태를 옮기고 WIP 한도, SLA 잔여, 미배정 건을 한 화면에서 확인합니다." />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=IBM+Plex+Sans+KR:wght@400;500;600&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="../tokens.css" />
+<link rel="stylesheet" href="../assets/css/base.css" />
+<link rel="stylesheet" href="../assets/css/components.css" />
+<link rel="stylesheet" href="../assets/css/app.css" />
+<style>
+  /* 이 화면에만 필요한 조각. 색·간격·반경·이징은 전부 토큰을 참조합니다. */
+  .tkt-bar { border-bottom: var(--rule-hair) solid var(--color-rule); border-radius: var(--radius-md); }
+  .tkt-bar .input, .tkt-bar .select { min-height: 28px; height: 28px; font-size: var(--text-xs); }
+  .tkt-bar .select { max-width: 148px; }
+  .tkt-bar__q { width: min(220px, 46vw); }
+  .tkt-ctl { display: inline-flex; align-items: center; gap: var(--space-2xs); min-width: 0; }
+  .tkt-ctl > label {
+    font-family: var(--font-mono); font-size: var(--text-2xs); letter-spacing: var(--track-mono);
+    text-transform: uppercase; color: var(--color-ink-4); white-space: nowrap;
+  }
+  #views { max-width: 100%; overflow-x: auto; overscroll-behavior-x: contain; }
+
+  /* ── 보드 — 한 개의 가로 스크롤러 안에 헤더 행 + 스윔레인 행들 ───── */
+  .board-scroll { overflow-x: auto; overscroll-behavior-x: contain; padding-bottom: var(--space-sm); }
+  .board-grid { display: grid; gap: var(--space-sm); align-items: start; }
+  .board-grid .kanban__col { max-height: none; }
+  .board-head { background: var(--color-surface); }
+  .kanban__n { font-family: var(--font-mono); color: var(--color-ink-3); font-weight: 500; white-space: nowrap; }
+  .kanban__title.is-over, .kanban__title.is-over .kanban__n { color: var(--color-neg); }
+  .kanban__sum { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2xs); }
+  .board-cell .kanban__list { max-height: 46vh; }
+
+  .swim__head {
+    grid-column: 1 / -1; display: flex; align-items: center; gap: var(--space-xs);
+    padding: var(--space-2xs) 0; border-bottom: var(--rule-hair) solid var(--color-rule-2);
+  }
+  .swim__name {
+    position: sticky; left: 0; display: inline-flex; align-items: center; gap: var(--space-xs);
+    background: var(--color-paper); padding-right: var(--space-sm);
+    font-family: var(--font-mono); font-size: var(--text-2xs); letter-spacing: var(--track-mono);
+    text-transform: uppercase; font-weight: 600; color: var(--color-ink-2); white-space: nowrap;
+  }
+  .swim--pinned .swim__name { color: var(--color-warn); }
+  .swim__ok { grid-column: 1 / -1; }
+  .swim__ok .swim__msg { position: sticky; left: 0; display: inline-block; font-size: var(--text-xs); color: var(--color-pos); padding: var(--space-xs) 0; }
+
+  .kcard:focus-visible { border-color: var(--color-accent); }
+  .kcard[data-locked="1"] { cursor: pointer; }
+  .kcard__top { display: flex; align-items: center; gap: var(--space-2xs); }
+  .kcard__acct { font-size: var(--text-xs); color: var(--color-ink-3); margin-top: var(--space-3xs); overflow-wrap: anywhere; }
+  .kcard__flags { display: flex; flex-wrap: wrap; gap: var(--space-2xs); margin-top: var(--space-2xs); }
+  .kcard__more { flex: 0 0 auto; }
+  .kcol-empty { padding: var(--space-md) var(--space-xs); text-align: center; font-size: var(--text-xs); color: var(--color-ink-4); }
+  .kcol-more { width: 100%; justify-content: center; }
+
+  /* ── 목록 ─────────────────────────────────────────────────────────── */
+  .list-card {
+    border: var(--rule-hair) solid var(--color-rule); border-top: none;
+    border-radius: 0 0 var(--radius-md) var(--radius-md); background: var(--color-surface);
+  }
+  .bulkbar {
+    display: flex; align-items: center; gap: var(--space-xs); flex-wrap: wrap;
+    padding: var(--space-xs) var(--space-md);
+    border-bottom: var(--rule-hair) solid var(--color-rule);
+    background: var(--color-accent-soft);
+  }
+  .pagerbar {
+    display: flex; align-items: center; justify-content: space-between; gap: var(--space-sm); flex-wrap: wrap;
+    padding: var(--space-xs) var(--space-md); border-top: var(--rule-hair) solid var(--color-rule);
+  }
+  .select--inline { height: 26px; min-height: 26px; font-size: var(--text-xs); max-width: 132px; }
+  .cand { display: flex; align-items: center; gap: var(--space-sm); padding: var(--space-xs) 0; border-bottom: var(--rule-hair) solid var(--color-rule); }
+  .cand__meter { width: 84px; flex: 0 0 auto; }
+  .cand__num { font-family: var(--font-mono); font-size: var(--text-2xs); color: var(--color-ink-3); width: 30px; text-align: right; }
+
+  @media (max-width: 640px) {
+    .tkt-bar { padding-inline: var(--space-sm); }
+    .tkt-bar .select { max-width: 44vw; }
+    .bulkbar, .pagerbar { padding-inline: var(--space-sm); }
+  }
+</style>
+</head>
+<body class="app">
+<a class="skip-link" href="#main">본문으로 건너뛰기</a>
+
+<div class="app-main">
+  <main class="app-page" id="main">
+
+    <div class="page-head">
+      <div>
+        <h1 class="page-head__title">제작 의뢰</h1>
+        <p class="page-head__sub" id="subline"></p>
+      </div>
+      <div class="page-head__acts" id="headActs"></div>
+    </div>
+
+    <section class="grid grid--4" id="tiles" data-verify aria-label="제작 의뢰 요약 지표"></section>
+
+    <section class="mt-lg" id="opinionSec" aria-label="제작 관련 분석 의견">
+      <div class="stack gap-xs" id="opinionList"></div>
+    </section>
+
+    <section class="filterbar tkt-bar mt-lg" id="filters" aria-label="제작 의뢰 필터">
+      <span class="seg" id="views" role="group" aria-label="보기 전환"></span>
+
+      <label class="field" style="flex:0 0 auto">
+        <span class="sr-only">의뢰 검색</span>
+        <input class="input tkt-bar__q" type="search" id="q" placeholder="티켓번호 · 제목 · 광고주 · 라벨" autocomplete="off" />
+      </label>
+
+      <label class="field" style="flex:0 0 auto"><span class="sr-only">유형</span><select class="select" id="fType"></select></label>
+      <label class="field" style="flex:0 0 auto"><span class="sr-only">우선순위</span><select class="select" id="fPrio"></select></label>
+      <label class="field" style="flex:0 0 auto"><span class="sr-only">담당자</span><select class="select" id="fAssignee"></select></label>
+      <label class="field" style="flex:0 0 auto"><span class="sr-only">광고주</span><select class="select" id="fAccount"></select></label>
+      <label class="field" style="flex:0 0 auto"><span class="sr-only">SLA 상태</span><select class="select" id="fSla"></select></label>
+
+      <span class="tkt-ctl" id="swimCtl">
+        <label for="fSwim">스윔레인</label>
+        <select class="select" id="fSwim">
+          <option value="assignee">담당자</option>
+          <option value="type">유형</option>
+          <option value="account">광고주</option>
+          <option value="none">없음</option>
+        </select>
+      </span>
+
+      <button class="btn btn--sm btn--ghost" type="button" id="reset">필터 초기화</button>
+      <span class="grow"></span>
+      <button class="btn btn--sm btn--ghost" type="button" id="csv">CSV 내보내기</button>
+      <span class="filterbar__count" id="count"></span>
+    </section>
+
+    <p class="t-micro mt-xs" id="hint"></p>
+    <p class="t-micro mt-xs" id="ctxNote" hidden></p>
+
+    <section class="mt-sm" id="boardPane" aria-label="상태별 제작 의뢰 보드">
+      <div class="board-scroll">
+        <div class="board-grid" id="board" data-verify></div>
+      </div>
+    </section>
+
+    <section class="mt-sm" id="listPane" aria-label="제작 의뢰 목록" hidden>
+      <div class="list-card">
+        <div class="bulkbar" id="bulkbar" hidden></div>
+        <div id="tableHost"></div>
+        <div class="pagerbar" id="pagerHost"></div>
+      </div>
+    </section>
+
+    <footer class="hairline mt-2xl" style="padding-block:var(--space-md)">
+      <p class="t-mono t-faint">CLOSER · 데모 데이터 · 모든 회사·인물·연락처는 가상입니다</p>
+    </footer>
+  </main>
+</div>
+
+<script src="../assets/js/seed.js"></script>
+<script src="../assets/js/util.js"></script>
+<script src="../assets/js/store.js"></script>
+<script src="../assets/js/domain.js"></script>
+<script src="../assets/js/metrics.js"></script>
+<script src="../assets/js/insights.js"></script>
+<script src="../assets/js/ui.js"></script>
+<script src="../assets/js/charts.js"></script>
+<script src="../assets/js/shell.js"></script>
+<script>
+(function () {
+  'use strict';
+  var C = window.CLOSER, U = C.util, db = C.db, D = C.domain, M = C.metrics, ui = C.ui;
+  C.shell.mount('tickets');
+
+  var $ = U.qs, esc = U.esc, el = U.el;
+  var me = db.me();
+  var PAGE_SIZE = 25;
+  var COL_CARDS = 10;          // 컬럼 한 칸에 한 번에 그리는 카드 수
+  var MAX_LANES = 6;           // 그 이상은 레인 대신 필터로 좁히게 안내한다
+
+  var COLS = D.TICKET_OPEN;    // 접수대기·검토·배정됨·진행중·검수·수정요청·보류
+  var canUpdate = D.can('tickets', 'U');
+  var canCreate = D.can('tickets', 'C');
+  var isMgr = me.role === '리소스매니저' || me.role === '관리자';
+  var canAssign = isMgr && canUpdate;
+  /* 티켓 보드의 조회 범위: 리소스매니저·관리자는 전사, 나머지는 자기(팀) 관련 건. */
+  var SCOPE_IDS = isMgr ? null : db.visibleUserIds();
+  var SCOPE = M.scope({ userIds: SCOPE_IDS });
+
+  var STATUS_KIND = {
+    접수대기: 'idle', 검토: 'idle', 배정됨: 'accent', 진행중: 'accent',
+    검수: 'warn', 수정요청: 'warn', 보류: 'idle', 완료: 'pos', 취소: 'idle'
+  };
+  var SLA_LABEL = { ok: '여유', risk: '임박', breach: '초과', done: '종료' };
+
+  /* ── 상태 — URL 파라미터가 초기값을 결정합니다 ───────────────────── */
+  var state = {
+    view: 'board',
+    swim: 'assignee',
+    q: '', type: '', prio: '', assignee: '', account: '', sla: '',
+    opp: '',
+    sort: { key: 'dueDate', dir: 'asc' },
+    page: 1,
+    sel: {},
+    open: {}          // 레인+컬럼별 '더 보기' 펼침 상태
+  };
+
+  (function readURL() {
+    var v = U.param('view', '');
+    if (['board', 'list', 'mine'].indexOf(v) > -1) state.view = v;
+    var f = U.param('filter', '');
+    if (f === 'breach') { state.sla = 'breach'; state.view = 'list'; }
+    else if (f === 'unassigned') { state.assignee = 'none'; }
+    else if (f === 'assigned-me') { state.assignee = me.id; }
+    var o = U.param('opp', '');
+    if (o && db.get('opportunities', o)) state.opp = o;
+    var q = U.param('q', '');
+    if (q) state.q = q;
+  })();
+
+  /* ── 데이터 ──────────────────────────────────────────────────────── */
+  function inScope(t) {
+    if (!SCOPE_IDS) return true;
+    return SCOPE_IDS.indexOf(t.requesterId) > -1 || (t.assigneeId && SCOPE_IDS.indexOf(t.assigneeId) > -1);
+  }
+  function accName(t) { var a = db.get('accounts', t.accountId); return a ? a.name : ''; }
+  function isOpen(t) { return D.TICKET_OPEN.indexOf(t.status) > -1; }
+  function mineTicket(t) { return t.requesterId === me.id || t.assigneeId === me.id; }
+
+  function matches(t) {
+    if (!inScope(t)) return false;
+    if (state.opp && t.oppId !== state.opp) return false;
+    if (state.type && t.type !== state.type) return false;
+    if (state.prio && t.priority !== state.prio) return false;
+    if (state.assignee === 'none' && t.assigneeId) return false;
+    if (state.assignee && state.assignee !== 'none' && t.assigneeId !== state.assignee) return false;
+    if (state.account && t.accountId !== state.account) return false;
+    if (state.sla && D.slaState(t) !== state.sla) return false;
+    if (state.q) {
+      var term = state.q.trim().toLowerCase();
+      var hay = [t.key, t.title, t.type, accName(t), db.userName(t.assigneeId), db.userName(t.requesterId)]
+        .concat(t.labels || []).join(' ').toLowerCase();
+      if (term && hay.indexOf(term) === -1) return false;
+    }
+    if (state.view === 'board') return isOpen(t);
+    if (state.view === 'mine') return isOpen(t) && mineTicket(t);
+    return true;
+  }
+  function filtered() { return db.where('tickets', matches); }
+
+  /* ── 표시 조각 ───────────────────────────────────────────────────── */
+  function prioHTML(key) {
+    var p = D.PRIORITIES.filter(function (x) { return x.key === key; })[0] || D.PRIORITIES[2];
+    var cls = 'prio' + (['P1', 'P2', 'P3'].indexOf(p.key) > -1 ? ' prio--' + p.key.toLowerCase() : '');
+    return '<span class="' + cls + '" title="우선순위 ' + esc(p.key + ' ' + p.label) + '">' +
+      '<i></i><i></i><i></i> ' + esc(p.label) + '</span>';
+  }
+  function slaChip(t) {
+    var st = D.slaState(t);
+    if (st === 'done') return '<span class="chip chip--idle">' + esc(t.status) + '</span>';
+    var dd = U.days(C.today, t.dueDate);
+    var hours = D.slaRemaining(t);
+    var text = isNaN(dd) ? '납기 미정' : dd < 0 ? 'D+' + Math.abs(dd) : dd === 0 ? '오늘 마감' : 'D-' + dd;
+    var kind = st === 'breach' ? 'neg' : st === 'risk' ? 'warn' : 'idle';
+    var tip = hours === null ? '납기가 지정되지 않았습니다'
+      : hours < 0 ? '납기 ' + Math.abs(hours) + '시간 경과 · 기준 SLA ' + D.slaHoursFor(t) + '시간'
+      : '잔여 ' + hours + '시간 · 기준 SLA ' + D.slaHoursFor(t) + '시간';
+    return '<span class="chip chip--' + kind + '" title="' + esc(tip) + '">' + esc(text) + '</span>';
+  }
+  function cardHTML(t) {
+    var acc = db.get('accounts', t.accountId);
+    var flags = '';
+    if (t.reworkCount) flags += '<span class="chip chip--warn" title="수정요청을 거친 횟수">재작업 ' + t.reworkCount + '회</span>';
+    (t.labels || []).forEach(function (l) { flags += '<span class="chip chip--idle">' + esc(l) + '</span>'; });
+
+    return '<article class="kcard" data-id="' + esc(t.id) + '" tabindex="0" role="link"' +
+      (canUpdate ? ' draggable="true"' : ' data-locked="1"') +
+      ' aria-label="' + esc(t.key + ' ' + t.title + ' · ' + t.status + ' · ' + (acc ? acc.name : '광고주 미지정')) + '">' +
+      '<div class="kcard__top">' +
+        '<span class="tkt-key">' + esc(t.key) + '</span>' +
+        '<span class="chip chip--plain">' + esc(t.type) + '</span>' +
+        '<span class="grow"></span>' +
+        '<button class="btn btn--ghost btn--icon btn--sm kcard__more" type="button" data-menu="' + esc(t.id) +
+          '" aria-label="' + esc(t.key) + ' 카드 메뉴">⋯</button>' +
+      '</div>' +
+      '<p class="kcard__name">' + esc(t.title) + '</p>' +
+      '<p class="kcard__acct">' + esc(acc ? acc.name : '광고주 미지정') + '</p>' +
+      '<div class="kcard__meta">' +
+        prioHTML(t.priority) +
+        '<span class="row gap-2xs">' +
+          (t.assigneeId ? ui.avatar(db.get('users', t.assigneeId), 'sm') : '<span class="chip chip--warn">미배정</span>') +
+          slaChip(t) +
+        '</span>' +
+      '</div>' +
+      (flags ? '<div class="kcard__flags">' + flags + '</div>' : '') +
+      '</article>';
+  }
+
+  /* ── 보드 ────────────────────────────────────────────────────────── */
+  function laneKeyOf(t) {
+    if (state.swim === 'none') return '__all';
+    if (!t.assigneeId) return '__none';
+    if (state.swim === 'assignee') return t.assigneeId;
+    if (state.swim === 'type') return t.type;
+    return t.accountId;
+  }
+  function laneLabel(key) {
+    if (key === '__all') return '';
+    if (key === '__none') return '미배정';
+    if (state.swim === 'assignee') return db.userName(key);
+    if (state.swim === 'type') return key;
+    var a = db.get('accounts', key);
+    return a ? a.name : '광고주 미지정';
+  }
+
+  function renderBoard(rows) {
+    var byLane = U.groupBy(rows, laneKeyOf);
+    var keys = Object.keys(byLane).filter(function (k) { return k !== '__none'; });
+    keys = U.sortBy(keys, function (k) { return -byLane[k].length; });
+    var hidden = Math.max(0, keys.length - MAX_LANES);
+    keys = keys.slice(0, MAX_LANES);
+    if (state.swim !== 'none') keys.unshift('__none');
+
+    var n = COLS.length;
+    var grid = $('#board');
+    grid.setAttribute('style',
+      'grid-template-columns:repeat(' + n + ',minmax(248px,1fr));' +
+      'min-width:calc(' + n + ' * 248px + ' + (n - 1) + ' * var(--space-sm))');
+
+    var html = COLS.map(function (st) { return headCellHTML(st, rows); }).join('');
+
+    keys.forEach(function (k) {
+      var list = byLane[k] || [];
+      if (state.swim !== 'none') {
+        html += '<div class="swim__head' + (k === '__none' ? ' swim--pinned' : '') + '">' +
+          '<span class="swim__name">' + esc(laneLabel(k)) +
+          '<span class="t-mono t-faint">' + list.length + '건 · 예상 ' + U.sum(list, 'estimateHours') + 'h</span>' +
+          '</span></div>';
+      }
+      if (k === '__none' && !list.length) {
+        html += '<div class="swim__ok"><span class="swim__msg">미배정 의뢰가 없습니다. 좋은 상태입니다.</span></div>';
+        return;
+      }
+      COLS.forEach(function (st) {
+        html += laneCellHTML(k, st, list.filter(function (t) { return t.status === st; }));
+      });
+    });
+
+    grid.innerHTML = html;
+
+    var note = hidden ? '레인 ' + hidden + '개는 화면 밖에 있습니다. 필터를 좁히면 전부 보입니다.' : '';
+    $('#count').textContent = rows.length + '건 표시 · 전체 ' + db.where('tickets', inScope).length + '건' + (note ? ' · ' + note : '');
+  }
+
+  function headCellHTML(st, rows) {
+    var list = rows.filter(function (t) { return t.status === st; });
+    var lim = D.WIP_LIMITS[st];
+    var over = lim && list.length > lim;
+    var unass = list.filter(function (t) { return !t.assigneeId; }).length;
+    var breach = list.filter(function (t) { return D.slaState(t) === 'breach'; }).length;
+    return '<div class="kanban__col board-head">' +
+      '<div class="kanban__head">' +
+        '<p class="kanban__title' + (over ? ' is-over' : '') + '">' +
+          '<span>' + esc(st) + '</span>' +
+          '<span class="kanban__n">' + list.length + (lim ? ' / ' + lim : '') + '</span></p>' +
+        '<p class="kanban__sum"><span>예상 ' + U.sum(list, 'estimateHours') + 'h</span>' +
+          '<span>' + (over ? '<span class="chip chip--neg">WIP 초과</span>'
+            : breach ? '<span class="chip chip--neg">초과 ' + breach + '</span>'
+            : unass ? '<span class="chip chip--warn">미배정 ' + unass + '</span>' : '') + '</span></p>' +
+      '</div></div>';
+  }
+
+  function laneCellHTML(laneKey, st, list) {
+    list = U.sortBy(list, function (t) { return t.dueDate || '9999-12-31'; });
+    var okey = laneKey + '|' + st;
+    var showAll = !!state.open[okey];
+    var shown = showAll ? list : list.slice(0, COL_CARDS);
+    var rest = list.length - shown.length;
+    return '<div class="kanban__col board-cell" data-status="' + esc(st) + '">' +
+      '<div class="kanban__list">' +
+        (list.length ? shown.map(cardHTML).join('') : '<p class="kcol-empty">이 상태의 의뢰가 없습니다</p>') +
+        (rest > 0 ? '<button class="btn btn--sm btn--ghost kcol-more" type="button" data-more="' + esc(okey) + '">' +
+          '나머지 ' + rest + '건 더 보기</button>' : '') +
+      '</div></div>';
+  }
+
+  /* ── 목록 ────────────────────────────────────────────────────────── */
+  var SORTS = {
+    key:        { get: function (t) { return t.key; }, dir: 'asc' },
+    title:      { get: function (t) { return t.title; }, dir: 'asc' },
+    type:       { get: function (t) { return t.type; }, dir: 'asc' },
+    account:    { get: function (t) { return accName(t); }, dir: 'asc' },
+    requester:  { get: function (t) { return db.userName(t.requesterId); }, dir: 'asc' },
+    assignee:   { get: function (t) { return t.assigneeId ? db.userName(t.assigneeId) : 'ㅎ힣'; }, dir: 'asc' },
+    status:     { get: function (t) { return D.TICKET_STATUS.indexOf(t.status); }, dir: 'asc' },
+    priority:   { get: function (t) { return t.priority; }, dir: 'asc' },
+    estimate:   { get: function (t) { return t.estimateHours || 0; }, dir: 'desc' },
+    spent:      { get: function (t) { return t.spentHours || 0; }, dir: 'desc' },
+    dueDate:    { get: function (t) { return t.dueDate || '9999-12-31'; }, dir: 'asc' },
+    sla:        { get: function (t) { var r = D.slaRemaining(t); return r === null ? 99999 : r; }, dir: 'asc' }
+  };
+
+  var pageRows = [];
+
+  function assigneeCell(t) {
+    if (!canAssign) {
+      return t.assigneeId ? ui.personCell(db.get('users', t.assigneeId)) : '<span class="chip chip--warn">미배정</span>';
+    }
+    var opts = '<option value="">미배정</option>' + makers().map(function (u) {
+      return '<option value="' + esc(u.id) + '"' + (u.id === t.assigneeId ? ' selected' : '') + '>' +
+        esc(u.name + ' · ' + (u.craft || u.role)) + '</option>';
+    }).join('');
+    return '<select class="select select--inline" data-assign="' + esc(t.id) +
+      '" aria-label="' + esc(t.key) + ' 담당자 변경">' + opts + '</select>';
+  }
+
+  function renderList(rows) {
+    var s = SORTS[state.sort.key] || SORTS.dueDate;
+    rows = U.sortBy(rows, s.get, state.sort.dir);
+
+    var pages = Math.max(1, Math.ceil(rows.length / PAGE_SIZE));
+    if (state.page > pages) state.page = pages;
+    if (state.page < 1) state.page = 1;
+    var from = (state.page - 1) * PAGE_SIZE;
+    pageRows = rows.slice(from, from + PAGE_SIZE);
+
+    var cols = [
+      { key: 'key', label: '번호', tight: true, cell: function (t) {
+          return '<a class="tkt-key link--quiet t-nowrap" href="ticket.html?id=' + encodeURIComponent(t.id) + '">' + esc(t.key) + '</a>';
+        } },
+      { key: 'title', label: '제목', width: '22%', cell: function (t) {
+          return '<a class="link--quiet" href="ticket.html?id=' + encodeURIComponent(t.id) + '">' + esc(t.title) + '</a>' +
+            (t.reworkCount ? ' <span class="chip chip--warn">재작업 ' + t.reworkCount + '</span>' : '');
+        } },
+      { key: 'type', label: '유형', cell: function (t) { return '<span class="t-small t-nowrap">' + esc(t.type) + '</span>'; } },
+      { key: 'account', label: '광고주', cell: function (t) {
+          var a = db.get('accounts', t.accountId);
+          return a ? '<a class="link--quiet" href="account.html?id=' + encodeURIComponent(a.id) + '">' + esc(a.name) + '</a>'
+                   : '<span class="t-faint">미지정</span>';
+        } },
+      { key: 'requester', label: '의뢰자', cell: function (t) { return ui.personCell(db.get('users', t.requesterId)); } },
+      { key: 'assignee', label: '담당자', cell: assigneeCell },
+      { key: 'status', label: '상태', cell: function (t) { return ui.chip(t.status, STATUS_KIND[t.status]); } },
+      { key: 'priority', label: '우선순위', cell: function (t) { return prioHTML(t.priority); } },
+      { key: 'estimate', label: '예상', align: 'right', cell: function (t) { return U.num(t.estimateHours) + 'h'; } },
+      { key: 'spent', label: '실투입', align: 'right', cell: function (t) {
+          if (!t.spentHours) return '<span class="t-faint">0h</span>';
+          var over = t.estimateHours && t.spentHours > t.estimateHours;
+          return '<span class="t-num' + (over ? ' t-warn' : '') + '">' + U.num(t.spentHours) + 'h</span>';
+        } },
+      { key: 'dueDate', label: '마감', align: 'right', cell: function (t) {
+          var dd = U.days(C.today, t.dueDate);
+          return '<span class="' + (dd < 0 && isOpen(t) ? 't-neg' : dd <= 3 && isOpen(t) ? 't-warn' : '') + '">' +
+            esc(U.fmtDate(t.dueDate)) + '</span>';
+        } },
+      { key: 'sla', label: 'SLA', align: 'right', cell: slaChip },
+      { key: 'act', label: '', sortable: false, tight: true, cell: function (t) {
+          return '<button class="btn btn--ghost btn--icon btn--sm" type="button" data-menu="' + esc(t.id) +
+            '" aria-label="' + esc(t.key) + ' 작업 메뉴">⋯</button>';
+        } }
+    ];
+
+    var host = $('#tableHost');
+    host.innerHTML = '';
+    host.appendChild(ui.table(cols, pageRows, {
+      selectable: canAssign,
+      sort: state.sort,
+      onSort: function (key) {
+        if (!SORTS[key]) return;
+        if (state.sort.key === key) state.sort = { key: key, dir: state.sort.dir === 'asc' ? 'desc' : 'asc' };
+        else state.sort = { key: key, dir: SORTS[key].dir };
+        state.page = 1;
+        render();
+      },
+      empty: state.view === 'mine'
+        ? { title: '내 작업이 없습니다', body: '내가 의뢰했거나 담당하는 진행 중 제작 건이 없습니다.' }
+        : { title: '조건에 맞는 의뢰가 없습니다', body: '검색어를 줄이거나 필터를 초기화해 보세요.' }
+    }));
+    U.qsa('input[data-id]', host).forEach(function (n) { n.checked = !!state.sel[n.dataset.id]; });
+
+    renderPager(rows, from, pages);
+    renderBulk();
+    $('#count').textContent = rows.length + '건 표시 · 전체 ' + db.where('tickets', inScope).length + '건';
+  }
+
+  function renderPager(rows, from, pages) {
+    var to = Math.min(rows.length, from + PAGE_SIZE);
+    var nums = '';
+    var lo = Math.max(1, state.page - 2), hi = Math.min(pages, lo + 4);
+    lo = Math.max(1, hi - 4);
+    if (lo > 1) nums += '<button class="pager__btn" type="button" data-page="1">1</button><span class="pager__btn t-faint">…</span>';
+    for (var i = lo; i <= hi; i++) {
+      nums += '<button class="pager__btn" type="button" data-page="' + i + '"' +
+        (i === state.page ? ' aria-current="page"' : '') + '>' + i + '</button>';
+    }
+    if (hi < pages) nums += '<span class="pager__btn t-faint">…</span><button class="pager__btn" type="button" data-page="' + pages + '">' + pages + '</button>';
+
+    $('#pagerHost').innerHTML =
+      '<span class="t-mono">' + (rows.length ? (from + 1) + '–' + to : 0) + ' / ' + rows.length + '건</span>' +
+      '<span class="pager">' +
+        '<button class="btn btn--sm btn--ghost" type="button" data-page="' + (state.page - 1) + '"' +
+          (state.page <= 1 ? ' disabled' : '') + '>이전</button>' + nums +
+        '<button class="btn btn--sm btn--ghost" type="button" data-page="' + (state.page + 1) + '"' +
+          (state.page >= pages ? ' disabled' : '') + '>다음</button>' +
+      '</span>';
+  }
+
+  function selectedIds() {
+    return Object.keys(state.sel).filter(function (k) { return state.sel[k] && db.get('tickets', k); });
+  }
+  function renderBulk() {
+    var bar = $('#bulkbar');
+    var ids = selectedIds();
+    if (!canAssign || !ids.length) { bar.hidden = true; bar.innerHTML = ''; return; }
+    bar.hidden = false;
+    bar.innerHTML = '<span class="t-mono">' + ids.length + '건 선택됨</span>' +
+      '<button class="btn btn--sm btn--primary" type="button" id="bulkAssign">담당자 일괄 배정</button>' +
+      '<button class="btn btn--sm btn--ghost" type="button" id="bulkClear">선택 해제</button>';
+  }
+
+  /* ── 지표 타일 · 머리말 ──────────────────────────────────────────── */
+  function renderTiles() {
+    var st = M.ticketStats(SCOPE);
+    var openList = db.where('tickets', function (t) { return inScope(t) && isOpen(t); });
+    var wip = COLS.filter(function (s) {
+      var lim = D.WIP_LIMITS[s];
+      return lim && openList.filter(function (t) { return t.status === s; }).length > lim;
+    });
+    var oldest = U.sortBy(openList.filter(function (t) { return !t.assigneeId; }), 'createdAt')[0];
+    var tiles = [
+      { label: '진행 중 의뢰', value: U.num(st.open) + '<small>건</small>',
+        foot: wip.length ? 'WIP 한도 초과 상태 ' + wip.length + '개 · ' + esc(wip.join(', '))
+                         : '모든 상태가 WIP 한도 안에 있습니다' },
+      { label: '미배정', value: U.num(st.unassigned) + '<small>건</small>',
+        foot: oldest ? '가장 오래된 건 ' + esc(oldest.key) + ' · 접수 후 ' + U.days(oldest.createdAt, C.today) + '일'
+                     : '담당자가 비어 있는 의뢰가 없습니다' },
+      { label: 'SLA 초과', value: U.num(st.breach) + '<small>건</small>',
+        foot: st.slaRate === null ? '판정할 의뢰가 아직 없습니다'
+              : '준수율 ' + U.pct(st.slaRate) + ' · 완료 건 중 납기 초과 ' + st.late + '건' },
+      { label: '평균 리드타임', value: st.avgCycle === null ? '—' : U.num(Math.round(st.avgCycle)) + '<small>일</small>',
+        foot: st.avgCycle === null ? '완료된 의뢰가 없어 계산할 수 없습니다'
+              : '완료 ' + st.done + '건 기준 · 재작업 비율 ' + (st.reworkRate === null ? '—' : U.pct(st.reworkRate)) }
+    ];
+    $('#tiles').innerHTML = tiles.map(function (t) {
+      return '<article class="stat reveal"><p class="stat__label">' + esc(t.label) + '</p>' +
+        '<p class="stat__value">' + t.value + '</p>' +
+        '<p class="stat__foot">' + t.foot + '</p></article>';
+    }).join('');
+
+    $('#subline').innerHTML =
+      '진행 <strong>' + st.open + '건</strong> · 미배정 ' + st.unassigned + '건 · SLA 초과 ' + st.breach + '건 · ' +
+      (isMgr ? '전사 기준' : '내 관련 건 기준') + ' · 예상 잔여 공수 ' +
+      '<strong>' + U.num(U.sum(openList, 'estimateHours')) + '시간</strong>';
+  }
+
+  /* ── 분석 의견 ───────────────────────────────────────────────────── */
+  (function renderOpinions() {
+    var WANT = ['sla-breach', 'unassigned', 'rework'];
+    var list = C.insights.run(SCOPE).filter(function (x) { return WANT.indexOf(x.id) > -1; }).slice(0, 2);
+    if (!list.length) { var s = $('#opinionSec'); s.parentNode.removeChild(s); return; }
+    $('#opinionList').innerHTML = list.map(function (x) {
+      return ui.insight({ kind: x.kind, label: x.label, say: x.say, why: x.why, actions: x.actions });
+    }).join('');
+  })();
+
+  /* ── 전이 ────────────────────────────────────────────────────────── */
+  function relation(t) {
+    return {
+      requester: t.requesterId === me.id,
+      assignee: !!t.assigneeId && t.assigneeId === me.id,
+      manager: isMgr
+    };
+  }
+  function actorOK(t, to) {
+    var need = D.TICKET_ACTOR[to];
+    if (!need) return true;
+    var r = relation(t);
+    return need.some(function (k) { return r[k]; });
+  }
+  function actorNames(to) {
+    var map = { requester: '의뢰자', assignee: '담당자', manager: '리소스매니저' };
+    return (D.TICKET_ACTOR[to] || []).map(function (k) { return map[k]; }).join(' 또는 ');
+  }
+  function allowedFrom(t) {
+    return (D.TICKET_FLOW[t.status] || []).filter(function (to) { return actorOK(t, to); });
+  }
+
+  function nowISO() { return new Date().toISOString(); }
+
+  function notifyKeep(userId, kind, text, link, bag) {
+    if (!userId || userId === me.id) return;
+    db.notify(userId, kind, text, link);
+    var list = db.all('notifications');
+    if (list.length) bag.push(list[0].id);
+  }
+
+  function applyTransition(t, to, extra) {
+    extra = extra || {};
+    var before = {
+      status: t.status, assigneeId: t.assigneeId, startedAt: t.startedAt || null, doneAt: t.doneAt || null,
+      reworkCount: t.reworkCount || 0, holdReason: t.holdReason || null,
+      cancelReason: t.cancelReason || null, reworkReason: t.reworkReason || null,
+      deliverables: (t.deliverables || []).slice()
+    };
+    var patch = { status: to };
+    if (to === '배정됨') patch.assigneeId = extra.assigneeId;
+    if (to === '진행중' && !t.startedAt) patch.startedAt = nowISO();
+    if (to === '완료') patch.doneAt = nowISO();
+    if (to === '수정요청') { patch.reworkCount = (t.reworkCount || 0) + 1; patch.reworkReason = extra.reason || ''; }
+    if (to === '보류') patch.holdReason = extra.reason || '';
+    if (to === '취소') patch.cancelReason = extra.reason || '';
+    if (to === '검수' && extra.deliverable) patch.deliverables = (t.deliverables || []).concat([extra.deliverable]);
+
+    db.update('tickets', t.id, patch);
+    var hist = db.insert('ticketHistory', {
+      ticketId: t.id, at: nowISO(), actorId: me.id, field: 'status', from: before.status, to: to
+    }, { silent: true });
+
+    var link = 'ticket.html?id=' + encodeURIComponent(t.id);
+    var bag = [];
+    var target = patch.assigneeId !== undefined ? patch.assigneeId : t.assigneeId;
+    if (to === '배정됨') notifyKeep(target, 'assign', '‘' + t.key + ' ' + t.title + '’의 담당자로 배정되었습니다.', link, bag);
+    else notifyKeep(target, 'ticket', '‘' + t.key + '’ 상태가 ' + before.status + ' → ' + to + '(으)로 바뀌었습니다.', link, bag);
+    if (['검수', '완료', '취소', '수정요청'].indexOf(to) > -1) {
+      notifyKeep(t.requesterId, 'ticket', '‘' + t.key + ' ' + t.title + '’이(가) ' + to + ' 상태가 되었습니다.', link, bag);
+    }
+
+    var lim = D.WIP_LIMITS[to];
+    var nowCount = db.where('tickets', function (x) { return inScope(x) && x.status === to; }).length;
+    var warn = lim && nowCount > lim ? ' ' + to + ' 상태가 WIP 한도 ' + lim + '건을 넘었습니다.' : '';
+
+    state.sel = {};
+    render();
+    ui.toast('‘' + t.key + '’을(를) ' + to + ' 상태로 옮겼습니다.' + warn, {
+      undo: function () {
+        db.update('tickets', t.id, before);
+        if (hist) db.remove('ticketHistory', hist.id, { noTrash: true });
+        bag.forEach(function (id) { db.remove('notifications', id, { noTrash: true }); });
+        render();
+      }
+    });
+  }
+
+  /** 전이 요청의 단일 관문. 드래그도 카드 메뉴도 여기를 통과한다. */
+  function requestTransition(id, to) {
+    var t = db.get('tickets', id);
+    if (!t || t.status === to) return;
+    if (!canUpdate) { ui.toast('제작 의뢰를 수정할 권한이 없습니다.', { kind: 'neg' }); return; }
+    var flow = D.TICKET_FLOW[t.status] || [];
+    if (flow.indexOf(to) === -1) {
+      ui.toast('‘' + t.status + '’에서 ‘' + to + '’로는 바로 옮길 수 없습니다. 가능한 이동은 ' +
+        (flow.length ? flow.join(' · ') : '없습니다') + '.', { kind: 'neg' });
+      return;
+    }
+    if (!actorOK(t, to)) {
+      ui.toast('‘' + to + '’ 처리는 ' + actorNames(to) + '만 할 수 있습니다.', { kind: 'neg' });
+      return;
+    }
+    if (to === '배정됨') { assignModal([t.id], '배정됨'); return; }
+    if (to === '검수' && !(t.deliverables || []).length) { deliverableModal(t); return; }
+    if (to === '수정요청') { reasonModal(t, to, '수정요청 사유', '어디를 어떻게 고쳐야 하는지 적어 주세요. 재작업 횟수가 1 올라갑니다.'); return; }
+    if (to === '보류') { reasonModal(t, to, '보류 사유', '무엇을 기다리는지 적어 주세요. 보류 사유는 이력에 남습니다.'); return; }
+    if (to === '취소') { reasonModal(t, to, '취소 사유', '취소는 되돌릴 수 없는 종료 상태입니다. 사유를 남겨 주세요.'); return; }
+    applyTransition(t, to, null);
+  }
+
+  function reasonModal(t, to, label, help) {
+    var ta = el('textarea', { class: 'textarea', 'data-autofocus': '', placeholder: '예: 광고주 로고 규격 재확인 필요' });
+    var field = el('label', { class: 'field' }, [
+      el('span', { class: 'field__label', html: esc(label) + ' <span class="req">*</span>' }), ta,
+      el('span', { class: 'field__error', text: '사유를 입력해야 상태를 바꿀 수 있습니다.' })
+    ]);
+    ui.modal({
+      title: t.key + ' · ' + to,
+      body: el('div', { class: 'stack gap-sm' }, [
+        el('p', { class: 't-body', text: t.title }),
+        el('p', { class: 't-micro', text: help }),
+        field
+      ]),
+      actions: [
+        { label: '취소' },
+        { label: to + '(으)로 이동', kind: to === '취소' ? 'danger' : 'primary', onClick: function () {
+            var v = ta.value.trim();
+            if (!v) { field.classList.add('is-invalid'); ta.focus(); return false; }
+            applyTransition(t, to, { reason: v });
+          } }
+      ]
+    });
+  }
+
+  function deliverableModal(t) {
+    var ver = 'v' + ((t.deliverables || []).length + 1);
+    var name = el('input', { class: 'input', 'data-autofocus': '', autocomplete: 'off',
+      value: t.key + '_' + t.type + '_' + ver, placeholder: '산출물 파일명' });
+    var field = el('label', { class: 'field' }, [
+      el('span', { class: 'field__label', html: '산출물 파일명 <span class="req">*</span>' }), name,
+      el('span', { class: 'field__error', text: '파일명을 입력해야 검수로 넘길 수 있습니다.' })
+    ]);
+    ui.modal({
+      title: t.key + ' · 검수 요청',
+      body: el('div', { class: 'stack gap-sm' }, [
+        el('p', { class: 't-body', text: '검수로 넘기려면 산출물이 최소 1건 등록돼 있어야 합니다. ' + ver + '(으)로 기록합니다.' }),
+        field,
+        el('p', { class: 't-micro', text: '파일 용량과 미리보기는 티켓 상세 화면에서 첨부할 때 채워집니다.' })
+      ]),
+      actions: [
+        { label: '취소' },
+        { label: '검수로 이동', kind: 'primary', onClick: function () {
+            var v = name.value.trim();
+            if (!v) { field.classList.add('is-invalid'); name.focus(); return false; }
+            applyTransition(t, '검수', {
+              deliverable: { version: ver, name: v, sizeMB: null, at: nowISO(), byId: me.id, approved: false }
+            });
+          } }
+      ]
+    });
+  }
+
+  /* ── 담당자 배정 ─────────────────────────────────────────────────── */
+  function makers() {
+    return U.sortBy(db.where('users', function (u) { return u.role === '제작인력' && u.active !== false; }), 'name');
+  }
+
+  /** 후보를 매치율 순으로 보여준다. 왜 이 사람이 위인지 항목별 점수로 설명한다. */
+  function candidateList(t) {
+    var req = {
+      roleNeeded: D.ticketType(t.type).role,
+      skillsNeeded: [],
+      startDate: U.iso(C.today),
+      endDate: t.dueDate || U.iso(U.addDays(C.today, 14))
+    };
+    var scored = makers().map(function (u) {
+      var m = D.matchScore(u, req);
+      return { user: u, score: m.score, parts: m.parts, util: m.utilization,
+        jobs: db.where('tickets', function (x) { return x.assigneeId === u.id && isOpen(x); }).length };
+    });
+    return U.sortBy(scored, 'score', 'desc');
+  }
+
+  function assignModal(ids, transitionTo) {
+    var list = ids.map(function (id) { return db.get('tickets', id); }).filter(Boolean);
+    if (!list.length) return;
+    var base = list[0];
+    var cands = candidateList(base).slice(0, 8);
+    if (!cands.length) {
+      ui.modal({ title: '담당자 배정',
+        body: ui.empty('배정할 제작 인력이 없습니다', '설정에서 사용자 역할을 제작인력으로 지정하면 후보가 나타납니다.'),
+        actions: [{ label: '닫기', kind: 'primary' }] });
+      return;
+    }
+
+    var picked = { id: cands[0].user.id };
+    var rows = cands.map(function (c, i) {
+      var input = el('input', { type: 'radio', name: 'cand', value: c.user.id });
+      if (i === 0) { input.checked = true; input.setAttribute('data-autofocus', ''); }
+      input.addEventListener('change', function () { picked.id = c.user.id; });
+      return el('label', { class: 'cand check' }, [
+        input,
+        el('span', { class: 'grow', html:
+          '<span style="display:block">' + esc(c.user.name) + ' <span class="t-muted">' + esc(c.user.craft || c.user.role) + '</span></span>' +
+          '<span class="t-mono" style="font-size:10px">' + c.parts.map(function (p) {
+            return esc(p.label) + ' ' + p.got + '/' + p.max;
+          }).join(' · ') + ' · 진행 ' + c.jobs + '건</span>' }),
+        el('span', { class: 'cand__num', text: c.score + '점' }),
+        el('span', { class: 'cand__meter', html: ui.meter(c.score, 100, c.util > 100 ? 'neg' : c.score >= 70 ? 'pos' : 'warn') })
+      ]);
+    });
+
+    var head = list.length === 1
+      ? base.key + ' · ' + base.title + ' — ' + D.ticketType(base.type).role + ' 직무 기준으로 정렬했습니다.'
+      : ids.length + '건을 한 사람에게 배정합니다. 정렬 기준은 첫 건(' + base.type + ')입니다.';
+
+    ui.modal({
+      title: transitionTo ? '담당자 지정 후 배정됨으로 이동' : '담당자 배정',
+      size: 'wide',
+      body: el('div', { class: 'stack gap-sm' }, [
+        el('p', { class: 't-small', text: head }),
+        el('div', {}, rows),
+        el('p', { class: 't-micro', text: '점수는 직무 일치 45 · 스킬 매칭 30 · 가용 여력 25로 계산합니다. 배정된 담당자에게 알림이 갑니다.' })
+      ]),
+      actions: [
+        { label: '취소' },
+        { label: transitionTo ? '배정하고 이동' : '배정', kind: 'primary', onClick: function () {
+            if (transitionTo) applyTransition(base, transitionTo, { assigneeId: picked.id });
+            else applyAssign(ids, picked.id);
+          } }
+      ]
+    });
+  }
+
+  function applyAssign(ids, userId) {
+    var target = db.get('users', userId);
+    var changed = ids.map(function (id) {
+      var t = db.get('tickets', id);
+      return t && t.assigneeId !== userId ? { id: id, prev: t.assigneeId, key: t.key } : null;
+    }).filter(Boolean);
+    if (!changed.length) {
+      ui.toast('선택한 의뢰는 이미 ' + (target ? target.name : '해당 담당자') + ' 담당입니다.');
+      return;
+    }
+    changed.forEach(function (c) { db.update('tickets', c.id, { assigneeId: userId || null }); });
+    var bag = [];
+    if (userId) {
+      notifyKeep(userId, 'assign', changed.length + '건의 제작 의뢰 담당자로 지정되었습니다.', 'tickets.html?filter=assigned-me', bag);
+    }
+    state.sel = {};
+    render();
+    ui.toast('의뢰 ' + changed.length + '건의 담당자를 ' + (target ? target.name : '미배정') + '(으)로 바꿨습니다.', {
+      undo: function () {
+        changed.forEach(function (c) { db.update('tickets', c.id, { assigneeId: c.prev || null }); });
+        bag.forEach(function (id) { db.remove('notifications', id, { noTrash: true }); });
+        render();
+      }
+    });
+  }
+
+  /* ── 새 제작 의뢰 ────────────────────────────────────────────────── */
+  var TYPE_FIELDS = {
+    영상제작: [
+      { key: 'runtimeSec', label: '러닝타임(초)', kind: 'number', min: '5', step: '5', ph: '예: 30' },
+      { key: 'ratio', label: '소재 형식', kind: 'select', opts: ['16:9 가로형', '9:16 세로형', '1:1 정방형'] },
+      { key: 'subtitle', label: '자막 여부', kind: 'select', opts: ['자막 필요', '자막 불필요'] }
+    ],
+    디자인: [
+      { key: 'spec', label: '규격', kind: 'text', ph: '예: 728×90, 300×250, 1080×1080' },
+      { key: 'usage', label: '사용처', kind: 'select', opts: ['네이버 GFA', '카카오 모먼트', '메타', '구글 디스플레이', '자사몰 배너', '오프라인 인쇄'] }
+    ],
+    랜딩페이지: [
+      { key: 'pageCount', label: '페이지 수', kind: 'number', min: '1', step: '1', ph: '예: 3' },
+      { key: 'integration', label: '연동 필요 여부', kind: 'select', opts: ['연동 없음', '폼·DB 연동', '결제 연동', '트래킹 코드만'] }
+    ],
+    광고기획: [
+      { key: 'kpi', label: '목표 KPI', kind: 'select', opts: ['인지 확대', '유입 증대', '전환 개선', '재구매 유도'] }
+    ],
+    카피: [
+      { key: 'volume', label: '분량', kind: 'text', ph: '예: 헤드라인 5안 · 본문 300자 이내' }
+    ],
+    성과분석: [
+      { key: 'periodFrom', label: '대상 기간 시작', kind: 'date' },
+      { key: 'periodTo', label: '대상 기간 종료', kind: 'date' }
+    ]
+  };
+
+  function nextKey() {
+    var max = 100;
+    db.all('tickets').forEach(function (t) {
+      var m = /(\d+)\s*$/.exec(String(t.key || ''));
+      if (m) max = Math.max(max, Number(m[1]));
+    });
+    return 'PRD-' + (max + 1);
+  }
+
+  function field(label, node, req, err) {
+    return el('label', { class: 'field' }, [
+      el('span', { class: 'field__label', html: esc(label) + (req ? ' <span class="req">*</span>' : '') }),
+      node,
+      err ? el('span', { class: 'field__error', text: err }) : null
+    ]);
+  }
+
+  function openCreate() {
+    if (!canCreate) { ui.toast('제작 의뢰를 만들 권한이 없습니다.', { kind: 'neg' }); return; }
+    var accounts = U.sortBy(db.all('accounts'), 'name');
+    if (!accounts.length) {
+      ui.modal({ title: '새 제작 의뢰',
+        body: ui.empty('등록된 광고주가 없습니다', '광고주를 먼저 만든 뒤 제작을 의뢰할 수 있습니다.',
+          '<a class="btn btn--sm btn--primary" href="accounts.html">광고주 목록</a>'),
+        actions: [{ label: '닫기', kind: 'primary' }] });
+      return;
+    }
+
+    var typeSel = el('select', { class: 'select', 'data-autofocus': '' },
+      D.TICKET_TYPES.map(function (t) { return el('option', { value: t.key, text: t.key + ' · 기본 ' + t.baseHours + 'h · SLA ' + t.slaHours + 'h' }); }));
+    var title = el('input', { class: 'input', autocomplete: 'off', placeholder: '예: 여름 프로모션 15초 영상 제작' });
+    var accSel = el('select', { class: 'select' }, accounts.map(function (a) { return el('option', { value: a.id, text: a.name + ' · ' + a.tier }); }));
+    var oppSel = el('select', { class: 'select' });
+    var due = el('input', { class: 'input', type: 'date', value: U.iso(U.addDays(C.today, 7)) });
+    var prioSel = el('select', { class: 'select' },
+      D.PRIORITIES.map(function (p) { return el('option', { value: p.key, text: p.key + ' · ' + p.label }); }));
+    prioSel.value = 'P3';
+    var est = el('input', { class: 'input input--num', type: 'number', min: '1', step: '1' });
+    var desc = el('textarea', { class: 'textarea', placeholder: '목적 · 참고 자료 · 산출물 형태를 적어 주세요. 여기가 비면 재작업이 늘어납니다.' });
+
+    var fTitle = field('제목', title, true, '제목을 입력해 주세요.');
+    var typeBox = el('div', { class: 'stack gap-sm' });
+    var missNote = el('p', { class: 't-micro' });
+
+    var preOpp = state.opp ? db.get('opportunities', state.opp) : null;
+    if (preOpp) accSel.value = preOpp.accountId;
+
+    function fillOpps() {
+      var list = db.where('opportunities', function (o) { return o.accountId === accSel.value; });
+      list = U.sortBy(list, 'closeDate', 'desc');
+      oppSel.innerHTML = '<option value="">연결 안 함</option>' + list.map(function (o) {
+        return '<option value="' + esc(o.id) + '">' + esc(o.name + ' · ' + o.stage) + '</option>';
+      }).join('');
+      if (preOpp && preOpp.accountId === accSel.value) oppSel.value = preOpp.id;
+    }
+
+    var typeNodes = {};
+    function buildTypeBlock() {
+      typeBox.innerHTML = '';
+      typeNodes = {};
+      var defs = TYPE_FIELDS[typeSel.value] || [];
+      var pair = el('div', { class: 'grid grid--2' });
+      defs.forEach(function (d) {
+        var node;
+        if (d.kind === 'select') node = el('select', { class: 'select' }, d.opts.map(function (o) { return el('option', { value: o, text: o }); }));
+        else if (d.kind === 'number') node = el('input', { class: 'input input--num', type: 'number', min: d.min, step: d.step, placeholder: d.ph });
+        else if (d.kind === 'date') node = el('input', { class: 'input', type: 'date' });
+        else node = el('input', { class: 'input', autocomplete: 'off', placeholder: d.ph });
+        typeNodes[d.key] = { def: d, node: node, field: field(d.label, node, true, d.label + '을(를) 입력해 주세요.') };
+        pair.appendChild(typeNodes[d.key].field);
+      });
+      typeBox.appendChild(el('p', { class: 't-mono t-faint', text: typeSel.value + ' 필수 항목' }));
+      typeBox.appendChild(pair);
+      est.value = String(D.ticketType(typeSel.value).baseHours);
+      sync();
+    }
+
+    function missing() {
+      var out = [];
+      if (!title.value.trim()) out.push('제목');
+      Object.keys(typeNodes).forEach(function (k) {
+        if (!String(typeNodes[k].node.value || '').trim()) out.push(typeNodes[k].def.label);
+      });
+      if (!due.value) out.push('마감일');
+      if (!(Number(est.value) > 0)) out.push('예상 공수');
+      return out;
+    }
+    var okBtn = null;
+    function sync() {
+      var miss = missing();
+      missNote.textContent = miss.length
+        ? '필수 항목 ' + miss.length + '개 미입력 · ' + miss.join(', ')
+        : '필수 항목이 모두 채워졌습니다. SLA 기준 ' + D.slaHoursFor({ type: typeSel.value, priority: prioSel.value }) + '시간.';
+      if (okBtn) okBtn.disabled = miss.length > 0;
+    }
+
+    var body = el('div', { class: 'stack gap-sm' }, [
+      el('div', { class: 'grid grid--2' }, [field('의뢰 유형', typeSel, true), field('우선순위', prioSel, true)]),
+      fTitle,
+      el('div', { class: 'grid grid--2' }, [field('광고주', accSel, true), field('영업기회', oppSel)]),
+      el('div', { class: 'grid grid--2' }, [
+        field('납품 희망일', due, true, '마감일을 선택해 주세요.'),
+        field('예상 공수(시간)', est, true, '1시간 이상으로 입력해 주세요.')
+      ]),
+      typeBox,
+      field('요청 내용', desc),
+      missNote
+    ]);
+
+    var layer = ui.modal({
+      title: '새 제작 의뢰', body: body, size: 'wide',
+      actions: [
+        { label: '취소' },
+        { label: '의뢰 등록', kind: 'primary', onClick: function () {
+            var miss = missing();
+            if (miss.length) {
+              if (!title.value.trim()) fTitle.classList.add('is-invalid');
+              Object.keys(typeNodes).forEach(function (k) {
+                if (!String(typeNodes[k].node.value || '').trim()) typeNodes[k].field.classList.add('is-invalid');
+              });
+              sync();
+              return false;
+            }
+            saveTicket();
+          } }
+      ]
+    });
+    okBtn = layer.root.querySelector('.modal__foot .btn--primary');
+    body.addEventListener('input', sync);
+    body.addEventListener('change', sync);
+    U.on(typeSel, 'change', buildTypeBlock);
+    U.on(accSel, 'change', function () { fillOpps(); sync(); });
+    fillOpps();
+    buildTypeBlock();
+
+    function saveTicket() {
+      var tf = {};
+      Object.keys(typeNodes).forEach(function (k) { tf[k] = typeNodes[k].node.value; });
+      var rec = db.insert('tickets', {
+        key: nextKey(), type: typeSel.value, title: title.value.trim(),
+        description: desc.value.trim(),
+        requesterId: me.id, assigneeId: null,
+        accountId: accSel.value, oppId: oppSel.value || null,
+        status: '접수대기', priority: prioSel.value,
+        estimateHours: Number(est.value), spentHours: 0,
+        dueDate: due.value, createdAt: nowISO(), startedAt: null, doneAt: null,
+        reworkCount: 0, labels: [], watchers: [me.id], deliverables: [], typeFields: tf
+      });
+      db.insert('ticketHistory', {
+        ticketId: rec.id, at: nowISO(), actorId: me.id, field: 'status', from: null, to: '접수대기'
+      }, { silent: true });
+
+      var bag = [];
+      var mgrs = db.where('users', function (u) { return u.role === '리소스매니저' && u.active !== false; });
+      if (!mgrs.length) mgrs = db.where('users', function (u) { return u.role === '관리자'; });
+      mgrs.forEach(function (u) {
+        notifyKeep(u.id, 'ticket', '새 제작 의뢰 ‘' + rec.key + ' ' + rec.title + '’이(가) 접수됐습니다.',
+          'ticket.html?id=' + encodeURIComponent(rec.id), bag);
+      });
+
+      state.view = 'board'; state.q = ''; state.type = ''; state.prio = ''; state.sla = '';
+      state.assignee = ''; state.account = ''; state.page = 1;
+      syncControls();
+      render();
+      ui.toast('‘' + rec.key + ' ' + rec.title + '’을(를) 접수대기에 등록했습니다.', {
+        undo: function () {
+          db.remove('tickets', rec.id, { noTrash: true });
+          db.where('ticketHistory', function (h) { return h.ticketId === rec.id; })
+            .forEach(function (h) { db.remove('ticketHistory', h.id, { noTrash: true }); });
+          bag.forEach(function (id) { db.remove('notifications', id, { noTrash: true }); });
+          render();
+        }
+      });
+    }
+  }
+
+  /* ── 카드·행 메뉴 ────────────────────────────────────────────────── */
+  function openMenu(anchor, id) {
+    var t = db.get('tickets', id);
+    if (!t) return;
+    var items = [];
+    if (canUpdate) {
+      var moves = allowedFrom(t);
+      items.push({ label: '상태 이동 →' });
+      if (moves.length) {
+        moves.forEach(function (to) {
+          items.push({ icon: '→', label: to, onClick: function () { requestTransition(t.id, to); } });
+        });
+      } else {
+        items.push({ label: D.TICKET_FLOW[t.status] && D.TICKET_FLOW[t.status].length
+          ? '내 권한으로 가능한 이동 없음' : '종료 상태 — 이동 없음' });
+      }
+      if (canAssign) {
+        items.push('-');
+        items.push({ icon: '◎', label: '담당자 배정', onClick: function () { assignModal([t.id]); } });
+      }
+      items.push('-');
+    }
+    items.push({ icon: '↗', label: '티켓 열기', onClick: function () {
+      window.location.href = 'ticket.html?id=' + encodeURIComponent(t.id);
+    } });
+    var acc = db.get('accounts', t.accountId);
+    if (acc) items.push({ icon: '⬢', label: acc.name + ' 열기', onClick: function () {
+      window.location.href = 'account.html?id=' + encodeURIComponent(acc.id);
+    } });
+    if (t.oppId && db.get('opportunities', t.oppId)) {
+      items.push({ icon: '◆', label: '연결 영업기회', onClick: function () {
+        window.location.href = 'opportunity.html?id=' + encodeURIComponent(t.oppId);
+      } });
+    }
+    ui.menu(anchor, items);
+  }
+
+  /* ── 필터 컨트롤 ─────────────────────────────────────────────────── */
+  var VIEWS = [{ k: 'board', n: '보드' }, { k: 'list', n: '목록' }, { k: 'mine', n: '내 작업' }];
+
+  function fillSelect(node, placeholder, values, current) {
+    node.innerHTML = '<option value="">' + esc(placeholder) + '</option>' + values.map(function (v) {
+      return '<option value="' + esc(v.value) + '"' + (current === v.value ? ' selected' : '') + '>' + esc(v.label) + '</option>';
+    }).join('');
+  }
+
+  function buildControls() {
+    $('#views').innerHTML = VIEWS.map(function (v) {
+      return '<button class="seg__item" type="button" data-view="' + v.k + '" aria-pressed="' +
+        (state.view === v.k) + '">' + esc(v.n) + '</button>';
+    }).join('');
+
+    var scoped = db.where('tickets', inScope);
+    var assignees = U.uniq(scoped.map(function (t) { return t.assigneeId; }).filter(Boolean))
+      .map(function (id) { return { value: id, label: db.userName(id) }; });
+    var accs = U.uniq(scoped.map(function (t) { return t.accountId; }).filter(Boolean))
+      .map(function (id) { var a = db.get('accounts', id); return { value: id, label: a ? a.name : id }; });
+
+    fillSelect($('#fType'), '유형 전체', D.TICKET_TYPES.map(function (t) { return { value: t.key, label: t.key }; }), state.type);
+    fillSelect($('#fPrio'), '우선순위 전체', D.PRIORITIES.map(function (p) { return { value: p.key, label: p.key + ' · ' + p.label }; }), state.prio);
+    fillSelect($('#fAssignee'), '담당자 전체',
+      [{ value: 'none', label: '미배정' }].concat(U.sortBy(assignees, 'label')), state.assignee);
+    fillSelect($('#fAccount'), '광고주 전체', U.sortBy(accs, 'label'), state.account);
+    fillSelect($('#fSla'), 'SLA 전체', [
+      { value: 'ok', label: 'SLA 여유' }, { value: 'risk', label: 'SLA 임박' }, { value: 'breach', label: 'SLA 초과' }
+    ], state.sla);
+    $('#q').value = state.q;
+    $('#fSwim').value = state.swim;
+
+    var acts = '';
+    if (canAssign) acts += '<button class="btn btn--sm" type="button" id="goUnassigned">미배정 처리</button>';
+    if (canCreate) acts += '<button class="btn btn--primary btn--sm" type="button" id="newTkt">새 제작 의뢰</button>';
+    $('#headActs').innerHTML = acts || '<span class="t-micro">읽기 권한으로 보고 있습니다</span>';
+  }
+
+  function syncControls() {
+    U.qsa('#views [data-view]').forEach(function (b) { b.setAttribute('aria-pressed', String(b.dataset.view === state.view)); });
+    $('#q').value = state.q;
+    $('#fType').value = state.type; $('#fPrio').value = state.prio;
+    $('#fAssignee').value = state.assignee; $('#fAccount').value = state.account; $('#fSla').value = state.sla;
+    $('#swimCtl').hidden = state.view !== 'board';
+  }
+
+  function renderContext() {
+    var node = $('#ctxNote');
+    if (!state.opp) { node.hidden = true; node.innerHTML = ''; return; }
+    var o = db.get('opportunities', state.opp);
+    node.hidden = false;
+    node.innerHTML = '영업기회 <strong>' + esc(o ? o.name : state.opp) + '</strong>에 걸린 의뢰만 보고 있습니다. ' +
+      '<button class="btn btn--sm btn--ghost" type="button" id="clearOpp">이 조건 해제</button>';
+  }
+
+  function renderHint(rows) {
+    var msg;
+    if (state.view !== 'board') {
+      msg = state.view === 'mine'
+        ? '내가 의뢰했거나 담당하는 진행 중 의뢰를 마감이 이른 순으로 보여 줍니다.'
+        : (canAssign ? '담당자 칸에서 바로 배정할 수 있고, 체크박스로 여러 건을 한 번에 배정할 수 있습니다.'
+                     : '행의 ⋯ 메뉴에서 내 권한으로 가능한 상태 이동을 볼 수 있습니다.');
+    } else if (!rows.length) {
+      msg = '조건에 맞는 진행 중 의뢰가 없습니다. 필터를 넓히거나 필터 초기화를 누르세요.';
+    } else if (canUpdate) {
+      msg = '카드를 끌어 다른 상태에 놓으면 상태가 바뀝니다. 전이표에 없는 이동은 거부됩니다. ' +
+        '카드의 ⋯ 메뉴로도 옮길 수 있고, Enter 키로 티켓을 엽니다.' +
+        (state.swim !== 'none' ? ' 담당자가 없는 의뢰는 최상단 미배정 레인에 모입니다.' : '');
+    } else {
+      msg = '내 권한으로는 의뢰를 읽기만 할 수 있습니다. 카드에서 Enter 키를 누르면 티켓이 열립니다.';
+    }
+    $('#hint').textContent = msg;
+  }
+
+  /* ── 렌더 ────────────────────────────────────────────────────────── */
+  function render() {
+    if (state.view === 'mine') state.sort = { key: 'dueDate', dir: 'asc' };
+    var rows = filtered();
+    syncControls();
+    renderContext();
+    renderTiles();
+    $('#boardPane').hidden = state.view !== 'board';
+    $('#listPane').hidden = state.view === 'board';
+    if (state.view === 'board') renderBoard(rows); else renderList(rows);
+    renderHint(rows);
+    U.revealAll();
+  }
+
+  /* ── 이벤트 배선 ─────────────────────────────────────────────────── */
+  buildControls();
+
+  U.live($('#views'), 'click', '[data-view]', function (e, b) {
+    state.view = b.dataset.view; state.page = 1; state.sel = {};
+    render();
+  });
+  U.on($('#q'), 'input', U.debounce(function () { state.q = $('#q').value; state.page = 1; render(); }, 180));
+  U.on($('#fType'), 'change', function () { state.type = this.value; state.page = 1; render(); });
+  U.on($('#fPrio'), 'change', function () { state.prio = this.value; state.page = 1; render(); });
+  U.on($('#fAssignee'), 'change', function () { state.assignee = this.value; state.page = 1; render(); });
+  U.on($('#fAccount'), 'change', function () { state.account = this.value; state.page = 1; render(); });
+  U.on($('#fSla'), 'change', function () { state.sla = this.value; state.page = 1; render(); });
+  U.on($('#fSwim'), 'change', function () { state.swim = this.value; state.open = {}; render(); });
+  U.on($('#reset'), 'click', function () {
+    state.q = ''; state.type = ''; state.prio = ''; state.assignee = ''; state.account = ''; state.sla = '';
+    state.opp = ''; state.page = 1; state.sel = {}; state.open = {};
+    render();
+  });
+  U.live($('#ctxNote'), 'click', '#clearOpp', function () { state.opp = ''; state.page = 1; render(); });
+
+  U.on($('#csv'), 'click', function () {
+    var rows = filtered();
+    if (!rows.length) { ui.toast('내보낼 의뢰가 없습니다.', { kind: 'neg' }); return; }
+    var head = ['번호', '제목', '유형', '광고주', '의뢰자', '담당자', '상태', '우선순위', '예상공수', '실투입', '마감', 'SLA'];
+    var body = U.sortBy(rows, (SORTS[state.sort.key] || SORTS.dueDate).get, state.sort.dir).map(function (t) {
+      return [t.key, t.title, t.type, accName(t), db.userName(t.requesterId),
+        t.assigneeId ? db.userName(t.assigneeId) : '미배정', t.status, t.priority,
+        t.estimateHours, t.spentHours || 0, t.dueDate, SLA_LABEL[D.slaState(t)]];
+    });
+    ui.exportCSV('closer-제작의뢰.csv', [head].concat(body));
+  });
+
+  U.live($('#headActs'), 'click', '#newTkt', function () { openCreate(); });
+  U.live($('#headActs'), 'click', '#goUnassigned', function () {
+    state.assignee = 'none'; state.view = 'list'; state.page = 1; render();
+  });
+
+  /* 보드 상호작용 */
+  var board = $('#board');
+  U.live(board, 'click', '.kcard__more', function (e, b) { e.stopPropagation(); openMenu(b, b.dataset.menu); });
+  U.live(board, 'click', '[data-more]', function (e, b) {
+    state.open[b.dataset.more] = true; render();
+  });
+  U.live(board, 'click', '.kcard', function (e, card) {
+    if (e.target.closest('button')) return;
+    window.location.href = 'ticket.html?id=' + encodeURIComponent(card.dataset.id);
+  });
+  U.live(board, 'keydown', '.kcard', function (e, card) {
+    if (e.isComposing || e.keyCode === 229) return;
+    if (e.key === 'Enter') { e.preventDefault(); window.location.href = 'ticket.html?id=' + encodeURIComponent(card.dataset.id); }
+  });
+
+  /* HTML5 드래그 앤 드롭 — 이동은 낙관적으로 반영하고 되돌리기를 토스트로 준다. */
+  var dragId = null, hot = null;
+  function cool() { if (hot) { hot.classList.remove('is-drop'); hot = null; } }
+  U.live(board, 'dragstart', '.kcard', function (e, card) {
+    if (!canUpdate || card.getAttribute('draggable') !== 'true') { e.preventDefault(); return; }
+    dragId = card.dataset.id;
+    try { e.dataTransfer.setData('text/plain', dragId); e.dataTransfer.effectAllowed = 'move'; } catch (x) { /* 일부 브라우저는 무시 */ }
+    card.classList.add('is-dragging');
+  });
+  U.live(board, 'dragend', '.kcard', function (e, card) { card.classList.remove('is-dragging'); dragId = null; cool(); });
+  U.live(board, 'dragover', '.board-cell', function (e, col) {
+    if (!dragId || !col.dataset.status) return;
+    e.preventDefault();
+    try { e.dataTransfer.dropEffect = 'move'; } catch (x) { /* noop */ }
+    if (hot !== col) { cool(); hot = col; col.classList.add('is-drop'); }
+  });
+  U.on(board, 'dragleave', function (e) { if (hot && !hot.contains(e.relatedTarget)) cool(); });
+  U.live(board, 'drop', '.board-cell', function (e, col) {
+    e.preventDefault();
+    var id = dragId;
+    if (!id) { try { id = e.dataTransfer.getData('text/plain'); } catch (x) { id = null; } }
+    dragId = null; cool();
+    if (id && col.dataset.status) requestTransition(id, col.dataset.status);
+  });
+
+  /* 목록 상호작용 */
+  U.live($('#tableHost'), 'click', '[data-menu]', function (e, b) { e.stopPropagation(); openMenu(b, b.dataset.menu); });
+  U.live($('#tableHost'), 'change', 'input[data-id]', function (e, t) {
+    if (t.checked) state.sel[t.dataset.id] = true; else delete state.sel[t.dataset.id];
+    renderBulk();
+  });
+  U.live($('#tableHost'), 'change', '[data-assign]', function (e, sel) {
+    applyAssign([sel.dataset.assign], sel.value || null);
+  });
+  U.live($('#bulkbar'), 'click', '#bulkAssign', function () { assignModal(selectedIds()); });
+  U.live($('#bulkbar'), 'click', '#bulkClear', function () { state.sel = {}; render(); });
+  U.live($('#pagerHost'), 'click', '[data-page]', function (e, b) {
+    var p = Number(b.dataset.page);
+    if (!p || p === state.page) return;
+    state.page = p;
+    render();
+    $('#tableHost').scrollIntoView({ block: 'start' });
+  });
+
+  render();
+  if (U.param('new') === '1') openCreate();
+})();
+</script>
+</body>
+</html>

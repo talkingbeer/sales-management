@@ -1,0 +1,733 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>매출 예측 · CLOSER</title>
+<meta name="description" content="CLOSER 매출 예측. 예측 카테고리별 롤업, 담당자별 목표 달성률, 월별 예측 추이와 예측을 오염시키는 딜을 한 화면에서 확인합니다." />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=IBM+Plex+Sans+KR:wght@400;500;600&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="../tokens.css" />
+<link rel="stylesheet" href="../assets/css/base.css" />
+<link rel="stylesheet" href="../assets/css/components.css" />
+<link rel="stylesheet" href="../assets/css/app.css" />
+<style>
+  /* 이 화면에만 필요한 조각들 — 값은 모두 토큰을 참조합니다. */
+
+  /* 표 위가 아니라 홀로 서는 필터바 (components.css 의 .filterbar 는 표와 붙는 전제) */
+  .filterbar--solo {
+    border-bottom: var(--rule-hair) solid var(--color-rule);
+    border-radius: var(--radius-md);
+  }
+  .fbar__group { display: flex; align-items: center; gap: var(--space-xs); min-width: 0; }
+  .fbar__key {
+    font-family: var(--font-mono); font-size: var(--text-2xs);
+    letter-spacing: var(--track-mono); text-transform: uppercase;
+    color: var(--color-ink-4); white-space: nowrap;
+  }
+  /* 권한이 없는 범위는 감추지 않고 잠급니다 — 왜 못 보는지가 보이는 편이 낫습니다. */
+  .seg__item[disabled] { opacity: 0.42; cursor: not-allowed; }
+  .seg__item[disabled]:hover { background: var(--color-surface); color: var(--color-ink-3); }
+
+  /* 롤업 표 — 열이 많아 표 안에서 가로 스크롤합니다 */
+  .fc-roll table { min-width: 960px; }
+  .fc-roll tfoot td {
+    background: var(--color-paper-2);
+    border-top: var(--rule-thick) solid var(--color-rule-2);
+    border-bottom: none;
+    color: var(--color-ink); font-weight: 500;
+  }
+  .fc-att { display: grid; gap: var(--space-3xs); min-width: 120px; }
+  .fc-att__row { display: flex; align-items: center; gap: var(--space-xs); }
+  .fc-att__n { font-size: var(--text-2xs); color: var(--color-ink-2); white-space: nowrap; }
+
+  /* 담당자 셀 — 누르면 그 사람의 딜 목록이 열립니다 */
+  .fc-owner {
+    display: inline-flex; align-items: center; gap: var(--space-xs);
+    max-width: 100%;
+    padding: var(--space-3xs) var(--space-2xs);
+    margin-inline-start: calc(-1 * var(--space-2xs));
+    border: var(--rule-hair) solid transparent;
+    border-radius: var(--radius-xs);
+    color: var(--color-ink); font: inherit; text-align: left; cursor: pointer;
+    transition: background-color var(--dur-short) var(--ease-out),
+                border-color var(--dur-short) var(--ease-out),
+                color var(--dur-short) var(--ease-out);
+  }
+  .fc-owner > span { white-space: nowrap; }
+  .fc-owner:hover { background: var(--color-paper-3); border-color: var(--color-rule-2); color: var(--color-accent-press); }
+  .fc-owner:active { border-color: var(--color-accent); }
+  .fc-owner[disabled] { opacity: 0.5; cursor: not-allowed; }
+  .fc-owner__role { font-family: var(--font-mono); font-size: 10px; color: var(--color-ink-4); }
+
+  /* 워터폴 아래 목표 대비 막대 */
+  .fc-goal { display: grid; grid-template-columns: auto minmax(72px, 1fr) auto; gap: var(--space-2xs) var(--space-sm); align-items: center; }
+  .fc-goal__k { font-size: var(--text-xs); color: var(--color-ink-2); white-space: nowrap; }
+  .fc-goal__v { font-family: var(--font-mono); font-size: var(--text-2xs); color: var(--color-ink-3); white-space: nowrap; }
+
+  /* 두 칸 배치 — 1024px 아래에서는 한 칸으로 */
+  .fc-2col { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: var(--space-lg); align-items: start; }
+  @media (max-width: 1024px) { .fc-2col { grid-template-columns: minmax(0, 1fr); } }
+  @media (max-width: 520px) { .fbar__group { flex: 1 1 100%; } }
+</style>
+</head>
+<body class="app">
+<a class="skip-link" href="#main">본문으로 건너뛰기</a>
+
+<div class="app-main">
+  <main class="app-page" id="main">
+
+    <div class="page-head">
+      <div>
+        <h1 class="page-head__title">매출 예측</h1>
+        <p class="page-head__sub" id="subline"></p>
+      </div>
+      <div class="page-head__acts">
+        <a class="btn btn--sm" href="pipeline.html">파이프라인 보드</a>
+        <a class="btn btn--sm" href="opportunities.html">영업기회 목록</a>
+        <button class="btn btn--sm" type="button" id="csvBtn">롤업 CSV 내보내기</button>
+      </div>
+    </div>
+
+    <section class="filterbar filterbar--solo mb-lg" aria-label="예측 기간과 범위">
+      <div class="fbar__group">
+        <span class="fbar__key">기간</span>
+        <div class="seg" id="segPeriod" role="group" aria-label="예측 기간 선택" data-verify="segPeriod"></div>
+      </div>
+      <div class="fbar__group">
+        <span class="fbar__key">범위</span>
+        <div class="seg" id="segScope" role="group" aria-label="예측 범위 선택" data-verify="segScope"></div>
+      </div>
+      <span class="grow"></span>
+      <span class="filterbar__count" id="scopeNote"></span>
+    </section>
+
+    <section class="grid grid--4" id="tiles" aria-label="예측 카테고리 요약" data-verify="tiles"></section>
+
+    <section class="mt-lg panel reveal" aria-label="예측 카테고리 롤업">
+      <div class="panel__head">
+        <h2 class="panel__title">예측 카테고리 롤업</h2>
+        <span class="t-mono" id="rollCount"></span>
+      </div>
+      <div class="fc-roll" id="rollHost" data-verify="rollHost"></div>
+      <div class="panel__foot">
+        <p class="t-micro" id="rollNote"></p>
+      </div>
+    </section>
+
+    <section class="mt-lg fc-2col">
+      <div class="panel reveal">
+        <div class="panel__head">
+          <h2 class="panel__title">목표에서 파이프라인까지</h2>
+          <span class="t-mono" id="wfPeriod"></span>
+        </div>
+        <div class="panel__body" id="wfHost" data-verify="wfHost"></div>
+      </div>
+      <div class="panel reveal">
+        <div class="panel__head">
+          <h2 class="panel__title">월별 예측 추이</h2>
+          <span class="t-mono">최근 6개월</span>
+        </div>
+        <div class="panel__body" id="trendHost" data-verify="trendHost"></div>
+      </div>
+    </section>
+
+    <section class="mt-lg fc-2col">
+      <div class="panel reveal">
+        <div class="panel__head">
+          <h2 class="panel__title">예측 판단 근거</h2>
+          <a class="link" href="pipeline.html">단계 보기</a>
+        </div>
+        <div id="basisHost" data-verify="basisHost"></div>
+        <div class="panel__foot">
+          <p class="t-micro" id="basisNote"></p>
+        </div>
+      </div>
+      <div class="panel reveal">
+        <div class="panel__head">
+          <h2 class="panel__title">분석 의견</h2>
+          <a class="link" href="insights.html">전체 보기</a>
+        </div>
+        <div class="panel__body stack gap-xs" id="insightHost" data-verify="insightHost"></div>
+      </div>
+    </section>
+
+    <section class="mt-lg panel reveal" aria-label="마감일이 지난 열린 딜">
+      <div class="panel__head">
+        <h2 class="panel__title">예측을 오염시키는 딜</h2>
+        <span id="odBadge"></span>
+      </div>
+      <div class="panel__body" id="odIntro"></div>
+      <div id="odHost" data-verify="odHost"></div>
+    </section>
+
+    <footer class="hairline mt-2xl" style="padding-block:var(--space-md)">
+      <p class="t-mono t-faint">CLOSER · 데모 데이터 · 모든 회사·인물·연락처는 가상입니다</p>
+    </footer>
+  </main>
+</div>
+
+<script src="../assets/js/seed.js"></script>
+<script src="../assets/js/util.js"></script>
+<script src="../assets/js/store.js"></script>
+<script src="../assets/js/domain.js"></script>
+<script src="../assets/js/metrics.js"></script>
+<script src="../assets/js/insights.js"></script>
+<script src="../assets/js/ui.js"></script>
+<script src="../assets/js/charts.js"></script>
+<script src="../assets/js/shell.js"></script>
+<script>
+(function () {
+  'use strict';
+  var C = window.CLOSER, U = C.util, db = C.db, D = C.domain, M = C.metrics, ui = C.ui, ch = C.charts;
+  C.shell.mount('forecast');
+
+  var $ = U.qs, esc = U.esc;
+  var me = db.me();
+  var canU = D.can('opportunities', 'U');
+
+  /* ══ 예측 카테고리 — 이름과 순서는 domain.js 의 것을 그대로 씁니다 ══════ */
+  var CAST_KO = { Closed: '확정', Commit: '커밋', 'Best Case': '베스트케이스', Pipeline: '파이프라인', Omitted: '제외' };
+  var CAST_ORDER = ['Closed', 'Commit', 'Best Case', 'Pipeline', 'Omitted'];
+  function castStages(cast) {
+    return D.STAGES.filter(function (s) { return s.cast === cast; });
+  }
+  function castOrderOf(cast) { var i = CAST_ORDER.indexOf(cast); return i < 0 ? CAST_ORDER.length : i; }
+
+  /* ══ 기간 ══════════════════════════════════════════════════════════════ */
+  var PERIODS = [
+    { key: 'this-q', label: '이번 분기' },
+    { key: 'next-q', label: '다음 분기' },
+    { key: 'this-m', label: '이번 달' }
+  ];
+  function rangeOf(key) {
+    var t = C.today;
+    if (key === 'this-m') {
+      return { from: new Date(t.getFullYear(), t.getMonth(), 1),
+               to: new Date(t.getFullYear(), t.getMonth() + 1, 0),
+               label: U.ymOf(t) };
+    }
+    var qi = Math.floor(t.getMonth() / 3) + (key === 'next-q' ? 1 : 0);
+    var from = new Date(t.getFullYear(), qi * 3, 1);
+    return { from: from, to: new Date(t.getFullYear(), qi * 3 + 3, 0), label: U.quarterOf(from) };
+  }
+
+  /* ══ 범위 — 권한 매트릭스와 소유 범위를 그대로 따릅니다 ═══════════════ */
+  var teamIds = db.where('users', function (u) { return u.teamId === me.teamId; }).map(function (u) { return u.id; });
+  var SCOPES = [
+    { key: 'me', label: '내 것', ok: true,
+      ids: function () { return [me.id]; },
+      note: '내가 담당하는 영업기회만 집계합니다.' },
+    { key: 'team', label: '팀', ok: db.isManager(me),
+      ids: function () { return teamIds; },
+      note: '같은 팀 구성원의 영업기회를 합산합니다.',
+      deny: '팀 예측은 관리자 권한이 있는 역할만 볼 수 있습니다.' },
+    { key: 'all', label: '전체', ok: me.role === '관리자',
+      ids: function () { return db.all('users').map(function (u) { return u.id; }); },
+      note: '전사 영업기회를 합산합니다.',
+      deny: '전사 예측은 관리자만 볼 수 있습니다.' }
+  ];
+  function scopeDef(key) {
+    for (var i = 0; i < SCOPES.length; i++) if (SCOPES[i].key === key) return SCOPES[i];
+    return SCOPES[0];
+  }
+
+  /* ══ 상태 — URL 이 화면 상태를 결정합니다 ═════════════════════════════ */
+  var urlPeriod = U.param('period', '');
+  var urlScope = U.param('scope', '');
+  var state = {
+    period: PERIODS.some(function (p) { return p.key === urlPeriod; }) ? urlPeriod : 'this-q',
+    scope: (scopeDef(urlScope).key === urlScope && scopeDef(urlScope).ok) ? urlScope : (db.isManager(me) ? 'team' : 'me'),
+    sort: { key: 'total', dir: 'desc' }
+  };
+  var view = null;   // 현재 렌더에 쓰인 스코프와 집계 — drawer 가 다시 읽습니다.
+
+  /* ══ 작은 도우미 ══════════════════════════════════════════════════════ */
+  function wonShort(v) { return U.won(v, { unit: false }); }
+  /** 목표 대비 비율 — 목표가 등록되지 않은 기간은 비율을 만들지 않습니다. */
+  function pctOfQuota(v) { return view.quota > 0 ? U.pct((v / view.quota) * 100) : null; }
+  function vsQuota(v) {
+    var p = pctOfQuota(v);
+    return p === null ? '목표 미등록' : '목표 대비 ' + p;
+  }
+  function meterKind(pct) { return pct === null ? 'warn' : pct >= 100 ? 'pos' : pct >= 70 ? '' : 'warn'; }
+
+  function ownerScope(id) {
+    return { userIds: [id], from: view.s.from, to: view.s.to, label: view.s.label };
+  }
+  /** 이 기간 예측에 들어가는 진행 딜 — metrics.forecast 와 같은 포함 규칙. */
+  function openInForecast(s) {
+    return M.open(s).filter(function (o) { return U.days(o.closeDate, s.to) >= 0; });
+  }
+
+  /* ══ 컨트롤 — 한 번만 그리고 이후에는 상태만 갱신합니다 ═══════════════ */
+  $('#segPeriod').innerHTML = PERIODS.map(function (p) {
+    return '<button class="seg__item" type="button" data-period="' + esc(p.key) + '" aria-pressed="false">' + esc(p.label) + '</button>';
+  }).join('');
+  $('#segScope').innerHTML = SCOPES.map(function (sc) {
+    return '<button class="seg__item" type="button" data-scope="' + esc(sc.key) + '" aria-pressed="false"' +
+      (sc.ok ? '' : ' disabled title="' + esc(sc.deny) + '"') + '>' + esc(sc.label) + '</button>';
+  }).join('');
+
+  U.live($('#segPeriod'), 'click', '[data-period]', function (e, b) {
+    if (b.dataset.period === state.period) return;
+    state.period = b.dataset.period;
+    syncURL(); render();
+  });
+  U.live($('#segScope'), 'click', '[data-scope]', function (e, b) {
+    if (b.disabled || b.dataset.scope === state.scope) return;
+    state.scope = b.dataset.scope;
+    syncURL(); render();
+  });
+  U.on($('#csvBtn'), 'click', function () {
+    ui.tableToCSV($('#rollHost table'), 'closer-forecast-' + state.period + '-' + state.scope + '.csv');
+  });
+
+  function syncURL() {
+    try {
+      var url = 'forecast.html?period=' + encodeURIComponent(state.period) + '&scope=' + encodeURIComponent(state.scope);
+      /* 저장소가 막힌 환경에서는 세션이 ?as= 로 따라다닙니다 — 주소를 다시 쓸 때 잃어버리지 않게 합니다. */
+      var as = U.param('as', '');
+      window.history.replaceState(null, '', as ? url + '&as=' + encodeURIComponent(as) : db.linkAs(url));
+    } catch (err) { /* file:// 에서는 주소를 못 바꿉니다 — 화면 상태는 그대로 유지됩니다. */ }
+  }
+
+  /* 정적 링크도 세션을 이어 가야 합니다 — 처음 한 번만 고쳐 씁니다. */
+  U.qsa('#main a[href]').forEach(function (a) {
+    var h = a.getAttribute('href');
+    if (h && !/^(https?:|mailto:|tel:|#)/i.test(h)) a.setAttribute('href', db.linkAs(h));
+  });
+
+  /* ══ 렌더 ═════════════════════════════════════════════════════════════ */
+  function render() {
+    var R = rangeOf(state.period);
+    var ids = scopeDef(state.scope).ids();
+    var s = { userIds: ids, from: R.from, to: R.to, label: R.label };
+    view = {
+      R: R, s: s,
+      f: M.forecast(s),
+      quota: M.quota(s),
+      omitted: U.sum(M.lost(s), 'amount')
+    };
+
+    U.qsa('#segPeriod [data-period]').forEach(function (b) {
+      b.setAttribute('aria-pressed', String(b.dataset.period === state.period));
+    });
+    U.qsa('#segScope [data-scope]').forEach(function (b) {
+      b.setAttribute('aria-pressed', String(b.dataset.scope === state.scope));
+    });
+
+    renderHead();
+    renderTiles();
+    renderRollup();
+    renderWaterfall();
+    renderTrend();
+    renderBasis();
+    renderInsights();
+    renderOverdue();
+    U.revealAll();
+  }
+
+  function renderHead() {
+    var s = view.s, R = view.R;
+    var people = s.userIds.filter(function (id) {
+      return db.count('opportunities', function (o) { return o.ownerId === id; }) > 0;
+    }).length;
+    $('#subline').innerHTML =
+      U.fmtDate(C.today) + ' 기준 · <strong>' + esc(R.label) + '</strong> (' + U.fmtDate(R.from) + '–' + U.fmtDate(R.to) + ')' +
+      ' · 대상 ' + U.num(people) + '명 · 목표 ' + (view.quota > 0 ? U.won(view.quota) : '미등록') +
+      ' · 남은 기간 <strong>' + Math.max(0, U.days(C.today, R.to)) + '일</strong>';
+    $('#scopeNote').textContent = scopeDef(state.scope).note;
+    $('#wfPeriod').textContent = R.label;
+  }
+
+  function renderTiles() {
+    var f = view.f;
+    var names = function (cast) { return castStages(cast).map(function (x) { return x.key; }).join(' · '); };
+    var tiles = [
+      { label: '확정 Closed', value: U.won(f.byCast.Closed),
+        foot: vsQuota(f.byCast.Closed) + ' · 성사 ' + U.num(M.won(view.s).length) + '건' },
+      { label: '커밋 Commit', value: U.won(f.commit),
+        foot: vsQuota(f.commit) + ' · 확정 + ' + names('Commit') },
+      { label: '베스트케이스', value: U.won(f.bestCase),
+        foot: vsQuota(f.bestCase) + ' · 커밋 + ' + names('Best Case') },
+      { label: '전체 파이프라인', value: U.won(f.pipeline),
+        foot: vsQuota(f.pipeline) + ' · 가중 ' + U.won(f.weighted) }
+    ];
+    $('#tiles').innerHTML = tiles.map(function (t) {
+      return '<article class="stat reveal"><p class="stat__label">' + esc(t.label) + '</p>' +
+        '<p class="stat__value">' + t.value + '</p>' +
+        '<p class="stat__foot">' + esc(t.foot) + '</p></article>';
+    }).join('');
+  }
+
+  /* ── 롤업 표 ─────────────────────────────────────────────────────────
+     행 = 담당자, 열 = 예측 카테고리. 모든 숫자는 metrics.forecast 를 담당자
+     스코프로 한 번 더 호출해서 얻습니다 — 화면에서 다시 계산하지 않습니다. */
+  function rowFor(u) {
+    var os = ownerScope(u.id);
+    var f = M.forecast(os);
+    return {
+      id: u.id, user: u,
+      closed: f.byCast.Closed,
+      commit: f.byCast.Commit,
+      best: f.byCast['Best Case'],
+      pipe: f.byCast.Pipeline,
+      omitted: U.sum(M.lost(os), 'amount'),
+      total: f.pipeline,
+      quota: M.quota(os),
+      att: M.attainment(os),
+      commitAtt: M.quota(os) > 0 ? (f.commit / M.quota(os)) * 100 : null
+    };
+  }
+
+  function rollupRows() {
+    var rows = view.s.userIds.map(function (id) { return db.get('users', id); })
+      .filter(function (u) {
+        if (!u) return false;
+        return db.count('opportunities', function (o) { return o.ownerId === u.id; }) > 0 ||
+               db.count('targets', function (t) { return t.ownerId === u.id; }) > 0;
+      })
+      .map(rowFor);
+    var key = state.sort.key;
+    return U.sortBy(rows, function (r) {
+      if (key === 'owner') return r.user.name;
+      if (key === 'att') return r.att === null ? -1 : r.att;
+      return r[key] || 0;
+    }, state.sort.dir);
+  }
+
+  function amtCell(k, muted) {
+    return function (r) {
+      return '<span class="t-num' + (muted ? ' t-muted' : '') + '">' + U.won(r[k]) + '</span>';
+    };
+  }
+
+  function renderRollup() {
+    var rows = rollupRows();
+    var f = view.f;
+    var cols = [
+      { key: 'owner', label: '담당자', width: '190px', cell: function (r) {
+          return '<button type="button" class="fc-owner" data-owner="' + esc(r.id) + '" aria-label="' + esc(r.user.name) + ' 예측 상세 열기">' +
+            ui.avatar(r.user, 'sm') + '<span>' + esc(r.user.name) + '</span>' +
+            '<span class="fc-owner__role">' + esc(r.user.title || r.user.role) + '</span></button>';
+        } },
+      { key: 'closed', label: '확정', align: 'right', cell: amtCell('closed') },
+      { key: 'commit', label: '커밋', align: 'right', cell: amtCell('commit') },
+      { key: 'best', label: '베스트케이스', align: 'right', cell: amtCell('best') },
+      { key: 'pipe', label: '파이프라인', align: 'right', cell: amtCell('pipe') },
+      { key: 'omitted', label: '제외', align: 'right', cell: amtCell('omitted', true) },
+      { key: 'total', label: '합계', align: 'right', cell: function (r) {
+          return '<strong class="t-num">' + U.won(r.total) + '</strong>';
+        } },
+      { key: 'quota', label: '목표', align: 'right', cell: function (r) {
+          return r.quota > 0 ? '<span class="t-num t-muted">' + U.won(r.quota) + '</span>' : '<span class="t-faint">미등록</span>';
+        } },
+      { key: 'att', label: '달성률', width: '168px', sortable: true, cell: function (r) {
+          return '<div class="fc-att"><div class="fc-att__row">' +
+            '<span class="grow">' + ui.meter(r.closed, r.quota, meterKind(r.att)) + '</span>' +
+            '<span class="fc-att__n">' + (r.att === null ? '—' : Math.round(r.att) + '%') + '</span></div>' +
+            '<span class="fc-att__n t-muted">커밋 기준 ' + (r.commitAtt === null ? '—' : Math.round(r.commitAtt) + '%') + '</span></div>';
+        } }
+    ];
+
+    var host = $('#rollHost');
+    host.innerHTML = '';
+    var wrap = ui.table(cols, rows, {
+      sort: state.sort,
+      onSort: function (key) {
+        state.sort = state.sort.key === key
+          ? { key: key, dir: state.sort.dir === 'asc' ? 'desc' : 'asc' }
+          : { key: key, dir: key === 'owner' ? 'asc' : 'desc' };
+        renderRollup();
+        var th = $('#rollHost th[aria-sort]');
+        if (th) th.focus();
+      },
+      /* 행 전체가 아니라 담당자 버튼만 drawer 를 엽니다 —
+         행에 버튼이 있는 표에서 행 클릭을 함께 걸면 Enter 한 번에 두 가지가 일어납니다. */
+      empty: {
+        title: '이 범위에 예측할 담당자가 없습니다',
+        body: '영업기회나 목표가 등록된 담당자가 있어야 롤업이 만들어집니다. 범위를 넓혀 보세요.'
+      }
+    });
+    if (rows.length) {
+      var tbl = wrap.querySelector('table');
+      tbl.appendChild(U.el('tfoot', {}, [
+        U.el('tr', {}, [
+          U.el('td', { class: 't-mono', text: '합계 · ' + U.num(rows.length) + '명' }),
+          U.el('td', { class: 'cell-num', text: U.won(f.byCast.Closed) }),
+          U.el('td', { class: 'cell-num', text: U.won(f.byCast.Commit) }),
+          U.el('td', { class: 'cell-num', text: U.won(f.byCast['Best Case']) }),
+          U.el('td', { class: 'cell-num', text: U.won(f.byCast.Pipeline) }),
+          U.el('td', { class: 'cell-num', text: U.won(view.omitted) }),
+          U.el('td', { class: 'cell-num', text: U.won(f.pipeline) }),
+          U.el('td', { class: 'cell-num', text: view.quota > 0 ? U.won(view.quota) : '미등록' }),
+          U.el('td', { class: 'cell-num', text: M.attainment(view.s) === null ? '—' : Math.round(M.attainment(view.s)) + '%' })
+        ])
+      ]));
+    }
+    host.appendChild(wrap);
+
+    $('#rollCount').textContent = U.num(rows.length) + '명';
+    $('#rollNote').innerHTML =
+      '열 이름은 Salesforce 예측 카테고리입니다 — 확정 Closed · 커밋 Commit · 베스트케이스 Best Case · 파이프라인 Pipeline · 제외 Omitted. ' +
+      '<strong>합계에는 제외(실주) 금액이 들어가지 않습니다.</strong> 달성률 막대는 확정 ÷ 목표이고, 아래 숫자는 커밋 ÷ 목표입니다. ' +
+      '담당자 이름을 누르면 그 사람의 딜 목록이 열립니다.';
+  }
+
+  U.live($('#rollHost'), 'click', '[data-owner]', function (e, b) { openOwner(b.dataset.owner); });
+
+  /* ── 워터폴 + 목표 대비 막대 ─────────────────────────────────────── */
+  function renderWaterfall() {
+    var f = view.f, q = view.quota;
+    var steps = [
+      { label: '목표', value: q, total: true },
+      { label: '확정', value: f.byCast.Closed, total: true },
+      { label: '커밋', value: f.byCast.Commit },
+      { label: '베스트', value: f.byCast['Best Case'] },
+      { label: '파이프라인', value: f.byCast.Pipeline }
+    ];
+    var bars = [
+      { k: '확정', v: f.byCast.Closed },
+      { k: '커밋', v: f.commit },
+      { k: '베스트케이스', v: f.bestCase },
+      { k: '파이프라인', v: f.pipeline }
+    ];
+    var gap = q - f.commit;
+    $('#wfHost').innerHTML =
+      ch.waterfall(steps, { h: 230, fmt: wonShort, label: '목표에서 파이프라인까지 쌓이는 예측 금액' }) +
+      '<p class="t-micro mt-xs">맨 왼쪽 <strong>목표</strong> 막대가 기준선입니다. 그 오른쪽은 확정에서 시작해 커밋 · 베스트케이스 · 파이프라인이 차례로 얹힌 금액입니다.</p>' +
+      '<div class="hairline mt-sm" style="padding-top:var(--space-sm)">' +
+        '<p class="t-mono mb-xs">목표 대비</p>' +
+        '<div class="fc-goal">' + bars.map(function (b) {
+          var pct = q > 0 ? (b.v / q) * 100 : null;
+          return '<span class="fc-goal__k">' + esc(b.k) + '</span>' +
+            ui.meter(b.v, q, meterKind(pct)) +
+            '<span class="fc-goal__v">' + (pct === null ? '목표 미등록' : Math.round(pct) + '% · ' + U.won(b.v)) + '</span>';
+        }).join('') + '</div>' +
+      '</div>' +
+      '<p class="t-micro mt-sm">' + (q <= 0
+        ? '이 기간에는 등록된 매출 목표가 없어 달성률을 계산하지 않습니다.'
+        : gap > 0
+          ? '커밋만으로는 목표에 <strong class="t-warn">' + U.won(gap) + '</strong> 모자랍니다. 베스트케이스가 모두 성사되면 ' +
+            (f.bestCase >= q ? '목표를 넘습니다.' : '여전히 ' + U.won(q - f.bestCase) + ' 부족합니다.')
+          : '커밋 기준으로 이미 목표를 <strong class="t-pos">' + U.won(-gap) + '</strong> 넘었습니다.') + '</p>';
+  }
+
+  /* ── 월별 추이 ───────────────────────────────────────────────────── */
+  function monthScope(ym) {
+    var p = String(ym).split('-'), y = Number(p[0]), m = Number(p[1]);
+    return { userIds: view.s.userIds, from: new Date(y, m - 1, 1), to: new Date(y, m, 0), label: ym, month: m };
+  }
+  function renderTrend() {
+    var to = view.R.to;
+    var first = new Date(to.getFullYear(), to.getMonth() - 5, 1);
+    var months = M.months(first, to).map(monthScope);
+    var pts = months.map(function (ms) {
+      var f = M.forecast(ms);
+      return { label: ms.month + '월', actual: f.byCast.Closed, commit: f.commit, target: M.quota(ms) };
+    });
+    var missing = pts.filter(function (p) { return !p.target; }).length;
+    $('#trendHost').innerHTML =
+      ch.line([
+        { name: '확정', points: pts.map(function (p) { return { label: p.label, value: p.actual }; }) },
+        { name: '커밋', series: 3, points: pts.map(function (p) { return { label: p.label, value: p.commit }; }) },
+        { name: '목표', ghost: true, points: pts.map(function (p) { return { label: p.label, value: p.target }; }) }
+      ], { h: 230, area: true, fmt: wonShort, label: '월별 확정·커밋·목표 추이' }) +
+      ch.legend([
+        { label: '확정', color: 'var(--color-accent)' },
+        { label: '커밋', color: 'var(--color-series-3)' },
+        { label: '목표', color: 'var(--color-rule-3)' }
+      ]) +
+      '<p class="t-micro mt-xs">각 달의 값은 그 달 말일을 기준으로 계산한 예측입니다. ' +
+      (missing ? '목표가 등록되지 않은 달 ' + U.num(missing) + '개는 0으로 표시됩니다.' : '여섯 달 모두 목표가 등록되어 있습니다.') + '</p>';
+  }
+
+  /* ── 예측 판단 근거 ──────────────────────────────────────────────── */
+  function renderBasis() {
+    var f = view.f;
+    var amount = {
+      Closed: f.byCast.Closed, Commit: f.byCast.Commit,
+      'Best Case': f.byCast['Best Case'], Pipeline: f.byCast.Pipeline,
+      Omitted: view.omitted
+    };
+    var rows = CAST_ORDER.map(function (cast) {
+      var st = castStages(cast);
+      var probs = st.map(function (x) { return x.prob; });
+      return {
+        cast: cast, stages: st,
+        prob: probs.length ? (Math.min.apply(null, probs) === Math.max.apply(null, probs)
+          ? U.pct(probs[0]) : U.pct(Math.min.apply(null, probs)) + '–' + U.pct(Math.max.apply(null, probs))) : '—',
+        amount: amount[cast] || 0
+      };
+    });
+    var host = $('#basisHost');
+    host.innerHTML = '';
+    host.appendChild(ui.table([
+      { key: 'cast', label: '카테고리', sortable: false, cell: function (r) {
+          return ui.chip(CAST_KO[r.cast], r.cast === 'Closed' ? 'pos' : r.cast === 'Commit' ? 'accent' : r.cast === 'Omitted' ? 'neg' : 'idle') +
+            ' <span class="t-mono">' + esc(r.cast) + '</span>';
+        } },
+      { key: 'stages', label: '포함 단계', sortable: false, cell: function (r) {
+          return r.stages.map(function (x) { return ui.chip(x.key, 'plain'); }).join(' ');
+        } },
+      { key: 'prob', label: '확률', align: 'right', sortable: false, cell: function (r) { return '<span class="t-muted">' + r.prob + '</span>'; } },
+      { key: 'amount', label: '이 기간 금액', align: 'right', sortable: false, cell: function (r) {
+          return '<span class="t-num">' + U.won(r.amount) + '</span>';
+        } }
+    ], rows, { compact: true }));
+    $('#basisNote').innerHTML =
+      '예측에 들어가는 딜은 <strong>마감일이 ' + U.fmtDate(view.R.to) + ' 이전인 진행 중 영업기회</strong>와, ' +
+      '이 기간에 <strong>계약체결</strong>로 마감된 영업기회입니다. 확률은 단계에 붙은 값이며 가중 파이프라인(금액 × 확률) 계산에만 쓰입니다. ' +
+      '제외(Omitted)는 실주한 딜이라 어떤 합계에도 더해지지 않고, 왜 빠졌는지 보이라고 함께 적습니다.';
+  }
+
+  /* ── 분석 의견 — 커버리지·페이스 관련 규칙만 ────────────────────── */
+  var KEEP = { 'coverage-low': 1, 'coverage-ok': 1, 'pace': 1, 'quota-hit': 1, 'overdue-close': 1, 'concentration': 1 };
+  function renderInsights() {
+    var list = C.insights.run(view.s).filter(function (x) { return KEEP[x.id]; });
+    $('#insightHost').innerHTML = list.length
+      ? list.map(function (x) { return ui.insight({ kind: x.kind, label: x.label, say: x.say, why: x.why, actions: x.actions }); }).join('')
+      : ui.empty('이 범위에서 짚을 것이 없습니다',
+          '커버리지와 진척 속도가 기준 안에 있고, 예측을 흔드는 집중 리스크도 발견되지 않았습니다.');
+  }
+
+  /* ── 마감일이 지난 열린 딜 ───────────────────────────────────────── */
+  function renderOverdue() {
+    var od = U.sortBy(M.open(view.s).filter(D.isOverdue), 'closeDate');
+    var amt = U.sum(od, 'amount');
+    $('#odBadge').innerHTML = od.length
+      ? ui.chip(U.num(od.length) + '건 · ' + U.won(amt), 'neg')
+      : ui.chip('없음', 'pos');
+
+    var infl = pctOfQuota(amt);
+    $('#odIntro').innerHTML = od.length
+      ? '<p class="t-small">마감일이 이미 지났는데 아직 열려 있는 딜입니다. 이 금액은 위 예측에 그대로 섞여 있습니다 — ' +
+        (infl === null
+          ? '이 기간에는 목표가 등록되지 않아 비율로 드러나지 않을 뿐입니다.'
+          : '목표 대비 비율을 <strong>' + infl + '</strong>만큼 부풀립니다.') +
+        ' 마감일을 다시 잡거나 단계를 옮겨야 예측이 정확해집니다.</p>'
+      : '<p class="t-small">마감일이 지난 열린 딜이 없습니다. 이 기간의 예측 금액은 모두 앞으로 마감될 딜에서 나옵니다.</p>';
+
+    var host = $('#odHost');
+    host.innerHTML = '';
+    if (!od.length) {
+      host.innerHTML = '<div class="panel__body panel__body--flush">' +
+        ui.empty('정리할 딜이 없습니다', '마감일이 지난 채 열려 있는 영업기회가 이 범위에는 없습니다.',
+          '<a class="btn btn--sm" href="' + db.linkAs('opportunities.html?filter=overdue') + '">전체 범위에서 확인</a>') + '</div>';
+      return;
+    }
+
+    var cols = [
+      { key: 'name', label: '영업기회', sortable: false, cell: function (o) {
+          return '<a class="link--quiet" href="' + db.linkAs('opportunity.html?id=' + encodeURIComponent(o.id)) + '">' + esc(o.name) + '</a>';
+        } },
+      { key: 'account', label: '광고주', sortable: false, cell: function (o) {
+          var a = db.accountOf(o);
+          return a ? '<a class="link--quiet" href="' + db.linkAs('account.html?id=' + encodeURIComponent(a.id)) + '">' + esc(a.name) + '</a>' : '';
+        } },
+      { key: 'owner', label: '담당자', sortable: false, cell: function (o) { return ui.personCell(db.get('users', o.ownerId)); } },
+      { key: 'stage', label: '단계', sortable: false, cell: function (o) {
+          var st = D.stage(o.stage);
+          return ui.chip(o.stage, st.cast === 'Commit' ? 'accent' : null) + ' ' + ui.chip(CAST_KO[st.cast], 'idle');
+        } },
+      { key: 'amount', label: '금액', align: 'right', sortable: false, cell: function (o) { return '<span class="t-num">' + U.won(o.amount) + '</span>'; } },
+      { key: 'closeDate', label: '마감일', align: 'right', sortable: false, cell: function (o) {
+          return '<span class="t-num t-neg">' + U.fmtDate(o.closeDate) + '</span><br>' +
+            '<span class="t-mono" style="font-size:10px">' + U.num(U.days(o.closeDate, C.today)) + '일 경과</span>';
+        } }
+    ];
+    if (canU) {
+      cols.push({ key: 'act', label: '조치', tight: true, sortable: false, cell: function (o) {
+        return '<button class="btn btn--sm" type="button" data-defer="' + esc(o.id) + '">마감일 30일 연기</button>';
+      } });
+    }
+    host.appendChild(ui.table(cols, od, {}));
+    host.appendChild(U.el('div', { class: 'panel__foot' }, [
+      U.el('p', { class: 't-micro', html: canU
+        ? '연기는 되돌리기가 붙습니다. 실제로 밀린 딜이 아니라면 마감일 대신 <a class="link" href="' + db.linkAs('pipeline.html') + '">단계</a>를 옮기세요.'
+        : '마감일을 바꾸려면 영업기회 편집 권한이 필요합니다. 담당자에게 정리를 요청하세요.' })
+    ]));
+  }
+
+  /** 되돌릴 수 있는 변경이므로 확인 대화상자 없이 즉시 반영하고 토스트로 되돌립니다. */
+  U.live($('#odHost'), 'click', '[data-defer]', function (e, b) {
+    if (!canU) return;
+    var id = b.dataset.defer;
+    var o = db.get('opportunities', id);
+    if (!o) return;
+    var prev = o.closeDate;
+    var next = U.iso(U.addDays(C.today, 30));
+    db.update('opportunities', id, { closeDate: next });
+    render();
+    ui.toast('“' + o.name + '”의 마감일을 ' + U.fmtDate(next) + '로 옮겼습니다.', {
+      undo: function () { db.update('opportunities', id, { closeDate: prev }); render(); }
+    });
+  });
+
+  /* ══ 담당자 딜 목록 drawer ════════════════════════════════════════════ */
+  function openOwner(id) {
+    var u = db.get('users', id);
+    if (!u) return;
+    var os = ownerScope(id);
+    var f = M.forecast(os), q = M.quota(os), om = U.sum(M.lost(os), 'amount'), att = M.attainment(os);
+    var deals = U.sortBy(
+      M.won(os).concat(M.lost(os)).concat(openInForecast(os)),
+      function (o) { return castOrderOf(D.stage(o.stage).cast) * 1e13 + new Date(o.closeDate).getTime(); }
+    );
+
+    var summary = U.el('div', { class: 'kv', html:
+      row('목표', q > 0 ? U.won(q) : '<span class="t-faint">미등록</span>') +
+      row('확정 Closed', U.won(f.byCast.Closed)) +
+      row('커밋 Commit', U.won(f.commit)) +
+      row('베스트케이스', U.won(f.bestCase)) +
+      row('전체 파이프라인', U.won(f.pipeline)) +
+      row('제외 Omitted', '<span class="t-muted">' + U.won(om) + '</span>') +
+      row('달성률', '<span class="row gap-xs"><span class="grow">' + ui.meter(f.byCast.Closed, q, meterKind(att)) + '</span>' +
+        '<span class="t-mono">' + (att === null ? '—' : Math.round(att) + '%') + '</span></span>')
+    });
+
+    var table = ui.table([
+      { key: 'name', label: '영업기회', sortable: false, cell: function (o) {
+          return '<a class="link--quiet" href="' + db.linkAs('opportunity.html?id=' + encodeURIComponent(o.id)) + '">' + esc(o.name) + '</a>';
+        } },
+      { key: 'cast', label: '카테고리', sortable: false, cell: function (o) {
+          var st = D.stage(o.stage);
+          return ui.chip(CAST_KO[st.cast], st.won ? 'pos' : st.lost ? 'neg' : st.cast === 'Commit' ? 'accent' : 'idle') +
+            '<br><span class="t-mono" style="font-size:10px">' + esc(o.stage) + '</span>';
+        } },
+      { key: 'amount', label: '금액', align: 'right', sortable: false, cell: function (o) { return '<span class="t-num">' + U.won(o.amount) + '</span>'; } },
+      { key: 'closeDate', label: '마감일', align: 'right', sortable: false, cell: function (o) {
+          var late = D.isOverdue(o);
+          return '<span class="t-num' + (late ? ' t-neg' : '') + '">' + U.fmtDate(o.closeDate) + '</span>';
+        } }
+    ], deals, {
+      compact: true,
+      onRow: function (o) { window.location.href = db.linkAs('opportunity.html?id=' + encodeURIComponent(o.id)); },
+      empty: { title: '이 기간에 잡히는 딜이 없습니다', body: '마감일이 기간 안에 있는 진행 딜과 마감된 딜이 여기에 모입니다.' }
+    });
+
+    ui.drawer({
+      kicker: view.R.label + ' 예측',
+      title: u.name + ' · ' + (u.title || u.role),
+      body: U.el('div', { class: 'panel__body stack gap-md' }, [
+        summary,
+        U.el('p', { class: 't-mono', text: '딜 ' + U.num(deals.length) + '건' }),
+        table,
+        U.el('p', { class: 't-micro', text: '카테고리 순서(확정 → 커밋 → 베스트케이스 → 파이프라인 → 제외)로 정렬했습니다. 행을 누르면 영업기회 상세로 이동합니다.' })
+      ])
+    });
+  }
+  function row(k, v) {
+    return '<div class="kv__row"><span class="kv__k">' + esc(k) + '</span><span class="kv__v">' + v + '</span></div>';
+  }
+
+  /* ══ 시작 ═════════════════════════════════════════════════════════════ */
+  render();
+  var deep = U.param('owner', '');
+  if (deep && view.s.userIds.indexOf(deep) > -1 && db.get('users', deep)) openOwner(deep);
+})();
+</script>
+</body>
+</html>

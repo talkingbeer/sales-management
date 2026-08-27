@@ -1,0 +1,1817 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>제작 의뢰 · CLOSER</title>
+<meta name="description" content="제작 의뢰 티켓 레코드 페이지. 상태 전이, 코멘트, 변경 이력, 산출물 버전, 투입 공수와 SLA를 한 화면에서 다룹니다." />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=IBM+Plex+Sans+KR:wght@400;500;600&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="../tokens.css" />
+<link rel="stylesheet" href="../assets/css/base.css" />
+<link rel="stylesheet" href="../assets/css/components.css" />
+<link rel="stylesheet" href="../assets/css/app.css" />
+<style>
+  /* 이 화면에만 필요한 소품. 값은 모두 토큰을 참조합니다. */
+  #recRoot .kv__v { display: flex; align-items: baseline; gap: var(--space-2xs); }
+  #recRoot .kv__pen { opacity: 0.45; transition: opacity var(--dur-short) var(--ease-out); }
+  #recRoot .kv__row:hover .kv__pen,
+  #recRoot .kv__pen:focus-visible { opacity: 1; }
+
+  /* Path — 갈 수 없는 단계는 눌리지 않는다. 그 사실이 손끝에 먼저 닿아야 한다. */
+  #statPath .path__step { min-width: 116px; }
+  #statPath .path__lab { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  #statPath .path__step[disabled] { cursor: default; opacity: 1; }
+  #statPath .path__step[disabled]:hover { background: var(--color-surface); color: var(--color-ink-3); }
+  #statPath .path__step.is-done[disabled]:hover { background: var(--color-accent-soft); color: var(--color-accent-press); }
+  #statPath .path__step.is-current[disabled]:hover { background: var(--color-accent); color: var(--color-accent-ink); }
+  #statPath .path__step.is-lost[disabled]:hover { background: var(--color-neg-soft); color: var(--color-neg); }
+  #statPath .path__step:not([disabled]) { box-shadow: inset 0 0 0 var(--rule-thick) var(--color-accent-soft-2); }
+
+  .side-fact {
+    display: flex; align-items: baseline; justify-content: space-between; gap: var(--space-sm);
+    padding: var(--space-2xs) 0; border-bottom: var(--rule-hair) solid var(--color-rule);
+    font-size: var(--text-sm); color: var(--color-ink);
+  }
+  .side-fact:last-child { border-bottom: none; }
+  .side-fact__k {
+    font-family: var(--font-mono); font-size: var(--text-2xs); letter-spacing: var(--track-mono);
+    text-transform: uppercase; color: var(--color-ink-3); white-space: nowrap;
+  }
+
+  .peep { display: flex; align-items: center; gap: var(--space-xs); padding: var(--space-xs) 0; border-bottom: var(--rule-hair) solid var(--color-rule); }
+  .peep:last-child { border-bottom: none; }
+  .peep__meta { font-family: var(--font-mono); font-size: 10px; letter-spacing: var(--track-mono); color: var(--color-ink-4); }
+
+  .cand { display: flex; align-items: center; gap: var(--space-xs); padding: var(--space-xs) 0; border-bottom: var(--rule-hair) solid var(--color-rule); }
+  .cand:last-child { border-bottom: none; }
+  .cand__num { font-family: var(--font-mono); font-size: var(--text-2xs); color: var(--color-ink-2); }
+  .cand__meter { width: 84px; flex: 0 0 auto; }
+
+  .desc { white-space: pre-wrap; font-size: var(--text-sm); line-height: var(--leading-body); color: var(--color-ink-2); overflow-wrap: anywhere; }
+
+  /* 코멘트 스레드 — 사람의 말과 시스템의 기록을 한 줄기에 둔다. */
+  .cmt { padding: var(--space-sm) 0; border-bottom: var(--rule-hair) solid var(--color-rule); }
+  .cmt:last-child { border-bottom: none; }
+  .cmt__top { display: flex; align-items: center; gap: var(--space-xs); flex-wrap: wrap; }
+  .cmt__who { font-size: var(--text-sm); color: var(--color-ink); font-weight: 500; }
+  .cmt__when { font-family: var(--font-mono); font-size: var(--text-2xs); letter-spacing: var(--track-mono); color: var(--color-ink-4); }
+  .cmt__body { margin-top: var(--space-2xs); white-space: pre-wrap; font-size: var(--text-sm); line-height: var(--leading-body); color: var(--color-ink-2); overflow-wrap: anywhere; }
+  .cmt--internal { border-left: var(--rule-thick) solid var(--color-warn); padding-left: var(--space-sm); }
+  .sysline {
+    display: flex; align-items: baseline; gap: var(--space-xs); flex-wrap: wrap;
+    padding: var(--space-2xs) 0; border-bottom: var(--rule-hair) solid var(--color-rule);
+    font-size: var(--text-xs); color: var(--color-ink-3);
+  }
+  .sysline:last-child { border-bottom: none; }
+  .mention { color: var(--color-accent-press); background: var(--color-accent-soft); border-radius: var(--radius-xs); padding: 0 2px; }
+
+  .composer { position: relative; }
+  .mentions {
+    position: absolute; left: var(--space-xs); right: var(--space-xs); max-height: 210px; overflow-y: auto;
+    z-index: var(--z-nav); background: var(--color-surface);
+    border: var(--rule-hair) solid var(--color-rule-2); border-radius: var(--radius-sm);
+    box-shadow: 0 6px 18px var(--color-veil);
+  }
+  .mentions__item { display: flex; gap: var(--space-xs); align-items: center; width: 100%; text-align: left;
+    padding: var(--space-2xs) var(--space-xs); font-size: var(--text-sm); color: var(--color-ink-2); }
+  .mentions__item:hover, .mentions__item.is-on { background: var(--color-accent-soft); color: var(--color-accent-press); }
+
+  .tbl-sum td {
+    background: var(--color-paper-2);
+    border-top: var(--rule-thick) solid var(--color-rule-2);
+    color: var(--color-ink); font-weight: 600;
+  }
+
+  @media (max-width: 640px) {
+    .rec-top { gap: var(--space-sm); }
+    #statPath .path__step { min-width: 128px; }
+    .cand__meter { display: none; }
+  }
+</style>
+</head>
+<body class="app">
+<a class="skip-link" href="#main">본문으로 건너뛰기</a>
+
+<div class="app-main">
+  <main class="app-page" id="main">
+
+    <nav class="crumb mb-sm" id="crumb" aria-label="경로"></nav>
+
+    <div id="recRoot" data-verify></div>
+
+    <footer class="hairline mt-2xl" style="padding-block:var(--space-md)">
+      <p class="t-mono t-faint">CLOSER · 데모 데이터 · 모든 회사·인물·연락처는 가상입니다</p>
+    </footer>
+  </main>
+</div>
+
+<script src="../assets/js/seed.js"></script>
+<script src="../assets/js/util.js"></script>
+<script src="../assets/js/store.js"></script>
+<script src="../assets/js/domain.js"></script>
+<script src="../assets/js/metrics.js"></script>
+<script src="../assets/js/insights.js"></script>
+<script src="../assets/js/ui.js"></script>
+<script src="../assets/js/charts.js"></script>
+<script src="../assets/js/shell.js"></script>
+<script>
+(function () {
+  'use strict';
+  var C = window.CLOSER, U = C.util, db = C.db, D = C.domain, M = C.metrics, ui = C.ui, ch = C.charts;
+  C.shell.mount('tickets');
+
+  var $ = U.qs, esc = U.esc, el = U.el;
+  var me = db.me();
+  var root = $('#recRoot');
+  var idParam = U.param('id');
+
+  /* ══ 레코드 확보 ═══════════════════════════════════════════════════ */
+  var t = idParam ? db.get('tickets', idParam) : null;
+
+  if (!D.can('tickets', 'R')) {
+    document.title = '제작 의뢰 · CLOSER';
+    $('#crumb').innerHTML = '<a class="link" href="dashboard.html">홈</a>';
+    root.innerHTML =
+      '<div class="page-head"><div><h1 class="page-head__title">제작 의뢰</h1>' +
+      '<p class="page-head__sub">' + esc(me.role) + ' 역할에는 제작 의뢰 열람 권한이 없습니다.</p></div></div>' +
+      '<section class="panel"><div class="panel__body">' +
+      ui.empty('이 화면을 볼 수 있는 권한이 없습니다',
+        '제작 의뢰는 영업·제작·리소스 역할에게 열려 있습니다. 접근이 필요하면 관리자에게 역할 변경을 요청해 주세요.',
+        '<a class="btn btn--sm btn--primary" href="dashboard.html">홈으로</a>') +
+      '</div></section>';
+    return;
+  }
+
+  if (!t) {
+    document.title = (idParam ? '의뢰를 찾을 수 없습니다' : '제작 의뢰') + ' · CLOSER';
+    $('#crumb').innerHTML = '<a class="link" href="tickets.html">제작 의뢰</a>';
+    var open = U.sortBy(db.where('tickets', function (x) {
+      return D.TICKET_OPEN.indexOf(x.status) > -1 &&
+        (x.requesterId === me.id || x.assigneeId === me.id || db.isManager(me));
+    }), 'dueDate').slice(0, 5);
+    root.innerHTML =
+      '<div class="page-head"><div><h1 class="page-head__title">제작 의뢰</h1>' +
+      '<p class="page-head__sub">' + (idParam
+        ? '주소에 담긴 의뢰 번호를 찾지 못했습니다.'
+        : '어떤 의뢰를 열지 주소에 지정되지 않았습니다.') + '</p></div></div>' +
+      '<section class="panel"><div class="panel__body">' +
+      ui.empty(idParam ? '해당 제작 의뢰가 없습니다' : '열 제작 의뢰를 지정해 주세요',
+        idParam
+          ? '요청하신 ID “' + idParam + '” 에 해당하는 의뢰가 없습니다. 삭제되었거나 주소가 잘못되었을 수 있습니다.'
+          : '보드나 목록에서 의뢰를 선택하면 이 화면이 그 레코드로 열립니다.',
+        '<a class="btn btn--sm btn--primary" href="tickets.html">제작 의뢰 보드로</a>' +
+        '<a class="btn btn--sm" href="dashboard.html" style="margin-left:var(--space-xs)">홈으로</a>') +
+      (open.length
+        ? '<div class="mt-md"><p class="t-mono">최근 열려 있는 의뢰</p>' + open.map(function (x) {
+            return '<div class="peep"><span class="tkt-key">' + esc(x.key) + '</span>' +
+              '<a class="link--quiet grow" href="ticket.html?id=' + encodeURIComponent(x.id) + '">' + esc(x.title) + '</a>' +
+              ui.chip(x.status, 'idle') + '</div>';
+          }).join('') + '</div>'
+        : '') +
+      '</div></section>';
+    return;
+  }
+
+  /* ══ 권한과 관계 ═══════════════════════════════════════════════════ */
+  var isMgr = me.role === '리소스매니저' || me.role === '관리자';
+  var canUpdate = D.can('tickets', 'U');
+  var canDelete = D.can('tickets', 'D');
+  var canCreate = D.can('tickets', 'C');
+  var canRequestHours = D.can('resourceRequests', 'C');
+
+  function rel(rec) {
+    return {
+      requester: rec.requesterId === me.id,
+      assignee: !!rec.assigneeId && rec.assigneeId === me.id,
+      manager: isMgr
+    };
+  }
+  function canField() {
+    var r = rel(t);
+    return canUpdate && (r.manager || r.requester || r.assignee);
+  }
+
+  var ACTOR_LABEL = { requester: '의뢰자', assignee: '담당자', manager: '리소스매니저' };
+  function actorOK(rec, to) {
+    var need = D.TICKET_ACTOR[to];
+    if (!need) return true;
+    var r = rel(rec);
+    return need.some(function (k) { return r[k]; });
+  }
+  function actorNames(to) {
+    return (D.TICKET_ACTOR[to] || []).map(function (k) { return ACTOR_LABEL[k]; }).join(' 또는 ');
+  }
+  function allowedFrom(rec) {
+    if (!canUpdate) return [];
+    return (D.TICKET_FLOW[rec.status] || []).filter(function (to) { return actorOK(rec, to); });
+  }
+
+  /* ══ 상태 ══════════════════════════════════════════════════════════ */
+  var TABS = ['detail', 'comments', 'history', 'files', 'effort'];
+  var TAB_LABEL = { detail: '상세', comments: '코멘트', history: '이력', files: '산출물', effort: '공수' };
+  var PATH_MAIN = ['접수대기', '검토', '배정됨', '진행중', '검수', '완료'];
+  var FIELD_LABEL = {
+    title: '제목', type: '의뢰 유형', priority: '우선순위', assigneeId: '담당자',
+    dueDate: '마감일', estimateHours: '예상 공수', description: '요청 내용',
+    status: '상태', purpose: '목적', labels: '라벨', freeReworkLimit: '무상 수정 한도'
+  };
+  var PER_HISTORY = 25, PER_THREAD = 20;
+
+  var state = {
+    tab: TABS.indexOf(U.param('tab')) > -1 ? U.param('tab') : 'detail',
+    histPage: 1,
+    threadPage: 1
+  };
+
+  /* ══ 조회 헬퍼 ═════════════════════════════════════════════════════ */
+  function acc() { return t.accountId ? db.get('accounts', t.accountId) : null; }
+  function opp() { return t.oppId ? db.get('opportunities', t.oppId) : null; }
+  function camp() { return t.campaignId ? db.get('campaigns', t.campaignId) : null; }
+  function comments() { return U.sortBy(db.where('ticketComments', function (c) { return c.ticketId === t.id; }), 'createdAt'); }
+  function history() { return U.sortBy(db.where('ticketHistory', function (h) { return h.ticketId === t.id; }), 'at', 'desc'); }
+  function requests() { return U.sortBy(db.where('resourceRequests', function (r) { return r.ticketId === t.id; }), 'createdAt', 'desc'); }
+  function assigns() { return U.sortBy(db.where('assignments', function (a) { return a.ticketId === t.id; }), 'startDate'); }
+  function sheets() { return U.sortBy(db.where('timesheets', function (s) { return s.ticketId === t.id; }), 'date'); }
+  function delivs() { return (t.deliverables || []).slice(); }
+  function watchers() { return (t.watchers || []).filter(function (id, i, arr) { return arr.indexOf(id) === i; }); }
+  function spentFromSheets() { return U.sum(sheets(), 'hours'); }
+
+  function nowISO() { return new Date().toISOString(); }
+  function dday(v) {
+    if (!v) return '';
+    var n = U.days(C.today, v);
+    return n === 0 ? 'D-DAY' : n > 0 ? 'D-' + n : 'D+' + Math.abs(n);
+  }
+  function prioOf(key) {
+    return D.PRIORITIES.filter(function (x) { return x.key === key; })[0] || D.PRIORITIES[2];
+  }
+  function prioHTML(key) {
+    var p = prioOf(key);
+    var cls = 'prio' + (['P1', 'P2', 'P3'].indexOf(p.key) > -1 ? ' prio--' + p.key.toLowerCase() : '');
+    return '<span class="' + cls + '" title="우선순위 ' + esc(p.key + ' ' + p.label) + '">' +
+      '<i></i><i></i><i></i> ' + esc(p.key + ' ' + p.label) + '</span>';
+  }
+  function statusKind(s) {
+    return s === '완료' ? 'pos' : s === '취소' || s === '보류' ? 'idle' : s === '수정요청' ? 'warn' : 'accent';
+  }
+  function slaText() {
+    var st = D.slaState(t);
+    if (st === 'done') return { kind: 'idle', short: '종료', long: t.status + ' 상태 — SLA 시계가 멈췄습니다' };
+    var r = D.slaRemaining(t);
+    if (r === null) return { kind: 'idle', short: '납기 미정', long: '납기가 지정되지 않았습니다' };
+    if (r < 0) return { kind: 'neg', short: '초과 ' + Math.abs(r) + '시간', long: '납기를 ' + Math.abs(r) + '시간 넘겼습니다' };
+    if (st === 'risk') return { kind: 'warn', short: '잔여 ' + r + '시간', long: '기준 SLA의 30% 미만이 남았습니다' };
+    return { kind: 'pos', short: '잔여 ' + r + '시간', long: '기준 SLA ' + D.slaHoursFor(t) + '시간 대비 여유가 있습니다' };
+  }
+
+  /* ══ 뼈대 — 한 번 만들고 이후에는 안쪽만 다시 그립니다 ═════════════ */
+  root.innerHTML =
+    '<section class="rec-highlights reveal" id="hl" aria-label="제작 의뢰 요약"></section>' +
+    '<section class="mt-md reveal" aria-label="의뢰 상태 경로">' +
+      '<div class="path" id="statPath"></div>' +
+      '<p class="t-micro mt-2xs" id="pathNote"></p>' +
+    '</section>' +
+    '<div class="rec-grid mt-lg">' +
+      '<div style="min-width:0">' +
+        '<div class="tabs" id="tabStrip" role="tablist" aria-label="제작 의뢰 세부 정보"></div>' +
+        '<div id="panes" class="mt-md"></div>' +
+      '</div>' +
+      '<aside class="stack gap-lg reveal" id="sideCol" aria-label="SLA와 관련 정보"></aside>' +
+    '</div>';
+
+  /* ══ 렌더 ══════════════════════════════════════════════════════════ */
+  function renderAll() {
+    t = db.get('tickets', t.id) || t;
+    document.title = t.key + ' ' + t.title + ' · CLOSER';
+    renderCrumb(); renderHL(); renderPath(); renderTabs(); renderPanes(); renderSide();
+  }
+
+  function renderCrumb() {
+    var a = acc();
+    $('#crumb').innerHTML =
+      '<a class="link" href="tickets.html">제작 의뢰</a>' +
+      '<span class="crumb__sep">/</span>' +
+      (a ? '<a class="link" href="account.html?id=' + encodeURIComponent(a.id) + '">' + esc(a.name) + '</a>' +
+           '<span class="crumb__sep">/</span>' : '') +
+      '<span class="t-ink">' + esc(t.key) + '</span>';
+  }
+
+  /* ── 하이라이트 ──────────────────────────────────────────────────── */
+  function renderHL() {
+    var a = acc(), o = opp(), sla = slaText();
+    var assignee = t.assigneeId ? db.get('users', t.assigneeId) : null;
+    var requester = db.get('users', t.requesterId);
+
+    var chips =
+      ui.chip(t.type, 'plain') +
+      ui.chip(t.status, statusKind(t.status)) +
+      (t.reworkCount ? ui.chip('재작업 ' + t.reworkCount + '회', 'warn') : '') +
+      (t.labels || []).map(function (l) { return ui.chip(l, 'idle'); }).join('');
+
+    var facts = [
+      { k: '유형', v: esc(t.type) + ' <span class="t-muted">· 기준 ' + D.ticketType(t.type).slaHours + '시간</span>' },
+      { k: '광고주', v: a
+        ? '<a class="link--quiet t-nowrap" href="account.html?id=' + encodeURIComponent(a.id) + '">' + esc(a.name) + '</a>'
+        : '<span class="t-faint">미연결</span>' },
+      { k: '영업기회', v: o
+        ? '<a class="link--quiet t-nowrap" href="opportunity.html?id=' + encodeURIComponent(o.id) + '">' + esc(o.name) + '</a>'
+        : '<span class="t-faint">미연결</span>' },
+      { k: '의뢰자', v: requester ? ui.personCell(requester) : '<span class="t-faint">미상</span>' },
+      { k: '담당자', v: assignee ? ui.personCell(assignee) : '<span class="chip chip--warn">미배정</span>' },
+      { k: '마감일', v: U.fmtDate(t.dueDate) + ' <span class="t-muted">' + dday(t.dueDate) + '</span>', num: true },
+      { k: '우선순위', v: prioHTML(t.priority) },
+      { k: 'SLA 잔여', v: '<span class="chip chip--' + sla.kind + '" title="' + esc(sla.long) + '">' + esc(sla.short) + '</span>' }
+    ];
+
+    $('#hl').innerHTML =
+      '<div class="rec-top">' +
+        '<div style="min-width:0">' +
+          '<p class="rec-type">제작 의뢰</p>' +
+          '<h1 class="rec-name"><span class="tkt-key">' + esc(t.key) + '</span> ' + esc(t.title) + '</h1>' +
+          '<div class="row row--wrap gap-xs mt-xs">' + chips + '</div>' +
+        '</div>' +
+        '<div class="row row--wrap gap-2xs" id="actBar">' + actionBarHTML() + '</div>' +
+      '</div>' +
+      '<div class="rec-facts">' + facts.map(function (f) {
+        return '<div><p class="rec-fact__k">' + esc(f.k) + '</p>' +
+          '<p class="rec-fact__v' + (f.num ? ' t-num' : '') + '">' + f.v + '</p></div>';
+      }).join('') + '</div>' +
+      '<p class="t-micro mt-sm">SLA 잔여는 광고주와 합의한 납기(' + U.fmtDate(t.dueDate) + ' 18:00)까지 남은 시간입니다. ' +
+      '기준 SLA는 유형 ' + D.ticketType(t.type).slaHours + '시간 × 우선순위 계수 ' + prioOf(t.priority).slaFactor +
+      ' = ' + D.slaHoursFor(t) + '시간입니다.</p>';
+  }
+
+  /** 상태 드롭다운은 두지 않는다. 지금 갈 수 있는 곳만 버튼으로 보인다. */
+  function actionBarHTML() {
+    var out = [];
+    var flow = D.TICKET_FLOW[t.status] || [];
+    var allowed = allowedFrom(t);
+
+    flow.forEach(function (to) {
+      var ok = allowed.indexOf(to) > -1;
+      var why = !canUpdate
+        ? me.role + ' 역할은 제작 의뢰를 수정할 수 없습니다'
+        : '‘' + to + '’ 처리는 ' + actorNames(to) + '만 할 수 있습니다';
+      out.push('<button class="btn btn--sm' + (ok && to === allowed[0] ? ' btn--primary' : '') +
+        (to === '취소' ? ' btn--danger' : '') + '" type="button" data-act="go" data-to="' + esc(to) + '"' +
+        (ok ? '' : ' disabled title="' + esc(why) + '"') + '>' + esc(to) + '(으)로</button>');
+    });
+    if (!flow.length) {
+      out.push('<span class="t-micro">' + esc(t.status) + '은(는) 종료 상태입니다. 다시 진행하려면 새 의뢰를 만들어 주세요.</span>');
+    }
+
+    if (canUpdate && D.TICKET_OPEN.indexOf(t.status) > -1 && t.assigneeId !== me.id) {
+      out.push('<button class="btn btn--sm" type="button" data-act="claim">내가 담당</button>');
+    }
+    if (canRequestHours) out.push('<button class="btn btn--sm" type="button" data-act="reqhours">공수 신청</button>');
+    if (canUpdate) out.push('<button class="btn btn--sm" type="button" data-act="addwatch">워처 추가</button>');
+    out.push('<button class="btn btn--sm btn--ghost" type="button" data-act="more" aria-label="더보기 메뉴">더보기</button>');
+
+    if (!canUpdate) {
+      out.push('<span class="t-micro">' + esc(me.role) + ' 역할은 이 의뢰를 읽기만 할 수 있습니다.</span>');
+    }
+    return out.join('');
+  }
+
+  /* ── 상태 Path ───────────────────────────────────────────────────── */
+  function pathSteps() {
+    var steps = PATH_MAIN.slice();
+    if (PATH_MAIN.indexOf(t.status) === -1) {
+      /* 수정요청·보류·취소는 지금 그 상태일 때만 경로에 끼워 넣는다. */
+      var at = { 수정요청: 4, 보류: 4, 취소: 6 }[t.status];
+      steps.splice(at === undefined ? steps.length : at, 0, t.status);
+    }
+    return steps;
+  }
+  function stepMoment(key) {
+    var rows = db.where('ticketHistory', function (h) {
+      return h.ticketId === t.id && h.field === 'status' && h.to === key;
+    });
+    if (rows.length) return U.sortBy(rows, 'at')[0].at;
+    if (key === '접수대기') return t.createdAt;
+    return null;
+  }
+  function renderPath() {
+    var steps = pathSteps();
+    var curIdx = steps.indexOf(t.status);
+    var allowed = allowedFrom(t);
+    var flow = D.TICKET_FLOW[t.status] || [];
+
+    $('#statPath').innerHTML = steps.map(function (s, i) {
+      var cls = 'path__step';
+      if (s === t.status) cls += (s === '취소' ? ' is-lost' : ' is-current');
+      else if (curIdx > -1 && i < curIdx) cls += ' is-done';
+      var at = stepMoment(s);
+      var sub;
+      if (s === t.status) {
+        sub = at ? U.days(at, C.today) + '일째' : '현재 상태';
+      } else if (at) {
+        sub = U.fmtDate(at, 'md') + ' 통과';
+      } else if (flow.indexOf(s) > -1) {
+        sub = allowed.indexOf(s) > -1 ? '지금 이동 가능' : actorNames(s) + '만 가능';
+      } else {
+        sub = '미도달';
+      }
+      var can = allowed.indexOf(s) > -1;
+      var why = s === t.status ? '현재 상태입니다'
+        : flow.indexOf(s) === -1 ? '‘' + t.status + '’에서 ‘' + s + '’로는 바로 옮길 수 없습니다'
+        : '‘' + s + '’ 처리는 ' + actorNames(s) + '만 할 수 있습니다';
+      return '<button type="button" class="' + cls + '" data-act="go" data-to="' + esc(s) + '"' +
+        (can ? '' : ' disabled title="' + esc(why) + '"') +
+        (s === t.status ? ' aria-current="step"' : '') + '>' +
+        '<span class="path__lab">' + esc(s) + '</span>' +
+        '<span class="path__pct">' + esc(sub) + '</span></button>';
+    }).join('');
+
+    $('#pathNote').textContent = allowed.length
+      ? '지금 이동할 수 있는 상태: ' + allowed.join(' · ') + '. 전이표에 없는 이동은 버튼 자체가 눌리지 않습니다.'
+      : (flow.length
+          ? '‘' + t.status + '’에서 가능한 이동은 ' + flow.join(' · ') + ' 이며, 모두 ' +
+            flow.map(actorNames).filter(function (x, i, arr) { return arr.indexOf(x) === i; }).join(' / ') + ' 의 권한입니다.'
+          : '‘' + t.status + '’은(는) 종료 상태라 더 이동할 곳이 없습니다.');
+  }
+
+  /* ── 탭 ──────────────────────────────────────────────────────────── */
+  function counts() {
+    return {
+      detail: 0,
+      comments: comments().length,
+      history: history().length,
+      files: delivs().length,
+      effort: requests().length + assigns().length
+    };
+  }
+  function renderTabs() {
+    var n = counts();
+    $('#tabStrip').innerHTML = TABS.map(function (k) {
+      return '<button class="tab" type="button" role="tab" data-tab="' + k + '" id="tab-' + k + '" ' +
+        'aria-controls="pane-' + k + '" aria-selected="' + (state.tab === k ? 'true' : 'false') + '">' +
+        esc(TAB_LABEL[k]) + (n[k] ? '<span class="tab__count">' + n[k] + '</span>' : '') + '</button>';
+    }).join('');
+  }
+
+  function renderPanes() {
+    $('#panes').innerHTML = TABS.map(function (k) {
+      return '<section id="pane-' + k + '" data-pane="' + k + '" role="tabpanel" aria-labelledby="tab-' + k + '"' +
+        (state.tab === k ? '' : ' hidden') + '><div class="stack gap-lg">' + paneHTML(k) + '</div></section>';
+    }).join('');
+
+    var host;
+    if ((host = $('#histHost'))) host.appendChild(historyTable());
+    if ((host = $('#delivHost'))) host.appendChild(deliverableTable());
+    if ((host = $('#reqHost'))) host.appendChild(requestTable());
+    if ((host = $('#asgHost'))) host.appendChild(assignTable());
+    if ((host = $('#cmtHost'))) host.appendChild(composer.root);
+  }
+
+  function paneHTML(k) {
+    if (k === 'detail') return detailPane();
+    if (k === 'comments') return commentPane();
+    if (k === 'history') return historyPane();
+    if (k === 'files') return filePane();
+    return effortPane();
+  }
+
+  /* ── 탭 1 · 상세 ─────────────────────────────────────────────────── */
+  function kvRow(label, value, editKey) {
+    return '<div class="kv__row"><div class="kv__k">' + esc(label) + '</div>' +
+      '<div class="kv__v"><span class="grow">' + value + '</span>' +
+      (editKey && canField()
+        ? '<button class="btn btn--ghost btn--sm btn--icon kv__pen" type="button" data-act="editf" data-f="' + editKey +
+          '" aria-label="' + esc(label) + ' 편집" title="' + esc(label) + ' 편집">✎</button>'
+        : '') +
+      '</div></div>';
+  }
+
+  function detailPane() {
+    var a = acc(), o = opp(), cp = camp();
+    var assignee = t.assigneeId ? db.get('users', t.assigneeId) : null;
+    var tsSum = spentFromSheets();
+
+    var kv =
+      kvRow('제목', esc(t.title), 'title') +
+      kvRow('의뢰 유형', ui.chip(t.type, 'plain') + ' <span class="t-muted">기본 공수 ' + D.ticketType(t.type).baseHours + '시간 · 담당 직무 ' + esc(D.ticketType(t.type).role) + '</span>', 'type') +
+      kvRow('상태', ui.chip(t.status, statusKind(t.status))) +
+      kvRow('우선순위', prioHTML(t.priority) + ' <span class="t-muted">SLA 계수 ' + prioOf(t.priority).slaFactor + '배</span>', 'priority') +
+      kvRow('담당자', assignee
+        ? esc(assignee.name) + ' <span class="t-muted">· ' + esc(assignee.craft || assignee.role) + '</span>'
+        : '<span class="t-warn">미배정 — 배정 전 대기도 납기에 포함됩니다</span>', 'assigneeId') +
+      kvRow('의뢰자', esc(db.userName(t.requesterId))) +
+      kvRow('마감일', U.fmtDate(t.dueDate) + ' <span class="t-muted">' + dday(t.dueDate) + '</span>', 'dueDate') +
+      kvRow('예상 공수', '<span class="t-num">' + U.num(t.estimateHours) + '시간</span>', 'estimateHours') +
+      kvRow('실투입', '<span class="t-num">' + U.num(tsSum, 1) + '시간</span> <span class="t-muted">타임시트 ' + sheets().length + '건 · 티켓 롤업 ' + U.num(t.spentHours || 0) + '시간</span>') +
+      kvRow('재작업 횟수', U.num(t.reworkCount || 0) + '회 <span class="t-muted">· 무상 한도 ' + U.num(t.freeReworkLimit === undefined ? 2 : t.freeReworkLimit) + '회</span>') +
+      kvRow('라벨', (t.labels || []).length ? (t.labels || []).map(function (l) { return ui.chip(l, 'idle'); }).join(' ') : '<span class="t-faint">없음</span>') +
+      kvRow('등록일시', U.fmtDateTime(t.createdAt) + ' <span class="t-muted">· ' + U.ago(t.createdAt) + '</span>') +
+      kvRow('착수일시', t.startedAt ? U.fmtDateTime(t.startedAt) : '<span class="t-faint">미착수</span>') +
+      kvRow('완료일시', t.doneAt
+        ? U.fmtDateTime(t.doneAt) + (D.wasLate(t) ? ' <span class="chip chip--neg">납기 초과 납품</span>' : ' <span class="chip chip--pos">납기 내 납품</span>')
+        : '<span class="t-faint">미완료</span>') +
+      (t.holdReason ? kvRow('보류 사유', esc(t.holdReason)) : '') +
+      (t.reworkReason ? kvRow('수정요청 사유', esc(t.reworkReason)) : '') +
+      (t.cancelReason ? kvRow('취소 사유', esc(t.cancelReason)) : '') +
+      (t.updatedAt ? kvRow('최근 수정', U.fmtDateTime(t.updatedAt)) : '');
+
+    var typeFields = t.typeFields && Object.keys(t.typeFields).length
+      ? '<div class="panel"><div class="panel__head"><h2 class="panel__title">유형별 상세</h2>' +
+        '<span class="t-mono">' + esc(t.type) + '</span></div>' +
+        '<div class="panel__body"><div class="kv">' +
+        Object.keys(t.typeFields).map(function (k) {
+          return kvRow(k, esc(String(t.typeFields[k])));
+        }).join('') + '</div></div></div>'
+      : '';
+
+    return '<div class="panel">' +
+        '<div class="panel__head"><h2 class="panel__title">요청 내용</h2>' +
+          (canField() ? '<button class="btn btn--sm" type="button" data-act="editf" data-f="description">내용 편집</button>' : '') +
+        '</div>' +
+        '<div class="panel__body"><p class="desc">' + esc(t.description || '요청 내용이 비어 있습니다. 무엇을 왜 만들어야 하는지 적어 주세요.') + '</p></div>' +
+      '</div>' +
+      '<div class="panel">' +
+        '<div class="panel__head"><h2 class="panel__title">의뢰 정보</h2>' +
+          (canField() ? '<button class="btn btn--sm" type="button" data-act="editmain">주요 항목 편집</button>' : '') +
+        '</div>' +
+        '<div class="panel__body"><div class="kv">' + kv + '</div></div>' +
+        '<div class="panel__foot"><p class="t-micro">연필 아이콘을 누르면 그 항목만 바로 고칠 수 있습니다. ' +
+        '모든 변경은 이력 탭에 한 줄로 남습니다.</p></div>' +
+      '</div>' +
+      '<div class="panel">' +
+        '<div class="panel__head"><h2 class="panel__title">연결 레코드</h2>' +
+          '<a class="link" href="tickets.html">의뢰 보드</a>' +
+        '</div>' +
+        '<div class="panel__body grid grid--3">' +
+          relCard('광고주', a ? esc(a.name) : null,
+            a ? esc(a.tier) + ' · ' + esc(a.industry) + ' · 담당 AE ' + esc(db.userName(a.ownerId)) : '연결된 광고주가 없습니다',
+            a ? 'account.html?id=' + encodeURIComponent(a.id) : null) +
+          relCard('영업기회', o ? esc(o.name) : null,
+            o ? esc(o.stage) + ' · ' + U.won(o.amount) + ' · 마감 ' + U.fmtDate(o.closeDate) : '연결된 영업기회가 없습니다',
+            o ? 'opportunity.html?id=' + encodeURIComponent(o.id) : null) +
+          relCard('캠페인', cp ? esc(cp.name) : null,
+            cp ? esc(cp.status) + ' · ' + U.fmtDate(cp.startDate) + '~' + U.fmtDate(cp.endDate) + ' · 예산 ' + U.won(cp.budget)
+               : '집행 캠페인이 아직 연결되지 않았습니다', null) +
+        '</div>' +
+      '</div>' +
+      typeFields;
+  }
+
+  function relCard(kind, name, meta, href) {
+    return '<div style="border:var(--rule-hair) solid var(--color-rule);border-radius:var(--radius-sm);padding:var(--space-sm);min-width:0">' +
+      '<p class="t-mono">' + esc(kind) + '</p>' +
+      (name
+        ? (href
+            ? '<p class="t-h5 t-ink" style="margin-top:2px"><a class="link--quiet" href="' + href + '">' + name + '</a></p>'
+            : '<p class="t-h5 t-ink" style="margin-top:2px">' + name + '</p>')
+        : '<p class="t-body t-faint" style="margin-top:2px">미연결</p>') +
+      '<p class="t-micro mt-2xs">' + meta + '</p>' +
+      '</div>';
+  }
+
+  /* ── 탭 2 · 코멘트 ───────────────────────────────────────────────── */
+  function threadItems() {
+    var out = comments().map(function (c) { return { at: c.createdAt, kind: 'cmt', rec: c }; });
+    history().forEach(function (h) { out.push({ at: h.at, kind: 'sys', rec: h }); });
+    out.push({ at: t.createdAt, kind: 'born', rec: null });
+    return U.sortBy(out, 'at');
+  }
+
+  function highlightMentions(body) {
+    var html = esc(body || '');
+    db.all('users').forEach(function (u) {
+      var tag = '@' + u.name;
+      if (html.indexOf(tag) === -1) return;
+      html = html.split(tag).join('<span class="mention">' + esc(tag) + '</span>');
+    });
+    return html;
+  }
+
+  function commentPane() {
+    var items = threadItems();
+    var pages = Math.max(1, Math.ceil(items.length / PER_THREAD));
+    if (state.threadPage > pages) state.threadPage = pages;
+    var slice = items.slice((state.threadPage - 1) * PER_THREAD, state.threadPage * PER_THREAD);
+
+    var thread = slice.map(function (it) {
+      if (it.kind === 'born') {
+        return '<p class="sysline"><span class="cmt__when">' + U.fmtDateTime(it.at) + '</span>' +
+          '<span>' + esc(db.userName(t.requesterId)) + ' 님이 이 의뢰를 등록했습니다.</span></p>';
+      }
+      if (it.kind === 'sys') {
+        var h = it.rec;
+        return '<p class="sysline"><span class="cmt__when">' + U.fmtDateTime(h.at) + '</span>' +
+          '<span>' + esc(db.userName(h.actorId)) + ' 님이 ' + esc(FIELD_LABEL[h.field] || h.field) + '을(를) ' +
+          '<strong>' + esc(labelOf(h.field, h.from)) + '</strong> → <strong>' + esc(labelOf(h.field, h.to)) + '</strong> (으)로 바꿨습니다.</span></p>';
+      }
+      var c = it.rec;
+      var author = db.get('users', c.authorId);
+      return '<article class="cmt' + (c.isInternal ? ' cmt--internal' : '') + '">' +
+        '<div class="cmt__top">' + ui.avatar(author, 'sm') +
+          '<span class="cmt__who">' + esc(author ? author.name : '알 수 없는 사용자') + '</span>' +
+          '<span class="cmt__when">' + U.fmtDateTime(c.createdAt) + '</span>' +
+          (c.isInternal ? '<span class="chip chip--warn" title="광고주 공유 리포트에서 제외됩니다">내부 전용</span>' : '') +
+          (c.authorId === me.id ? '<span class="grow"></span><button class="btn btn--ghost btn--sm" type="button" data-act="delcmt" data-id="' + esc(c.id) + '">삭제</button>' : '') +
+        '</div>' +
+        '<p class="cmt__body">' + highlightMentions(c.body) + '</p>' +
+        '</article>';
+    }).join('');
+
+    return '<div class="panel">' +
+        '<div class="panel__head"><h2 class="panel__title">코멘트 작성</h2>' +
+          '<span class="t-mono">워처 ' + watchers().length + '명에게 알림</span>' +
+        '</div>' +
+        '<div class="panel__body" id="cmtHost"></div>' +
+      '</div>' +
+      '<div class="panel">' +
+        '<div class="panel__head"><h2 class="panel__title">스레드</h2>' +
+          '<span class="t-mono">코멘트 ' + comments().length + '건 · 시스템 기록 ' + (history().length + 1) + '건</span>' +
+        '</div>' +
+        '<div class="panel__body">' +
+          (items.length ? thread : ui.empty('아직 대화가 없습니다', '무엇이 막혀 있는지 여기 남기면 워처 모두에게 전달됩니다.')) +
+        '</div>' +
+        (pages > 1 ? '<div class="panel__foot">' + pagerHTML('thread', state.threadPage, pages, items.length) + '</div>' : '') +
+      '</div>';
+  }
+
+  function labelOf(field, value) {
+    if (value === null || value === undefined || value === '') return '(없음)';
+    if (field === 'assigneeId') return db.userName(value);
+    return String(value);
+  }
+
+  function pagerHTML(key, cur, pages, total) {
+    var btns = '';
+    for (var i = 1; i <= pages; i++) {
+      btns += '<button class="pager__btn" type="button" data-act="page" data-key="' + key + '" data-p="' + i + '"' +
+        (i === cur ? ' aria-current="page"' : '') + '>' + i + '</button>';
+    }
+    return '<div class="row row--between row--wrap gap-xs">' +
+      '<span class="t-micro">전체 ' + total + '건 · ' + cur + ' / ' + pages + ' 쪽</span>' +
+      '<span class="pager">' + btns + '</span></div>';
+  }
+
+  /* 작성기는 한 번만 만들고 계속 재사용합니다 — 다시 그려도 초안이 살아 있습니다. */
+  var composer = buildComposer();
+
+  function buildComposer() {
+    var ta = el('textarea', {
+      class: 'textarea', rows: '3',
+      placeholder: '무엇이 필요한지 적어 주세요. @를 입력하면 사람을 부를 수 있습니다.',
+      'aria-label': '코멘트 내용'
+    });
+    var box = el('div', { class: 'mentions', hidden: true, role: 'listbox', 'aria-label': '멘션 후보' });
+    var internal = el('input', { type: 'checkbox' });
+    var submit = el('button', { class: 'btn btn--sm btn--primary', type: 'button', text: '등록' });
+    var hint = el('p', { class: 't-micro' });
+
+    var wrap = el('div', { class: 'composer stack gap-xs' }, [
+      el('div', { style: 'position:relative' }, [ta, box]),
+      el('div', { class: 'row row--between row--wrap gap-xs' }, [
+        el('label', { class: 'check' }, [internal, el('span', { text: '내부 전용 (광고주 공유 리포트에서 제외)' })]),
+        submit
+      ]),
+      hint
+    ]);
+
+    var cand = [], sel = 0, anchor = -1;
+
+    function people() {
+      return U.sortBy(db.where('users', function (u) { return u.active !== false; }), 'name');
+    }
+    function closeBox() { box.hidden = true; cand = []; anchor = -1; }
+    function paint() {
+      box.innerHTML = cand.map(function (u, i) {
+        return '<button class="mentions__item' + (i === sel ? ' is-on' : '') + '" type="button" role="option" ' +
+          'aria-selected="' + (i === sel) + '" data-uid="' + esc(u.id) + '">' +
+          ui.avatar(u, 'sm') + '<span class="grow">' + esc(u.name) + '</span>' +
+          '<span class="t-mono">' + esc(u.craft || u.role) + '</span></button>';
+      }).join('');
+      box.hidden = !cand.length;
+    }
+    function scan() {
+      var pos = ta.selectionStart;
+      var before = ta.value.slice(0, pos);
+      var m = /@([^\s@]{0,16})$/.exec(before);
+      if (!m) { closeBox(); return; }
+      anchor = pos - m[0].length;
+      var q = m[1];
+      cand = people().filter(function (u) {
+        return !q || u.name.indexOf(q) > -1 || (u.craft || u.role).indexOf(q) > -1;
+      }).slice(0, 6);
+      sel = 0;
+      paint();
+    }
+    function pick(u) {
+      if (anchor < 0) return;
+      var pos = ta.selectionStart;
+      ta.value = ta.value.slice(0, anchor) + '@' + u.name + ' ' + ta.value.slice(pos);
+      var caret = anchor + u.name.length + 2;
+      closeBox();
+      ta.focus();
+      ta.setSelectionRange(caret, caret);
+      sync();
+    }
+    function sync() {
+      var n = mentionedIds(ta.value).length;
+      hint.textContent = ta.value.trim()
+        ? (n ? '멘션 ' + n + '명은 자동으로 워처에 추가되고 알림을 받습니다.' : '워처 ' + watchers().length + '명이 알림을 받습니다.')
+        : '';
+    }
+
+    U.on(ta, 'input', function () { scan(); sync(); });
+    U.on(ta, 'click', function () { closeBox(); });
+    U.on(ta, 'blur', function () { setTimeout(closeBox, 140); });
+    U.on(ta, 'keydown', function (e) {
+      /* 한글 조합 중에는 어떤 단축키도 가로채지 않습니다. */
+      if (e.isComposing || e.keyCode === 229) return;
+      if (box.hidden || !cand.length) {
+        if ((e.key === 'Enter') && (e.metaKey || e.ctrlKey)) { e.preventDefault(); post(); }
+        return;
+      }
+      if (e.key === 'ArrowDown') { e.preventDefault(); sel = (sel + 1) % cand.length; paint(); return; }
+      if (e.key === 'ArrowUp') { e.preventDefault(); sel = (sel + cand.length - 1) % cand.length; paint(); return; }
+      if (e.key === 'Enter' || e.key === 'Tab') { e.preventDefault(); pick(cand[sel]); return; }
+      if (e.key === 'Escape') { e.preventDefault(); closeBox(); }
+    });
+    U.live(box, 'mousedown', '.mentions__item', function (e, node) {
+      e.preventDefault();
+      var u = db.get('users', node.dataset.uid);
+      if (u) pick(u);
+    });
+    U.on(submit, 'click', function () { post(); });
+
+    function mentionedIds(text) {
+      var ids = [];
+      db.all('users').forEach(function (u) {
+        if (text.indexOf('@' + u.name) > -1) ids.push(u.id);
+      });
+      return ids;
+    }
+
+    function post() {
+      var body = ta.value.trim();
+      if (!body) { ui.toast('코멘트 내용을 입력해 주세요.', { kind: 'neg' }); ta.focus(); return; }
+      var mentions = mentionedIds(body);
+      var isInternal = internal.checked;
+      var added = mentions.filter(function (id) { return watchers().indexOf(id) === -1; });
+
+      var rec = db.insert('ticketComments', {
+        ticketId: t.id, authorId: me.id, body: body,
+        createdAt: nowISO(), isInternal: isInternal,
+        mentions: mentions, attachments: []
+      }, { silent: true });
+
+      var beforeWatchers = watchers();
+      if (added.length) db.update('tickets', t.id, { watchers: beforeWatchers.concat(added) }, { silent: true });
+
+      var bag = [];
+      var link = 'ticket.html?id=' + encodeURIComponent(t.id);
+      watchers().concat(mentions).forEach(function (uid, i, arr) {
+        if (arr.indexOf(uid) !== i) return;
+        pushNotify(uid, 'ticket',
+          mentions.indexOf(uid) > -1
+            ? me.name + '님이 ‘' + t.key + '’ 코멘트에서 회원님을 언급했습니다.'
+            : me.name + '님이 ‘' + t.key + '’에 코멘트를 남겼습니다.',
+          link, bag);
+      });
+
+      ta.value = '';
+      internal.checked = false;
+      closeBox(); sync();
+      state.tab = 'comments';
+      state.threadPage = Math.max(1, Math.ceil(threadItems().length / PER_THREAD));
+      renderAll();
+
+      ui.toast('코멘트를 등록했습니다.' + (added.length ? ' 멘션된 ' + added.length + '명을 워처에 추가했습니다.' : ''), {
+        undo: function () {
+          db.remove('ticketComments', rec.id, { noTrash: true });
+          if (added.length) db.update('tickets', t.id, { watchers: beforeWatchers }, { silent: true });
+          bag.forEach(function (id) { db.remove('notifications', id, { noTrash: true }); });
+          renderAll();
+        }
+      });
+    }
+
+    return { root: wrap, ta: ta };
+  }
+
+  function deleteComment(id) {
+    var c = db.get('ticketComments', id);
+    if (!c || c.authorId !== me.id) return;
+    var list = db.all('ticketComments');
+    var idx = -1;
+    for (var i = 0; i < list.length; i++) if (list[i].id === id) { idx = i; break; }
+    db.remove('ticketComments', id, { noTrash: true });
+    renderAll();
+    ui.toast('코멘트를 지웠습니다.', {
+      undo: function () { db.restore('ticketComments', c, idx); renderAll(); }
+    });
+  }
+
+  /* ── 탭 3 · 이력 ─────────────────────────────────────────────────── */
+  function historyPane() {
+    return '<div class="panel">' +
+      '<div class="panel__head"><h2 class="panel__title">변경 이력</h2>' +
+        '<span class="t-mono">추가 전용 · ' + history().length + '행</span>' +
+      '</div>' +
+      '<div id="histHost"></div>' +
+      '<div class="panel__foot" id="histFoot">' +
+        '<p class="t-micro">이력은 고쳐 쓰거나 지울 수 없습니다. 상태 체류 시간과 리드타임은 이 표에서만 나옵니다.</p>' +
+      '</div>' +
+    '</div>';
+  }
+
+  function historyTable() {
+    var rows = history();
+    var pages = Math.max(1, Math.ceil(rows.length / PER_HISTORY));
+    if (state.histPage > pages) state.histPage = pages;
+    var slice = rows.slice((state.histPage - 1) * PER_HISTORY, state.histPage * PER_HISTORY);
+
+    var wrap = ui.table([
+      { key: 'at', label: '일시', cell: function (h) { return '<span class="t-mono">' + U.fmtDateTime(h.at) + '</span>'; } },
+      { key: 'actorId', label: '변경자', cell: function (h) { return ui.personCell(db.get('users', h.actorId)); } },
+      { key: 'field', label: '필드', cell: function (h) { return esc(FIELD_LABEL[h.field] || h.field); } },
+      { key: 'from', label: '이전 값', cell: function (h) { return '<span class="t-muted">' + esc(labelOf(h.field, h.from)) + '</span>'; } },
+      { key: 'to', label: '이후 값', cell: function (h) {
+          return h.field === 'status'
+            ? ui.chip(labelOf(h.field, h.to), statusKind(h.to))
+            : esc(labelOf(h.field, h.to));
+        } },
+      { key: 'dwell', label: '체류', align: 'right', cell: function (h) {
+          var i = rows.indexOf(h);
+          var prev = rows[i + 1];
+          var from = prev ? prev.at : t.createdAt;
+          return '<span class="t-num t-muted">' + U.num(Math.max(0, U.days(from, h.at))) + '일</span>';
+        } }
+    ], slice, {
+      empty: { title: '기록된 변경이 없습니다', body: '상태를 옮기거나 항목을 고치면 여기에 한 줄씩 쌓입니다.' }
+    });
+
+    if (pages > 1) {
+      var foot = $('#histFoot');
+      if (foot) foot.insertAdjacentHTML('afterbegin', pagerHTML('hist', state.histPage, pages, rows.length));
+    }
+    return wrap;
+  }
+
+  /* ── 탭 4 · 산출물 ───────────────────────────────────────────────── */
+  function filePane() {
+    var list = delivs();
+    var canApprove = t.status === '검수' && canUpdate && actorOK(t, '완료');
+    var note = t.status === '검수'
+      ? (canApprove
+          ? '마지막 버전을 최종 승인하면 의뢰가 완료 상태로 넘어갑니다.'
+          : '최종 승인은 ' + actorNames('완료') + '만 할 수 있습니다.')
+      : '검수 상태가 되면 마지막 버전에 최종 승인 버튼이 열립니다.';
+
+    return '<div class="panel">' +
+      '<div class="panel__head"><h2 class="panel__title">산출물 버전</h2>' +
+        '<span class="t-mono">' + list.length + '개 버전 · 승인 ' +
+        list.filter(function (d) { return d.approved; }).length + '개</span>' +
+      '</div>' +
+      '<div id="delivHost"></div>' +
+      '<div class="panel__foot"><p class="t-micro">' + esc(note) + ' ' +
+      '버전은 덮어쓰지 않고 쌓입니다 — 광고주가 어느 안을 봤는지 나중에 확인할 수 있어야 하기 때문입니다.</p></div>' +
+    '</div>';
+  }
+
+  function deliverableTable() {
+    var list = delivs();
+    var lastIdx = list.length - 1;
+    var canApprove = t.status === '검수' && canUpdate && actorOK(t, '완료');
+
+    return ui.table([
+      { key: 'version', label: '버전', tight: true, cell: function (d) { return '<span class="t-mono">' + esc(d.version) + '</span>'; } },
+      { key: 'name', label: '파일명', cell: function (d) { return '<span class="t-clamp-2">' + esc(d.name) + '</span>'; } },
+      { key: 'sizeMB', label: '용량', align: 'right', cell: function (d) {
+          return d.sizeMB === null || d.sizeMB === undefined
+            ? '<span class="t-faint">미측정</span>'
+            : '<span class="t-num">' + U.num(d.sizeMB, 1) + 'MB</span>';
+        } },
+      { key: 'byId', label: '올린 사람', cell: function (d) { return ui.personCell(db.get('users', d.byId)); } },
+      { key: 'at', label: '일시', align: 'right', cell: function (d) { return '<span class="t-mono">' + U.fmtDateTime(d.at) + '</span>'; } },
+      { key: 'approved', label: '승인', cell: function (d) {
+          if (d.approved) return ui.chip('최종 승인본', 'pos');
+          var i = list.indexOf(d);
+          if (canApprove && i === lastIdx) {
+            return '<button class="btn btn--sm btn--primary" type="button" data-act="approve">최종 승인</button>';
+          }
+          return '<span class="t-faint">미승인</span>';
+        } }
+    ], list, {
+      empty: {
+        title: '등록된 산출물이 없습니다',
+        body: '담당자가 검수로 넘길 때 산출물 버전이 한 개 이상 기록됩니다.'
+      }
+    });
+  }
+
+  /* ── 탭 5 · 공수 ─────────────────────────────────────────────────── */
+  function effortPane() {
+    var est = t.estimateHours || 0;
+    var tsSum = spentFromSheets();
+    var over = est > 0 && tsSum > est;
+    var pctText = est > 0 ? U.pct((tsSum / est) * 100) : '—';
+    var rows = sheets();
+
+    var byDate = U.groupBy(rows, 'date');
+    var dates = U.sortBy(Object.keys(byDate)).slice(-14);
+    var chart = dates.length
+      ? ch.bars(dates.map(function (d) {
+          var hours = U.sum(byDate[d], 'hours');
+          return { label: U.fmtDate(d, 'md'), value: hours, kind: hours > 8 ? 'warn' : null };
+        }), {
+          h: 190, label: '일자별 투입 시간',
+          fmt: function (v) { return U.num(v, 1) + 'h'; }
+        }) + '<p class="t-micro mt-xs">최근 기록된 ' + dates.length + '일치입니다. 하루 8시간을 넘긴 날은 주황으로 표시했습니다.</p>'
+      : ui.empty('입력된 타임시트가 없습니다', '담당자가 주 단위로 시간을 입력하면 여기에 일자별로 쌓입니다.',
+          '<a class="btn btn--sm" href="timesheet.html">타임시트 열기</a>');
+
+    var billable = U.sum(rows.filter(function (r) { return r.billable; }), 'hours');
+
+    return '<div class="panel">' +
+        '<div class="panel__head"><h2 class="panel__title">예상 대 실투입</h2>' +
+          '<span class="t-mono">' + pctText + ' 소진</span>' +
+        '</div>' +
+        '<div class="panel__body">' +
+          '<div class="row row--between gap-sm"><span class="side-fact__k">타임시트 합계</span>' +
+            '<span class="t-num ' + (over ? 't-neg' : '') + '">' + U.num(tsSum, 1) + ' / ' + U.num(est) + '시간</span></div>' +
+          ui.meter(tsSum, est, over ? 'neg' : tsSum >= est * 0.8 ? 'warn' : 'pos') +
+          '<p class="t-micro mt-2xs">' +
+            (est === 0 ? '예상 공수가 0이라 소진율을 계산할 수 없습니다.'
+             : over ? '예상보다 ' + U.num(tsSum - est, 1) + '시간 더 들어갔습니다. 다음 같은 유형의 견적에 반영할 근거입니다.'
+             : '남은 예상 여유 ' + U.num(est - tsSum, 1) + '시간입니다.') + '</p>' +
+          '<div class="mt-md">' +
+            '<div class="side-fact"><span class="side-fact__k">청구 가능</span><span class="t-num">' + U.num(billable, 1) + '시간</span></div>' +
+            '<div class="side-fact"><span class="side-fact__k">청구 불가</span><span class="t-num">' + U.num(tsSum - billable, 1) + '시간</span></div>' +
+            '<div class="side-fact"><span class="side-fact__k">티켓 롤업(spentHours)</span><span class="t-num">' + U.num(t.spentHours || 0) + '시간</span></div>' +
+            '<div class="side-fact"><span class="side-fact__k">타임시트 행</span><span class="t-num">' + rows.length + '건</span></div>' +
+          '</div>' +
+        '</div>' +
+      '</div>' +
+      '<div class="panel">' +
+        '<div class="panel__head"><h2 class="panel__title">일자별 투입</h2>' +
+          '<a class="link" href="timesheet.html">타임시트</a>' +
+        '</div>' +
+        '<div class="panel__body">' + chart + '</div>' +
+      '</div>' +
+      '<div class="panel">' +
+        '<div class="panel__head"><h2 class="panel__title">공수 신청</h2>' +
+          (canRequestHours ? '<button class="btn btn--sm" type="button" data-act="reqhours">공수 신청</button>' : '<a class="link" href="resources.html">공수 관리</a>') +
+        '</div>' +
+        '<div id="reqHost"></div>' +
+      '</div>' +
+      '<div class="panel">' +
+        '<div class="panel__head"><h2 class="panel__title">배정</h2>' +
+          '<a class="link" href="resources.html">캐파 히트맵</a>' +
+        '</div>' +
+        '<div id="asgHost"></div>' +
+      '</div>';
+  }
+
+  function requestTable() {
+    return ui.table([
+      { key: 'roleNeeded', label: '요청 직무', cell: function (r) { return ui.chip(r.roleNeeded, 'plain'); } },
+      { key: 'hours', label: '요청 공수', align: 'right', cell: function (r) { return '<span class="t-num">' + U.num(r.hours) + '시간</span>'; } },
+      { key: 'startDate', label: '희망 기간', cell: function (r) { return U.fmtDate(r.startDate) + ' ~ ' + U.fmtDate(r.endDate); } },
+      { key: 'status', label: '상태', cell: function (r) {
+          return ui.chip(r.status, r.status === '반려' ? 'neg' : r.status === '대기' ? 'warn' : r.status === '배정완료' ? 'pos' : 'accent');
+        } },
+      { key: 'approverId', label: '승인자', cell: function (r) { return ui.personCell(db.get('users', r.approverId)); } },
+      { key: 'note', label: '메모', cell: function (r) {
+          var text = r.note || r.reason || '';
+          return text ? '<span class="t-small t-clamp-2">' + esc(text) + '</span>' : '<span class="t-faint">—</span>';
+        } }
+    ], requests(), {
+      empty: { title: '이 의뢰에 낸 공수 신청이 없습니다', body: '사람이 필요하면 공수를 신청하세요. 리소스매니저가 후보와 캐파를 보고 배정합니다.' }
+    });
+  }
+
+  function assignTable() {
+    return ui.table([
+      { key: 'resourceId', label: '담당', cell: function (a) { return ui.personCell(db.get('users', a.resourceId)); } },
+      { key: 'hours', label: '배정 공수', align: 'right', cell: function (a) { return '<span class="t-num">' + U.num(a.hours) + '시간</span>'; } },
+      { key: 'startDate', label: '기간', cell: function (a) { return U.fmtDate(a.startDate) + ' ~ ' + U.fmtDate(a.endDate); } },
+      { key: 'weeks', label: '주당 평균', align: 'right', cell: function (a) {
+          var w = Math.max(1, U.days(a.startDate, a.endDate) / 7);
+          return '<span class="t-num t-muted">' + U.num(a.hours / w, 1) + '시간</span>';
+        } },
+      { key: 'status', label: '상태', cell: function (a) { return ui.chip(a.status, a.status === '완료' ? 'pos' : 'accent'); } }
+    ], assigns(), {
+      empty: { title: '배정된 인력이 없습니다', body: '공수 신청이 승인되면 배정이 만들어지고 캐파 히트맵에 반영됩니다.' }
+    });
+  }
+
+  /* ── 사이드 ──────────────────────────────────────────────────────── */
+  function renderSide() {
+    $('#sideCol').innerHTML = slaCard() + watcherCard() + accountCard() + siblingCard();
+  }
+
+  function slaCard() {
+    var base = D.slaHoursFor(t);
+    var r = D.slaRemaining(t);
+    var st = D.slaState(t);
+    var sla = slaText();
+    var used = r === null ? base : U.clamp(base - r, 0, base);
+    var kind = st === 'breach' ? 'neg' : st === 'risk' ? 'warn' : 'pos';
+    var due = D.dueMoment(t);
+
+    var verdict;
+    if (t.status === '완료') {
+      verdict = D.wasLate(t)
+        ? '<span class="chip chip--neg">납기 초과 납품</span> <span class="t-micro">' +
+          U.num(Math.round((new Date(t.doneAt) - due) / 3600000)) + '시간 늦게 끝났습니다.</span>'
+        : '<span class="chip chip--pos">납기 준수</span> <span class="t-micro">약속한 날짜 안에 끝냈습니다.</span>';
+    } else if (t.status === '취소') {
+      verdict = '<span class="chip chip--idle">취소</span> <span class="t-micro">SLA 집계에서 제외됩니다.</span>';
+    } else if (st === 'breach') {
+      verdict = '<span class="chip chip--neg">위반</span> <span class="t-micro">담당자·의뢰자·리소스매니저에게 에스컬레이션되는 구간입니다.</span>';
+    } else if (st === 'risk') {
+      verdict = '<span class="chip chip--warn">임박</span> <span class="t-micro">기준 SLA의 25%가 남으면 알림이 나갑니다.</span>';
+    } else {
+      verdict = '<span class="chip chip--pos">정상</span> <span class="t-micro">아직 여유가 있습니다.</span>';
+    }
+
+    return '<div class="panel">' +
+      '<div class="panel__head"><h2 class="panel__title">SLA</h2>' +
+        '<span class="t-mono">' + esc(sla.short) + '</span></div>' +
+      '<div class="panel__body">' +
+        '<div class="row row--between gap-sm"><span class="side-fact__k">경과 / 기준</span>' +
+          '<span class="t-num">' + U.num(used) + ' / ' + U.num(base) + '시간</span></div>' +
+        ui.meter(used, base, kind) +
+        '<p class="mt-xs">' + verdict + '</p>' +
+        '<div class="mt-md">' +
+          '<div class="side-fact"><span class="side-fact__k">납기</span><span>' + U.fmtDate(t.dueDate) + ' 18:00</span></div>' +
+          '<div class="side-fact"><span class="side-fact__k">잔여</span><span class="t-num">' +
+            (r === null ? '—' : (r < 0 ? '초과 ' + U.num(Math.abs(r)) : U.num(r)) + '시간') + '</span></div>' +
+          '<div class="side-fact"><span class="side-fact__k">기준 SLA</span><span class="t-num">' + U.num(base) + '시간</span></div>' +
+          '<div class="side-fact"><span class="side-fact__k">접수 이후</span><span class="t-num">' + U.num(U.days(t.createdAt, C.today)) + '일</span></div>' +
+        '</div>' +
+        '<p class="t-micro mt-sm">기준 SLA = 유형 ' + D.ticketType(t.type).slaHours + '시간 × ' +
+        esc(prioOf(t.priority).key) + ' 계수 ' + prioOf(t.priority).slaFactor + '배.</p>' +
+      '</div>' +
+    '</div>';
+  }
+
+  function watcherCard() {
+    var list = watchers();
+    var rows = list.map(function (id) {
+      var u = db.get('users', id);
+      if (!u) return '';
+      var why = id === t.requesterId ? '의뢰자' : id === t.assigneeId ? '담당자' : '워처';
+      return '<div class="peep">' + ui.avatar(u, 'sm') +
+        '<span class="grow" style="min-width:0"><span style="display:block">' + esc(u.name) + '</span>' +
+        '<span class="peep__meta">' + esc(why) + ' · ' + esc(u.craft || u.role) + '</span></span>' +
+        (canUpdate && id !== t.requesterId
+          ? '<button class="btn btn--ghost btn--sm" type="button" data-act="delwatch" data-id="' + esc(u.id) + '">해제</button>'
+          : '<span class="t-micro">고정</span>') +
+        '</div>';
+    }).join('');
+
+    return '<div class="panel">' +
+      '<div class="panel__head"><h2 class="panel__title">워처</h2>' +
+        (canUpdate ? '<button class="btn btn--sm" type="button" data-act="addwatch">추가</button>' : '<span class="t-mono">' + list.length + '명</span>') +
+      '</div>' +
+      '<div class="panel__body panel__body--flush" style="padding-inline:var(--space-md)">' +
+        (rows || ui.empty('워처가 없습니다', '상태가 바뀌어도 아무에게도 알림이 가지 않습니다.')) +
+      '</div>' +
+      '<div class="panel__foot"><p class="t-micro">워처는 상태 변경과 코멘트 알림을 받습니다. 편집 권한은 따로입니다. 의뢰자는 해제할 수 없습니다.</p></div>' +
+    '</div>';
+  }
+
+  function accountCard() {
+    var a = acc();
+    if (!a) {
+      return '<div class="panel"><div class="panel__body">' +
+        ui.empty('연결된 광고주가 없습니다', '광고주를 연결하면 건강도와 다른 제작 건을 함께 볼 수 있습니다.') + '</div></div>';
+    }
+    var h = D.accountHealth(a);
+    var kind = h.score >= 70 ? 'pos' : h.score >= 55 ? 'warn' : 'neg';
+    var openT = db.where('tickets', function (x) { return x.accountId === a.id && D.TICKET_OPEN.indexOf(x.status) > -1; });
+    var breach = openT.filter(function (x) { return D.slaState(x) === 'breach'; }).length;
+
+    return '<div class="panel">' +
+      '<div class="panel__head"><h2 class="panel__title">광고주</h2>' +
+        '<a class="link" href="account.html?id=' + encodeURIComponent(a.id) + '">레코드 열기</a></div>' +
+      '<div class="panel__body">' +
+        '<p class="t-h5 t-ink">' + esc(a.name) + '</p>' +
+        '<div class="row row--wrap gap-2xs mt-2xs">' + ui.chip(a.tier, 'accent') + ui.chip(a.industry) + ui.chip(a.status) + '</div>' +
+        '<div class="mt-md">' +
+          '<div class="row row--between gap-sm"><span class="side-fact__k">건강도</span>' +
+            '<span class="t-num t-' + kind + '">' + h.score + '점</span></div>' +
+          ui.meter(h.score, 100, kind) +
+          '<p class="t-micro mt-2xs">' + esc(h.reasons.slice(0, 3).join(' · ') || '판단 근거가 될 활동 기록이 부족합니다.') + '</p>' +
+        '</div>' +
+        '<div class="mt-md">' +
+          '<div class="side-fact"><span class="side-fact__k">최근 1년 매출</span><span class="t-num">' + U.won(M.accountRevenue(a.id, 365)) + '</span></div>' +
+          '<div class="side-fact"><span class="side-fact__k">진행 중 제작 건</span><span class="t-num">' + openT.length + '건</span></div>' +
+          '<div class="side-fact"><span class="side-fact__k">SLA 초과 건</span><span class="t-num ' + (breach ? 't-neg' : '') + '">' + breach + '건</span></div>' +
+          '<div class="side-fact"><span class="side-fact__k">담당 AE</span><span>' + esc(db.userName(a.ownerId)) + '</span></div>' +
+        '</div>' +
+      '</div>' +
+    '</div>';
+  }
+
+  function siblingCard() {
+    var o = opp();
+    if (!o) {
+      return '<div class="panel">' +
+        '<div class="panel__head"><h2 class="panel__title">같은 영업기회의 의뢰</h2></div>' +
+        '<div class="panel__body">' +
+        ui.empty('연결된 영업기회가 없습니다', '영업기회에 걸린 제작 건은 딜 레코드에서 함께 관리됩니다.') +
+        '</div></div>';
+    }
+    var sibs = U.sortBy(db.ticketsOf(o.id).filter(function (x) { return x.id !== t.id; }), 'dueDate');
+    var rows = sibs.slice(0, 8).map(function (x) {
+      var st = D.slaState(x);
+      return '<a class="peep" style="text-decoration:none" href="ticket.html?id=' + encodeURIComponent(x.id) + '">' +
+        '<span class="tkt-key">' + esc(x.key) + '</span>' +
+        '<span class="grow" style="min-width:0"><span style="display:block" class="t-clamp-2">' + esc(x.title) + '</span>' +
+        '<span class="peep__meta">' + esc(x.type) + ' · ' + esc(x.status) + ' · 마감 ' + U.fmtDate(x.dueDate, 'md') + '</span></span>' +
+        '<span class="chip chip--' + (st === 'breach' ? 'neg' : st === 'risk' ? 'warn' : 'idle') + '">' +
+        (st === 'breach' ? '초과' : st === 'risk' ? '임박' : st === 'done' ? '종료' : '정상') + '</span></a>';
+    }).join('');
+
+    return '<div class="panel">' +
+      '<div class="panel__head"><h2 class="panel__title">같은 영업기회의 의뢰</h2>' +
+        '<a class="link" href="opportunity.html?id=' + encodeURIComponent(o.id) + '">딜 열기</a></div>' +
+      '<div class="panel__body panel__body--flush" style="padding-inline:var(--space-md)">' +
+        (rows || ui.empty('다른 제작 건이 없습니다', '이 딜에 걸린 제작 의뢰는 지금 이 건 하나뿐입니다.')) +
+      '</div>' +
+      (sibs.length > 8 ? '<div class="panel__foot"><p class="t-micro">' + (sibs.length - 8) + '건은 딜 레코드에서 볼 수 있습니다.</p></div>' : '') +
+    '</div>';
+  }
+
+  /* ══ 입력 컨트롤 ═══════════════════════════════════════════════════ */
+  var BAD = {};
+
+  function field(label, node, req, help) {
+    return el('label', { class: 'field' }, [
+      el('span', { class: 'field__label', html: esc(label) + (req ? ' <span class="req">*</span>' : '') }),
+      node,
+      help ? el('span', { class: 'field__help', text: help }) : null
+    ]);
+  }
+  function selectCtl(options, value, allowEmpty) {
+    var node = el('select', { class: 'select' });
+    if (allowEmpty) node.appendChild(el('option', { value: '', text: '선택 안 함' }));
+    options.forEach(function (o) {
+      node.appendChild(el('option', { value: o.value, text: o.label, selected: String(o.value) === String(value) ? true : null }));
+    });
+    return { el: node, read: function () { return node.value === '' ? null : node.value; } };
+  }
+  function opts(list) { return list.map(function (v) { return { value: v, label: v }; }); }
+  function makers() {
+    return U.sortBy(db.where('users', function (u) { return u.role === '제작인력' && u.active !== false; }), 'name');
+  }
+
+  function buildControl(k) {
+    var v = t[k];
+    if (k === 'title') {
+      var n1 = el('input', { class: 'input', type: 'text', value: v || '', autocomplete: 'off', 'data-autofocus': '' });
+      return { el: n1, read: function () { var s = n1.value.trim(); return s ? s : BAD; } };
+    }
+    if (k === 'description') {
+      var n2 = el('textarea', { class: 'textarea', rows: '8', 'data-autofocus': '' });
+      n2.value = v || '';
+      return { el: n2, read: function () { return n2.value; } };
+    }
+    if (k === 'dueDate') {
+      var n3 = el('input', { class: 'input', type: 'date', value: v ? U.iso(v) : '', 'data-autofocus': '' });
+      return { el: n3, read: function () { return n3.value ? n3.value : BAD; } };
+    }
+    if (k === 'estimateHours') {
+      var n4 = el('input', { class: 'input input--num', type: 'number', min: '1', step: '1', value: v == null ? '' : String(v), 'data-autofocus': '' });
+      return { el: n4, read: function () { var x = Number(n4.value); return (!n4.value || isNaN(x) || x < 1) ? BAD : Math.round(x); } };
+    }
+    if (k === 'type') {
+      return selectCtl(D.TICKET_TYPES.map(function (x) {
+        return { value: x.key, label: x.key + ' · 기준 ' + x.slaHours + '시간' };
+      }), v);
+    }
+    if (k === 'priority') return selectCtl(D.PRIORITIES.map(function (p) { return { value: p.key, label: p.key + ' ' + p.label + ' · 계수 ' + p.slaFactor + '배' }; }), v);
+    if (k === 'assigneeId') {
+      return selectCtl(makers().map(function (u) { return { value: u.id, label: u.name + ' · ' + (u.craft || u.role) }; }), v, true);
+    }
+    var n5 = el('input', { class: 'input', type: 'text', value: v == null ? '' : String(v), 'data-autofocus': '' });
+    return { el: n5, read: function () { return n5.value.trim(); } };
+  }
+
+  /* ══ 쓰기 ══════════════════════════════════════════════════════════ */
+  function pushNotify(userId, kind, text, link, bag) {
+    if (!userId || userId === me.id) return;
+    db.notify(userId, kind, text, link);
+    var list = db.all('notifications');
+    if (list.length) bag.push(list[0].id);
+  }
+
+  /** 필드 하나를 고칠 때도 이력에 한 줄을 남깁니다. */
+  function saveField(k, value) {
+    var before = t[k];
+    if (JSON.stringify(before) === JSON.stringify(value)) return;
+    var patch = {};
+    patch[k] = value;
+    db.update('tickets', t.id, patch, { silent: true });
+    var hist = db.insert('ticketHistory', {
+      ticketId: t.id, at: nowISO(), actorId: me.id, field: k,
+      from: before === null || before === undefined ? '' : String(before),
+      to: value === null || value === undefined ? '' : String(value)
+    }, { silent: true });
+    var bag = [];
+    if (k === 'assigneeId' && value) {
+      pushNotify(value, 'assign', '‘' + t.key + ' ' + t.title + '’의 담당자로 지정되었습니다.',
+        'ticket.html?id=' + encodeURIComponent(t.id), bag);
+    }
+    renderAll();
+    ui.toast((FIELD_LABEL[k] || k) + '을(를) 바꿨습니다.', {
+      undo: function () {
+        var back = {}; back[k] = before;
+        db.update('tickets', t.id, back, { silent: true });
+        db.remove('ticketHistory', hist.id, { noTrash: true });
+        bag.forEach(function (id) { db.remove('notifications', id, { noTrash: true }); });
+        renderAll();
+      }
+    });
+  }
+
+  function editField(k) {
+    if (!canField()) { ui.toast('이 의뢰를 고칠 수 있는 사람은 의뢰자·담당자·리소스매니저입니다.', { kind: 'neg' }); return; }
+    var c = buildControl(k);
+    var wrap = field(FIELD_LABEL[k] || k, c.el, true);
+    ui.modal({
+      title: (FIELD_LABEL[k] || k) + ' 편집',
+      size: k === 'description' ? 'wide' : undefined,
+      body: el('div', { class: 'stack gap-sm' }, [wrap]),
+      actions: [
+        { label: '취소' },
+        { label: '저장', kind: 'primary', onClick: function () {
+            var v = c.read();
+            if (v === BAD) {
+              wrap.classList.add('is-invalid');
+              ui.toast((FIELD_LABEL[k] || k) + ' 값을 확인해 주세요.', { kind: 'neg' });
+              return false;
+            }
+            saveField(k, v);
+          } }
+      ]
+    });
+  }
+
+  function editMain() {
+    if (!canField()) { ui.toast('이 의뢰를 고칠 수 있는 사람은 의뢰자·담당자·리소스매니저입니다.', { kind: 'neg' }); return; }
+    var cTitle = buildControl('title'), cPrio = buildControl('priority');
+    var cDue = buildControl('dueDate'), cEst = buildControl('estimateHours');
+    var fTitle = field('제목', cTitle.el, true), fDue = field('마감일', cDue.el, true);
+    var fEst = field('예상 공수 (시간)', cEst.el, true);
+    var note = el('p', { class: 't-micro' });
+    function sync() {
+      var p = prioOf(cPrio.el.value);
+      note.textContent = '기준 SLA ' + Math.round(D.ticketType(t.type).slaHours * p.slaFactor) + '시간 (' +
+        D.ticketType(t.type).slaHours + '시간 × ' + p.slaFactor + '배)입니다.';
+    }
+    U.on(cPrio.el, 'change', sync);
+    sync();
+
+    ui.modal({
+      title: t.key + ' 편집',
+      size: 'wide',
+      body: el('div', { class: 'stack gap-sm' }, [
+        fTitle,
+        el('div', { class: 'grid grid--3' }, [field('우선순위', cPrio.el), fDue, fEst]),
+        note
+      ]),
+      actions: [
+        { label: '취소' },
+        { label: '저장', kind: 'primary', onClick: function () {
+            var title = cTitle.read(), due = cDue.read(), est = cEst.read();
+            if (title === BAD) { fTitle.classList.add('is-invalid'); ui.toast('제목을 입력해 주세요.', { kind: 'neg' }); return false; }
+            if (due === BAD) { fDue.classList.add('is-invalid'); ui.toast('마감일을 선택해 주세요.', { kind: 'neg' }); return false; }
+            if (est === BAD) { fEst.classList.add('is-invalid'); ui.toast('예상 공수는 1시간 이상이어야 합니다.', { kind: 'neg' }); return false; }
+            var pairs = [['title', title], ['priority', cPrio.read()], ['dueDate', due], ['estimateHours', est]];
+            var changed = pairs.filter(function (p) { return JSON.stringify(t[p[0]]) !== JSON.stringify(p[1]); });
+            if (!changed.length) { ui.toast('바뀐 항목이 없습니다.'); return; }
+            var before = {};
+            var hists = [];
+            changed.forEach(function (p) {
+              before[p[0]] = t[p[0]];
+              var patch = {}; patch[p[0]] = p[1];
+              db.update('tickets', t.id, patch, { silent: true });
+              hists.push(db.insert('ticketHistory', {
+                ticketId: t.id, at: nowISO(), actorId: me.id, field: p[0],
+                from: String(before[p[0]] === null || before[p[0]] === undefined ? '' : before[p[0]]),
+                to: String(p[1])
+              }, { silent: true }));
+            });
+            renderAll();
+            ui.toast(changed.length + '개 항목을 바꿨습니다.', {
+              undo: function () {
+                db.update('tickets', t.id, before, { silent: true });
+                hists.forEach(function (h) { db.remove('ticketHistory', h.id, { noTrash: true }); });
+                renderAll();
+              }
+            });
+          } }
+      ]
+    });
+  }
+
+  /* ── 상태 전이 ───────────────────────────────────────────────────── */
+  function applyTransition(to, extra) {
+    extra = extra || {};
+    var before = {
+      status: t.status, assigneeId: t.assigneeId || null,
+      startedAt: t.startedAt || null, doneAt: t.doneAt || null,
+      reworkCount: t.reworkCount || 0, holdReason: t.holdReason || null,
+      cancelReason: t.cancelReason || null, reworkReason: t.reworkReason || null,
+      deliverables: (t.deliverables || []).slice(),
+      watchers: watchers()
+    };
+    var patch = { status: to };
+    if (to === '배정됨') patch.assigneeId = extra.assigneeId;
+    if (to === '진행중' && !t.startedAt) patch.startedAt = nowISO();
+    if (to === '수정요청') { patch.reworkCount = (t.reworkCount || 0) + 1; patch.reworkReason = extra.reason || ''; }
+    if (to === '보류') patch.holdReason = extra.reason || '';
+    if (to === '취소') patch.cancelReason = extra.reason || '';
+    if (to === '검수' && extra.deliverable) patch.deliverables = (t.deliverables || []).concat([extra.deliverable]);
+    if (to === '완료') {
+      patch.doneAt = nowISO();
+      var ds = (t.deliverables || []).slice();
+      if (ds.length) {
+        ds = ds.map(function (d, i) {
+          return i === ds.length - 1 ? Object.assign({}, d, { approved: true }) : d;
+        });
+        patch.deliverables = ds;
+      }
+    }
+    if (to === '배정됨' && extra.assigneeId && before.watchers.indexOf(extra.assigneeId) === -1) {
+      patch.watchers = before.watchers.concat([extra.assigneeId]);
+    }
+
+    db.update('tickets', t.id, patch, { silent: true });
+    var hists = [db.insert('ticketHistory', {
+      ticketId: t.id, at: nowISO(), actorId: me.id, field: 'status', from: before.status, to: to
+    }, { silent: true })];
+    if (to === '배정됨' && extra.assigneeId !== before.assigneeId) {
+      hists.push(db.insert('ticketHistory', {
+        ticketId: t.id, at: nowISO(), actorId: me.id, field: 'assigneeId',
+        from: before.assigneeId || '', to: extra.assigneeId || ''
+      }, { silent: true }));
+    }
+
+    var link = 'ticket.html?id=' + encodeURIComponent(t.id);
+    var bag = [];
+    var fresh = db.get('tickets', t.id);
+    (fresh.watchers || []).forEach(function (uid) {
+      pushNotify(uid, to === '배정됨' && uid === extra.assigneeId ? 'assign' : 'ticket',
+        to === '배정됨' && uid === extra.assigneeId
+          ? '‘' + t.key + ' ' + t.title + '’의 담당자로 배정되었습니다.'
+          : '‘' + t.key + '’ 상태가 ' + before.status + ' → ' + to + '(으)로 바뀌었습니다.',
+        link, bag);
+    });
+
+    var lim = D.WIP_LIMITS[to];
+    var nowCount = db.count('tickets', function (x) { return x.status === to; });
+    var warn = lim && nowCount > lim ? ' ' + to + ' 상태가 WIP 한도 ' + lim + '건을 넘었습니다.' : '';
+
+    renderAll();
+    ui.toast('‘' + t.key + '’을(를) ' + to + ' 상태로 옮겼습니다.' + warn, {
+      undo: function () {
+        db.update('tickets', t.id, before, { silent: true });
+        hists.forEach(function (h) { db.remove('ticketHistory', h.id, { noTrash: true }); });
+        bag.forEach(function (id) { db.remove('notifications', id, { noTrash: true }); });
+        renderAll();
+      }
+    });
+  }
+
+  /** 전이 요청의 단일 관문. 액션 바도 Path도 여기를 통과합니다. */
+  function requestTransition(to) {
+    if (!to || to === t.status) return;
+    if (!canUpdate) { ui.toast('제작 의뢰를 수정할 권한이 없습니다.', { kind: 'neg' }); return; }
+    var flow = D.TICKET_FLOW[t.status] || [];
+    if (flow.indexOf(to) === -1) {
+      ui.toast('‘' + t.status + '’에서 ‘' + to + '’로는 바로 옮길 수 없습니다. 가능한 이동은 ' +
+        (flow.length ? flow.join(' · ') : '없습니다') + '.', { kind: 'neg' });
+      return;
+    }
+    if (!actorOK(t, to)) {
+      ui.toast('‘' + to + '’ 처리는 ' + actorNames(to) + '만 할 수 있습니다.', { kind: 'neg' });
+      return;
+    }
+    if (to === '배정됨') return assignModal();
+    if (to === '검수' && !delivs().length) return deliverableModal();
+    if (to === '완료') return completeModal();
+    if (to === '수정요청') return reasonModal(to, '수정요청 사유', '어디를 어떻게 고쳐야 하는지 적어 주세요. 재작업 횟수가 1 올라갑니다.');
+    if (to === '보류') return reasonModal(to, '보류 사유', '무엇을 기다리는지 적어 주세요. 보류 사유는 이력에 남습니다.');
+    if (to === '취소') return reasonModal(to, '취소 사유', '취소는 되돌릴 수 없는 종료 상태입니다. 사유를 남겨 주세요.');
+    applyTransition(to, null);
+  }
+
+  function reasonModal(to, label, help) {
+    var ta = el('textarea', { class: 'textarea', 'data-autofocus': '', placeholder: '예: 광고주 로고 규격 재확인 필요' });
+    var f = el('label', { class: 'field' }, [
+      el('span', { class: 'field__label', html: esc(label) + ' <span class="req">*</span>' }), ta,
+      el('span', { class: 'field__error', text: '사유를 입력해야 상태를 바꿀 수 있습니다.' })
+    ]);
+    var extra = null;
+    if (to === '수정요청') {
+      var limit = t.freeReworkLimit === undefined ? 2 : t.freeReworkLimit;
+      var next = (t.reworkCount || 0) + 1;
+      if (next > limit) {
+        extra = el('p', { class: 't-micro', text:
+          '이번이 ' + next + '번째 재작업입니다. 무상 수정 한도 ' + limit + '회를 넘기 때문에 추가비용 승인이 필요합니다.' });
+      }
+    }
+    ui.modal({
+      title: t.key + ' · ' + to,
+      body: el('div', { class: 'stack gap-sm' }, [
+        el('p', { class: 't-body', text: t.title }),
+        el('p', { class: 't-micro', text: help }),
+        f, extra
+      ]),
+      actions: [
+        { label: '취소' },
+        { label: to + '(으)로 이동', kind: to === '취소' ? 'danger' : 'primary', onClick: function () {
+            var v = ta.value.trim();
+            if (!v) { f.classList.add('is-invalid'); ta.focus(); return false; }
+            applyTransition(to, { reason: v });
+          } }
+      ]
+    });
+  }
+
+  function deliverableModal() {
+    var ver = 'v' + (delivs().length + 1);
+    var name = el('input', { class: 'input', 'data-autofocus': '', autocomplete: 'off',
+      value: t.key + '_' + t.type + '_' + ver, placeholder: '산출물 파일명' });
+    var f = el('label', { class: 'field' }, [
+      el('span', { class: 'field__label', html: '산출물 파일명 <span class="req">*</span>' }), name,
+      el('span', { class: 'field__error', text: '파일명을 입력해야 검수로 넘길 수 있습니다.' })
+    ]);
+    ui.modal({
+      title: t.key + ' · 검수 요청',
+      body: el('div', { class: 'stack gap-sm' }, [
+        el('p', { class: 't-body', text: '검수로 넘기려면 산출물이 최소 1건 있어야 합니다. ' + ver + '(으)로 기록합니다.' }),
+        f,
+        el('p', { class: 't-micro', text: '검수 상태에서는 의뢰자의 확인을 기다립니다. 파일 용량은 실제 업로드 시 채워집니다.' })
+      ]),
+      actions: [
+        { label: '취소' },
+        { label: '검수로 이동', kind: 'primary', onClick: function () {
+            var v = name.value.trim();
+            if (!v) { f.classList.add('is-invalid'); name.focus(); return false; }
+            applyTransition('검수', {
+              deliverable: { version: ver, name: v, sizeMB: null, at: nowISO(), byId: me.id, approved: false }
+            });
+          } }
+      ]
+    });
+  }
+
+  /** 완료는 산출물 승인을 뜻합니다 — 무엇을 승인하는지 눈으로 확인하고 누릅니다. */
+  function completeModal() {
+    var list = delivs();
+    var last = list[list.length - 1];
+    var agree = el('input', { type: 'checkbox' });
+    var agreeRow = el('label', { class: 'check' }, [agree,
+      el('span', { text: last ? last.name + ' 을(를) 최종 산출물로 승인합니다.' : '산출물 없이 완료 처리합니다.' })]);
+    var body = el('div', { class: 'stack gap-sm' }, [
+      el('p', { class: 't-body', text: t.key + ' ' + t.title }),
+      el('div', { html: last
+        ? '<div class="side-fact"><span class="side-fact__k">최종 버전</span><span class="t-mono">' + esc(last.version) + '</span></div>' +
+          '<div class="side-fact"><span class="side-fact__k">파일명</span><span>' + esc(last.name) + '</span></div>' +
+          '<div class="side-fact"><span class="side-fact__k">올린 사람</span><span>' + esc(db.userName(last.byId)) + '</span></div>' +
+          '<div class="side-fact"><span class="side-fact__k">등록</span><span class="t-mono">' + U.fmtDateTime(last.at) + '</span></div>'
+        : '<p class="t-micro">등록된 산출물이 없습니다. 승인 대상 파일 없이 완료로 기록됩니다.</p>' }),
+      agreeRow,
+      el('p', { class: 't-micro', text: '완료는 종료 상태입니다. 이후 수정이 필요하면 새 의뢰를 만들어야 합니다. ' +
+        (D.slaState(t) === 'breach' ? '이 건은 납기를 이미 넘겨 SLA 위반으로 집계됩니다.' : '') })
+    ]);
+    ui.modal({
+      title: '최종 산출물 승인',
+      body: body,
+      actions: [
+        { label: '취소' },
+        { label: '승인하고 완료', kind: 'primary', onClick: function () {
+            if (!agree.checked) {
+              agreeRow.classList.add('is-invalid');
+              ui.toast('산출물 승인에 체크해야 완료로 넘길 수 있습니다.', { kind: 'neg' });
+              return false;
+            }
+            applyTransition('완료', null);
+          } }
+      ]
+    });
+  }
+
+  function approveLast() {
+    if (!canUpdate || !actorOK(t, '완료')) {
+      ui.toast('최종 승인은 ' + actorNames('완료') + '만 할 수 있습니다.', { kind: 'neg' });
+      return;
+    }
+    completeModal();
+  }
+
+  /* ── 담당자 배정 ─────────────────────────────────────────────────── */
+  function candidateList() {
+    var req = {
+      roleNeeded: D.ticketType(t.type).role,
+      skillsNeeded: [],
+      startDate: U.iso(C.today),
+      endDate: t.dueDate || U.iso(U.addDays(C.today, 14))
+    };
+    return U.sortBy(makers().map(function (u) {
+      var m = D.matchScore(u, req);
+      return {
+        user: u, score: m.score, parts: m.parts, util: m.utilization,
+        jobs: db.count('tickets', function (x) { return x.assigneeId === u.id && D.TICKET_OPEN.indexOf(x.status) > -1; })
+      };
+    }), 'score', 'desc');
+  }
+
+  function assignModal() {
+    var cands = candidateList().slice(0, 8);
+    if (!cands.length) {
+      ui.modal({
+        title: '담당자 배정',
+        body: el('div', { html: ui.empty('배정할 제작 인력이 없습니다', '사용자 역할을 제작인력으로 지정하면 후보가 나타납니다.') }),
+        actions: [{ label: '닫기', kind: 'primary' }]
+      });
+      return;
+    }
+    var picked = { id: cands[0].user.id };
+    var rows = cands.map(function (c, i) {
+      var input = el('input', { type: 'radio', name: 'cand', value: c.user.id });
+      if (i === 0) { input.checked = true; input.setAttribute('data-autofocus', ''); }
+      U.on(input, 'change', function () { picked.id = c.user.id; });
+      return el('label', { class: 'cand check' }, [
+        input,
+        el('span', { class: 'grow', html:
+          '<span style="display:block">' + esc(c.user.name) + ' <span class="t-muted">' + esc(c.user.craft || c.user.role) + '</span></span>' +
+          '<span class="peep__meta">' + c.parts.map(function (p) {
+            return esc(p.label) + ' ' + p.got + '/' + p.max;
+          }).join(' · ') + ' · 진행 ' + c.jobs + '건</span>' }),
+        el('span', { class: 'cand__num', text: c.score + '점' }),
+        el('span', { class: 'cand__meter', html: ui.meter(c.score, 100, c.util > 100 ? 'neg' : c.score >= 70 ? 'pos' : 'warn') })
+      ]);
+    });
+
+    ui.modal({
+      title: '담당자 지정 후 배정됨으로 이동',
+      size: 'wide',
+      body: el('div', { class: 'stack gap-sm' }, [
+        el('p', { class: 't-small', text: t.key + ' · ' + t.title + ' — ' + D.ticketType(t.type).role + ' 직무 기준으로 정렬했습니다.' }),
+        el('div', {}, rows),
+        el('p', { class: 't-micro', text: '점수는 직무 일치 45 · 스킬 매칭 30 · 가용 여력 25로 계산합니다. 배정된 담당자는 워처로 추가되고 알림을 받습니다.' })
+      ]),
+      actions: [
+        { label: '취소' },
+        { label: '배정하고 이동', kind: 'primary', onClick: function () { applyTransition('배정됨', { assigneeId: picked.id }); } }
+      ]
+    });
+  }
+
+  /** 내가 담당 — 낙관적 잠금. 이미 주인이 있으면 뺏지 않습니다. */
+  function claim() {
+    if (!canUpdate) { ui.toast('제작 의뢰를 수정할 권한이 없습니다.', { kind: 'neg' }); return; }
+    var fresh = db.get('tickets', t.id);
+    if (fresh.assigneeId && fresh.assigneeId !== me.id) {
+      ui.toast('이미 ' + db.userName(fresh.assigneeId) + '님이 담당으로 지정했습니다.', { kind: 'neg' });
+      renderAll();
+      return;
+    }
+    if (fresh.assigneeId === me.id) { ui.toast('이미 회원님이 담당입니다.'); return; }
+    var before = { assigneeId: fresh.assigneeId || null, watchers: watchers() };
+    var patch = { assigneeId: me.id };
+    if (before.watchers.indexOf(me.id) === -1) patch.watchers = before.watchers.concat([me.id]);
+    db.update('tickets', t.id, patch, { silent: true });
+    var hist = db.insert('ticketHistory', {
+      ticketId: t.id, at: nowISO(), actorId: me.id, field: 'assigneeId',
+      from: before.assigneeId || '', to: me.id
+    }, { silent: true });
+    var bag = [];
+    pushNotify(t.requesterId, 'ticket', me.name + '님이 ‘' + t.key + '’의 담당자가 되었습니다.',
+      'ticket.html?id=' + encodeURIComponent(t.id), bag);
+    renderAll();
+    ui.toast('‘' + t.key + '’의 담당자가 되었습니다.', {
+      undo: function () {
+        db.update('tickets', t.id, before, { silent: true });
+        db.remove('ticketHistory', hist.id, { noTrash: true });
+        bag.forEach(function (id) { db.remove('notifications', id, { noTrash: true }); });
+        renderAll();
+      }
+    });
+  }
+
+  /* ── 워처 ────────────────────────────────────────────────────────── */
+  function addWatcher() {
+    if (!canUpdate) { ui.toast('제작 의뢰를 수정할 권한이 없습니다.', { kind: 'neg' }); return; }
+    var have = watchers();
+    var pool = db.where('users', function (u) { return u.active !== false && have.indexOf(u.id) === -1; });
+    if (!pool.length) { ui.toast('추가할 수 있는 사람이 없습니다. 이미 모두 워처입니다.', { kind: 'neg' }); return; }
+    var sel = selectCtl(U.sortBy(pool, 'name').map(function (u) {
+      return { value: u.id, label: u.name + ' · ' + (u.craft || u.role) };
+    }), pool[0].id);
+    ui.modal({
+      title: '워처 추가',
+      body: el('div', { class: 'stack gap-sm' }, [
+        field('추가할 사람', sel.el, false, '워처는 상태 변경과 코멘트 알림을 받습니다. 편집 권한은 생기지 않습니다.')
+      ]),
+      actions: [
+        { label: '취소' },
+        { label: '추가', kind: 'primary', onClick: function () {
+            var v = sel.read();
+            if (!v) return false;
+            var before = watchers();
+            db.update('tickets', t.id, { watchers: before.concat([v]) }, { silent: true });
+            renderAll();
+            ui.toast(db.userName(v) + ' 님을 워처로 추가했습니다.', {
+              undo: function () { db.update('tickets', t.id, { watchers: before }, { silent: true }); renderAll(); }
+            });
+          } }
+      ]
+    });
+  }
+
+  function delWatcher(uid) {
+    if (!canUpdate) return;
+    if (uid === t.requesterId) { ui.toast('의뢰자는 워처에서 뺄 수 없습니다.', { kind: 'neg' }); return; }
+    var before = watchers();
+    db.update('tickets', t.id, { watchers: before.filter(function (x) { return x !== uid; }) }, { silent: true });
+    renderAll();
+    ui.toast(db.userName(uid) + ' 님을 워처에서 뺐습니다.', {
+      undo: function () { db.update('tickets', t.id, { watchers: before }, { silent: true }); renderAll(); }
+    });
+  }
+
+  /* ── 공수 신청 ───────────────────────────────────────────────────── */
+  function approverUser() {
+    return db.first('users', function (u) { return u.role === '리소스매니저' && u.active !== false; }) ||
+           db.first('users', function (u) { return u.role === '관리자'; });
+  }
+
+  function requestHours() {
+    if (!canRequestHours) { ui.toast('공수를 신청할 권한이 없습니다.', { kind: 'neg' }); return; }
+    var approver = approverUser();
+    var roleSel = selectCtl(opts(D.RESOURCE_ROLES), D.ticketType(t.type).role);
+    var hours = el('input', { class: 'input input--num', type: 'number', min: '1', step: '1', value: String(t.estimateHours || 8), 'data-autofocus': '' });
+    var from = el('input', { class: 'input', type: 'date', value: U.iso(C.today) });
+    var to = el('input', { class: 'input', type: 'date', value: U.iso(t.dueDate ? U.date(t.dueDate) : U.addDays(C.today, 7)) });
+    var reason = el('textarea', { class: 'textarea', placeholder: '왜 이 시점에 이 공수가 필요한지 적어 주세요. 리소스매니저가 그대로 읽습니다.' });
+    var fHours = field('요청 공수 (시간)', hours, true), fFrom = field('시작 희망일', from, true), fTo = field('종료 희망일', to, true);
+    var fReason = field('신청 사유', reason, true);
+    var hint = el('p', { class: 't-micro' });
+    function sync() {
+      var h = Number(hours.value) || 0;
+      var days = Math.max(1, U.days(from.value, to.value) + 1);
+      hint.textContent = '기간 ' + days + '일 · 일 평균 ' + U.num(h / days, 1) + '시간. 주간 기준 캐파는 1인 ' + D.WEEKLY_CAPACITY + '시간입니다.';
+    }
+    [hours, from, to].forEach(function (n) { U.on(n, 'input', sync); U.on(n, 'change', sync); });
+    sync();
+
+    ui.modal({
+      title: t.key + ' · 공수 신청',
+      size: 'wide',
+      body: el('div', { class: 'stack gap-sm' }, [
+        el('p', { class: 't-small', text: t.title }),
+        el('div', { class: 'grid grid--2' }, [field('요청 직무', roleSel.el, true), fHours]),
+        el('div', { class: 'grid grid--2' }, [fFrom, fTo]),
+        hint,
+        fReason,
+        el('p', { class: 't-micro', text: approver ? '결재자: ' + approver.name + ' · ' + approver.role : '결재할 리소스매니저를 찾지 못했습니다.' })
+      ]),
+      actions: [
+        { label: '취소' },
+        { label: '신청 제출', kind: 'primary', onClick: function () {
+            var h = Number(hours.value);
+            if (!hours.value || isNaN(h) || h < 1) { fHours.classList.add('is-invalid'); ui.toast('요청 공수는 1시간 이상이어야 합니다.', { kind: 'neg' }); return false; }
+            if (!from.value) { fFrom.classList.add('is-invalid'); ui.toast('시작 희망일을 선택해 주세요.', { kind: 'neg' }); return false; }
+            if (!to.value) { fTo.classList.add('is-invalid'); ui.toast('종료 희망일을 선택해 주세요.', { kind: 'neg' }); return false; }
+            if (U.days(from.value, to.value) < 0) { fTo.classList.add('is-invalid'); ui.toast('종료일은 시작일보다 뒤여야 합니다.', { kind: 'neg' }); return false; }
+            var why = reason.value.trim();
+            if (!why) { fReason.classList.add('is-invalid'); ui.toast('신청 사유를 적어 주세요.', { kind: 'neg' }); return false; }
+
+            var rec = db.insert('resourceRequests', {
+              ticketId: t.id, requesterId: me.id, roleNeeded: roleSel.read(),
+              hours: Math.round(h), startDate: from.value, endDate: to.value,
+              status: '대기', approverId: approver ? approver.id : null,
+              createdAt: nowISO(), decidedAt: null, note: '', reason: why, skillsNeeded: []
+            }, { silent: true });
+            var bag = [];
+            if (approver) {
+              pushNotify(approver.id, '공수', me.name + '님이 ‘' + t.key + '’에 공수 ' + Math.round(h) + '시간을 신청했습니다.',
+                'resources.html?tab=requests', bag);
+            }
+            state.tab = 'effort';
+            renderAll();
+            ui.toast('공수 신청을 제출했습니다.' + (approver ? ' 결재자: ' + approver.name : ''), {
+              undo: function () {
+                db.remove('resourceRequests', rec.id, { noTrash: true });
+                bag.forEach(function (id) { db.remove('notifications', id, { noTrash: true }); });
+                renderAll();
+              }
+            });
+          } }
+      ]
+    });
+  }
+
+  /* ── 더보기 ──────────────────────────────────────────────────────── */
+  function nextKey() {
+    var max = 100;
+    db.all('tickets').forEach(function (x) {
+      var m = /(\d+)\s*$/.exec(String(x.key || ''));
+      if (m) max = Math.max(max, Number(m[1]));
+    });
+    return 'PRD-' + (max + 1);
+  }
+
+  function duplicate() {
+    if (!canCreate) { ui.toast('제작 의뢰를 만들 권한이 없습니다.', { kind: 'neg' }); return; }
+    var key = nextKey();
+    var rec = db.insert('tickets', {
+      key: key, type: t.type, title: t.title + ' (복제)',
+      description: t.description, requesterId: me.id, assigneeId: null,
+      accountId: t.accountId, oppId: t.oppId, campaignId: t.campaignId || null,
+      status: '접수대기', priority: t.priority,
+      estimateHours: t.estimateHours, spentHours: 0,
+      dueDate: U.iso(U.addDays(C.today, Math.max(1, Math.round(D.slaHoursFor(t) / 24)))),
+      createdAt: nowISO(), startedAt: null, doneAt: null,
+      reworkCount: 0, freeReworkLimit: t.freeReworkLimit === undefined ? 2 : t.freeReworkLimit,
+      labels: (t.labels || []).slice(), watchers: [me.id], deliverables: [],
+      typeFields: Object.assign({}, t.typeFields || {})
+    }, { silent: true });
+    var hist = db.insert('ticketHistory', {
+      ticketId: rec.id, at: nowISO(), actorId: me.id, field: 'status', from: '', to: '접수대기'
+    }, { silent: true });
+    renderAll();
+    ui.toast(key + ' 로 복제했습니다. 납기는 기준 SLA로 다시 잡았습니다.', {
+      ms: 9000,
+      undo: function () {
+        db.remove('tickets', rec.id, { noTrash: true });
+        db.remove('ticketHistory', hist.id, { noTrash: true });
+        renderAll();
+      }
+    });
+  }
+
+  function removeTicket() {
+    if (!canDelete) { ui.toast('제작 의뢰를 삭제할 권한이 없습니다.', { kind: 'neg' }); return; }
+    var cs = comments().length, hs = history().length;
+    ui.confirmDestructive({
+      title: '제작 의뢰 삭제',
+      message: '‘' + t.key + ' ' + t.title + '’ 와(과) 코멘트 ' + cs + '건, 이력 ' + hs + '행이 함께 사라집니다. 이력은 되돌릴 수 없습니다.',
+      phrase: t.key,
+      confirmLabel: '영구 삭제',
+      onConfirm: function () {
+        db.where('ticketComments', function (c) { return c.ticketId === t.id; })
+          .forEach(function (c) { db.remove('ticketComments', c.id, { noTrash: true }); });
+        db.where('ticketHistory', function (h) { return h.ticketId === t.id; })
+          .forEach(function (h) { db.remove('ticketHistory', h.id, { noTrash: true }); });
+        db.remove('tickets', t.id);
+        window.location.href = 'tickets.html';
+      }
+    });
+  }
+
+  function moreMenu(anchor) {
+    var items = [{ label: '이 의뢰로 할 수 있는 일' }];
+    items.push({ label: '복제해서 새 의뢰 만들기', onClick: duplicate });
+    items.push({ label: '인쇄 / PDF로 저장', onClick: function () { window.print(); } });
+    items.push({ label: '보드에서 보기', onClick: function () { window.location.href = 'tickets.html'; } });
+    if (canDelete) {
+      items.push('-');
+      items.push({ label: '삭제', danger: true, onClick: removeTicket });
+    }
+    ui.menu(anchor, items);
+  }
+
+  /* ══ 이벤트 — 위임이라 다시 그려도 살아남습니다 ═════════════════════ */
+  U.live(root, 'click', '[data-act]', function (e, node) {
+    var a = node.dataset.act;
+    if (a === 'go') return requestTransition(node.dataset.to);
+    if (a === 'editf') return editField(node.dataset.f);
+    if (a === 'editmain') return editMain();
+    if (a === 'claim') return claim();
+    if (a === 'reqhours') return requestHours();
+    if (a === 'addwatch') return addWatcher();
+    if (a === 'delwatch') return delWatcher(node.dataset.id);
+    if (a === 'delcmt') return deleteComment(node.dataset.id);
+    if (a === 'approve') return approveLast();
+    if (a === 'more') return moreMenu(node);
+    if (a === 'page') {
+      if (node.dataset.key === 'hist') state.histPage = Number(node.dataset.p);
+      else state.threadPage = Number(node.dataset.p);
+      renderPanes();
+      return;
+    }
+  });
+
+  ui.tabs(root, function (k) { state.tab = k; });
+
+  renderAll();
+  U.revealAll();
+})();
+</script>
+</body>
+</html>

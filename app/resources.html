@@ -1,0 +1,1408 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>공수 관리 · CLOSER</title>
+<meta name="description" content="CLOSER 공수 관리. 제작 인력의 향후 8주 가동률을 히트맵으로 보고, 공수 신청을 승인하고, 매치율 근거를 확인한 뒤 배정을 확정합니다." />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=IBM+Plex+Sans+KR:wght@400;500;600&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="../tokens.css" />
+<link rel="stylesheet" href="../assets/css/base.css" />
+<link rel="stylesheet" href="../assets/css/components.css" />
+<link rel="stylesheet" href="../assets/css/app.css" />
+<style>
+  /* 이 화면에만 필요한 조각. 색·간격·반경·이징은 모두 토큰만 사용합니다. */
+
+  /* 경보 카드 — .stat 을 그대로 쓰되 누를 수 있게 만듭니다. */
+  .stat--btn { width: 100%; text-align: left; cursor: pointer; display: block;
+    transition: border-color var(--dur-short) var(--ease-out), background-color var(--dur-short) var(--ease-out); }
+  .stat--btn:hover { border-color: var(--color-rule-3); background: var(--color-paper-2); }
+  .stat--btn:active { transform: translateY(1px); }
+  .stat--btn[aria-pressed="true"] { border-color: var(--color-accent); background: var(--color-accent-soft); }
+  .stat--btn[disabled] { opacity: 0.55; cursor: not-allowed; }
+  .stat--btn[disabled]:hover { border-color: var(--color-rule); background: var(--color-surface); }
+
+  /* 히트맵 — 행 헤더 한 칸 + 주 8칸. 좁은 화면에서는 제 안에서 가로로 스크롤합니다. */
+  .heatwrap { overflow-x: auto; overscroll-behavior-x: contain; padding-bottom: var(--space-2xs); }
+  .heat--cap { grid-template-columns: 232px repeat(8, minmax(58px, 1fr)); min-width: 700px; align-items: stretch; }
+  .heat__head { font-family: var(--font-mono); font-size: var(--text-2xs); letter-spacing: var(--track-mono);
+    color: var(--color-ink-4); text-align: center; padding-bottom: var(--space-2xs); align-self: end; }
+  .heat__head--now { color: var(--color-accent-press); font-weight: 600; }
+  .heat__rowhead { padding: var(--space-2xs) var(--space-xs) var(--space-2xs) 0; min-width: 0; border-right: var(--rule-hair) solid var(--color-rule); }
+  .heat__name { font-size: var(--text-sm); color: var(--color-ink); font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .heat__meta { font-family: var(--font-mono); font-size: 10px; color: var(--color-ink-4); letter-spacing: var(--track-mono); }
+  .heat__skills { display: flex; gap: var(--space-3xs); flex-wrap: wrap; margin-top: var(--space-3xs); }
+  .heat__util { display: flex; align-items: center; gap: var(--space-2xs); margin-top: 2px; }
+  .heat__util .meter { flex: 1 1 auto; min-width: 40px; }
+  .heat__cell { height: 100%; min-height: 26px; display: flex; align-items: center; justify-content: center;
+    font-family: var(--font-mono); font-size: 10px; letter-spacing: var(--track-mono);
+    color: var(--color-ink-3); width: 100%; cursor: pointer;
+    transition: outline-color var(--dur-short) var(--ease-out), opacity var(--dur-short) var(--ease-out);
+    outline: var(--rule-hair) solid transparent; outline-offset: -1px; }
+  .heat__cell[data-load="1"], .heat__cell[data-load="2"] { color: var(--color-accent-press); }
+  .heat__cell[data-load="3"], .heat__cell[data-load="4"], .heat__cell[data-load="5"] { color: var(--color-accent-ink); font-weight: 600; }
+  .heat__cell:hover { outline-color: var(--color-ink); }
+  .heat__cell:active { opacity: 0.82; }
+  .heat__row.is-focus .heat__rowhead { background: var(--color-accent-soft); border-radius: var(--radius-xs); }
+  .heatkey { display: flex; align-items: center; gap: var(--space-sm); flex-wrap: wrap;
+    font-family: var(--font-mono); font-size: var(--text-2xs); letter-spacing: var(--track-mono); color: var(--color-ink-3); }
+  .heatkey span { display: inline-flex; align-items: center; gap: var(--space-2xs); }
+  .heatkey i { width: 12px; height: 10px; border-radius: 2px; display: inline-block; background: var(--color-paper-3); }
+  .heatkey i[data-load="1"] { background: var(--color-accent-soft); }
+  .heatkey i[data-load="2"] { background: var(--color-accent-soft-2); }
+  .heatkey i[data-load="3"] { background: var(--color-accent); }
+  .heatkey i[data-load="4"] { background: var(--color-warn); }
+  .heatkey i[data-load="5"] { background: var(--color-neg); }
+
+  .toolbar { display: flex; align-items: center; gap: var(--space-sm); flex-wrap: wrap;
+    padding: var(--space-xs) var(--space-md); border-bottom: var(--rule-hair) solid var(--color-rule); }
+  .toolbar__label { font-family: var(--font-mono); font-size: var(--text-2xs); letter-spacing: var(--track-mono);
+    text-transform: uppercase; color: var(--color-ink-4); }
+
+  .list-card { border: var(--rule-hair) solid var(--color-rule); border-top: none;
+    border-radius: 0 0 var(--radius-md) var(--radius-md); background: var(--color-surface); }
+  .pagerbar { display: flex; align-items: center; justify-content: space-between; gap: var(--space-sm);
+    flex-wrap: wrap; padding: var(--space-xs) var(--space-md); border-top: var(--rule-hair) solid var(--color-rule); }
+  .filterbar .input, .filterbar .select { min-height: 28px; height: 28px; font-size: var(--text-xs); }
+  .filterbar .select { max-width: 150px; }
+  .filterbar__q { width: min(210px, 46vw); }
+  #views { max-width: 100%; overflow-x: auto; }
+
+  /* 후보 근거 — 표 안에서 펼쳐 보는 점수 내역 */
+  .why { font-size: var(--text-xs); }
+  .why > summary { cursor: pointer; color: var(--color-accent); font-family: var(--font-mono);
+    font-size: var(--text-2xs); letter-spacing: var(--track-mono); white-space: nowrap;
+    transition: color var(--dur-short) var(--ease-out); }
+  .why > summary:hover { color: var(--color-accent-press); }
+  .why[open] > summary { color: var(--color-ink-2); }
+  .why__grid { margin-top: var(--space-2xs); display: grid; gap: var(--space-2xs); min-width: 190px; }
+  .why__row { display: grid; grid-template-columns: 62px 1fr 44px; gap: var(--space-2xs); align-items: center; }
+  .why__k { font-family: var(--font-mono); font-size: 10px; color: var(--color-ink-4); letter-spacing: var(--track-mono); }
+  .why__v { font-family: var(--font-mono); font-size: 10px; color: var(--color-ink-2); text-align: right; }
+  .why__note { grid-column: 1 / -1; font-size: 10px; color: var(--color-ink-4); }
+
+  .mrate { display: flex; align-items: center; gap: var(--space-xs); min-width: 108px; }
+  .mrate__n { font-family: var(--font-mono); font-variant-numeric: tabular-nums; font-size: var(--text-xs);
+    color: var(--color-ink-2); width: 26px; text-align: right; }
+  .mrate .meter { flex: 1 1 auto; min-width: 46px; }
+
+  .wkbar { display: grid; grid-template-columns: 92px minmax(0, 1fr) 118px; gap: var(--space-xs);
+    align-items: center; padding: var(--space-2xs) 0; border-bottom: var(--rule-hair) solid var(--color-rule); }
+  .wkbar:last-child { border-bottom: none; }
+  .wkbar__k { font-family: var(--font-mono); font-size: var(--text-2xs); color: var(--color-ink-3); letter-spacing: var(--track-mono); }
+  .wkbar__v { font-family: var(--font-mono); font-size: var(--text-2xs); color: var(--color-ink-2); text-align: right; }
+  .wkbar__track { position: relative; height: 14px; background: var(--color-paper-3); border-radius: var(--radius-xs); overflow: hidden; }
+  .wkbar__seg { position: absolute; top: 0; bottom: 0; }
+  .wkbar__seg--have { background: var(--color-rule-3); left: 0; }
+  .wkbar__seg--add { background: var(--color-accent); }
+  .wkbar__seg--over { background: var(--color-neg); }
+  .wkbar__cap { position: absolute; top: -2px; bottom: -2px; width: var(--rule-thick); background: var(--color-ink); }
+
+  .skillpick { display: flex; gap: var(--space-2xs); flex-wrap: wrap; }
+  .skillpick .check { border: var(--rule-hair) solid var(--color-rule-2); border-radius: var(--radius-xs);
+    padding: 2px var(--space-xs); font-size: var(--text-xs);
+    transition: border-color var(--dur-short) var(--ease-out), background-color var(--dur-short) var(--ease-out); }
+  .skillpick .check:hover { border-color: var(--color-accent); background: var(--color-paper-2); }
+
+  @media (max-width: 900px) {
+    .heat--cap { grid-template-columns: 168px repeat(8, minmax(52px, 1fr)); }
+  }
+  @media (max-width: 640px) {
+    .toolbar, .pagerbar { padding-inline: var(--space-sm); }
+    .filterbar { padding-inline: var(--space-sm); }
+    .filterbar .select { max-width: 44vw; }
+    .wkbar { grid-template-columns: 72px minmax(0, 1fr); }
+    .wkbar__v { grid-column: 1 / -1; text-align: left; }
+  }
+</style>
+</head>
+<body class="app">
+<a class="skip-link" href="#main">본문으로 건너뛰기</a>
+
+<div class="app-main">
+  <main class="app-page" id="main">
+
+    <div class="page-head">
+      <div>
+        <h1 class="page-head__title">공수 관리</h1>
+        <p class="page-head__sub" id="subline"></p>
+      </div>
+      <div class="page-head__acts" id="headActs"></div>
+    </div>
+
+    <section class="grid grid--4" id="alerts" data-verify aria-label="공수 경보"></section>
+
+    <section class="mt-lg" id="opinionSec" aria-label="리소스 분석 의견">
+      <div class="stack gap-xs" id="opinionList"></div>
+    </section>
+
+    <div class="tabs mt-lg" id="tabs" role="tablist" aria-label="공수 관리 보기">
+      <button class="tab" type="button" role="tab" data-tab="heat" aria-selected="true">가동률 히트맵 <span class="tab__count" id="cntHeat"></span></button>
+      <button class="tab" type="button" role="tab" data-tab="requests" aria-selected="false">작업 큐 <span class="tab__count" id="cntQueue"></span></button>
+    </div>
+
+    <section class="mt-md" data-pane="heat" aria-label="가동률 히트맵">
+      <div class="panel">
+        <div class="panel__head">
+          <h2 class="panel__title">향후 8주 가동률</h2>
+          <span class="t-mono" id="heatRange"></span>
+        </div>
+        <div class="toolbar">
+          <span class="toolbar__label">표시</span>
+          <div class="seg" id="segUnit" role="group" aria-label="셀 표시 단위">
+            <button class="seg__item" type="button" data-unit="hours" aria-pressed="true">시간</button>
+            <button class="seg__item" type="button" data-unit="pct" aria-pressed="false">퍼센트</button>
+          </div>
+          <span class="toolbar__label">수요 기준</span>
+          <div class="seg" id="segDemand" role="group" aria-label="수요 기준">
+            <button class="seg__item" type="button" data-demand="confirmed" aria-pressed="true">확정 배정만</button>
+            <button class="seg__item" type="button" data-demand="pending" aria-pressed="false">확정 + 대기 신청</button>
+          </div>
+          <span class="grow"></span>
+          <div class="heatkey" aria-hidden="true">
+            <span><i></i>0%</span>
+            <span><i data-load="1"></i>~40</span>
+            <span><i data-load="2"></i>~70</span>
+            <span><i data-load="3"></i>~100</span>
+            <span><i data-load="4"></i>~120</span>
+            <span><i data-load="5"></i>120+</span>
+          </div>
+        </div>
+        <div class="panel__body" id="heatHost" data-verify></div>
+      </div>
+      <div class="panel mt-lg">
+        <div class="panel__head">
+          <h2 class="panel__title">4주 수요와 캐파</h2>
+          <span class="t-mono" id="capNote"></span>
+        </div>
+        <div class="panel__body" id="capChart"></div>
+      </div>
+    </section>
+
+    <section class="mt-md" data-pane="requests" aria-label="작업 큐" hidden>
+      <div class="filterbar" id="filterbar">
+        <div class="seg" id="views" role="group" aria-label="큐 보기"></div>
+
+        <label class="field" style="flex:0 0 auto">
+          <span class="sr-only">검색</span>
+          <input class="input filterbar__q" type="search" id="q" placeholder="티켓 · 직무 · 이름" autocomplete="off" />
+        </label>
+        <label class="field" style="flex:0 0 auto">
+          <span class="sr-only">직무</span>
+          <select class="select" id="fRole"></select>
+        </label>
+
+        <button class="btn btn--sm btn--ghost" type="button" id="reset">필터 초기화</button>
+        <span class="grow"></span>
+        <button class="btn btn--sm btn--ghost" type="button" id="csv">CSV 내보내기</button>
+        <span class="filterbar__count" id="count"></span>
+      </div>
+
+      <div class="list-card">
+        <div id="tableHost" data-verify></div>
+        <div class="pagerbar" id="pagerHost"></div>
+      </div>
+
+      <p class="t-micro mt-xs" id="queueNote"></p>
+    </section>
+
+    <footer class="hairline mt-2xl" style="padding-block:var(--space-md)">
+      <p class="t-mono t-faint">CLOSER · 데모 데이터 · 모든 회사·인물·연락처는 가상입니다</p>
+    </footer>
+  </main>
+</div>
+
+<script src="../assets/js/seed.js"></script>
+<script src="../assets/js/util.js"></script>
+<script src="../assets/js/store.js"></script>
+<script src="../assets/js/domain.js"></script>
+<script src="../assets/js/metrics.js"></script>
+<script src="../assets/js/insights.js"></script>
+<script src="../assets/js/ui.js"></script>
+<script src="../assets/js/charts.js"></script>
+<script src="../assets/js/shell.js"></script>
+<script>
+(function () {
+  'use strict';
+  var C = window.CLOSER, U = C.util, db = C.db, D = C.domain, M = C.metrics, ui = C.ui, ch = C.charts;
+  C.shell.mount('resources');
+
+  var me = db.me();
+  var $ = U.qs, esc = U.esc, el = U.el;
+  var PAGE_SIZE = 15;
+  var WEEKS = 8;
+  var CONCURRENT_CAP = 4;   // SPEC 9.4 · 동시 진행 상한
+
+  /* ── 권한 ─────────────────────────────────────────────────────────────
+     신청은 영업 쪽에서, 승인·배정은 리소스매니저·관리자만. 제작인력은 읽기만. */
+  var canCreate = D.can('resourceRequests', 'C');
+  var canDecide = D.can('resourceRequests', 'U') && (me.role === '리소스매니저' || me.role === '관리자');
+  var canAssign = canDecide && D.can('tickets', 'U');
+
+  /* ── 주(週) 축 — 이번 주 월요일부터 8주 ─────────────────────────────── */
+  function mondayOf(v) { var d = U.date(v); return U.addDays(d, -((d.getDay() + 6) % 7)); }
+  var weeks = (function () {
+    var m0 = mondayOf(C.today), out = [];
+    for (var i = 0; i < WEEKS; i++) {
+      var s = U.addDays(m0, i * 7);
+      out.push({ from: U.iso(s), to: U.iso(U.addDays(s, 6)), label: U.fmtDate(s, 'md') });
+    }
+    return out;
+  })();
+
+  function span(a, b) { return Math.max(1, U.days(a, b) + 1); }
+  function overlapDays(s1, e1, s2, e2) {
+    var s = s1 > s2 ? s1 : s2, e = e1 < e2 ? e1 : e2;
+    var n = U.days(s, e) + 1;
+    return n > 0 ? n : 0;
+  }
+  /** 배정 시간은 기간에 고르게 퍼져 있다고 보고, 주와 겹치는 일수만큼만 셉니다. */
+  function share(hours, from, to, wFrom, wTo) {
+    var od = overlapDays(from, to, wFrom, wTo);
+    return od ? (hours || 0) * od / span(from, to) : 0;
+  }
+  function level(rate) {
+    var p = rate * 100;
+    if (p < 0.5) return 0;
+    if (p <= 40) return 1;
+    if (p <= 70) return 2;
+    if (p <= 100) return 3;
+    if (p <= 120) return 4;
+    return 5;
+  }
+
+  function makers() {
+    return U.sortBy(db.where('users', function (u) { return u.role === '제작인력' && u.active !== false; }), 'name');
+  }
+  function openTickets() {
+    return db.where('tickets', function (t) { return D.TICKET_OPEN.indexOf(t.status) > -1; });
+  }
+
+  /* ── 히트맵 데이터 ────────────────────────────────────────────────────
+     conf = 확정 배정, pend = 대기 신청 수요. 대기 신청은 인력이 아직 정해지지
+     않았으므로, 연결 티켓에 담당자가 있으면 그 사람에게, 없으면 같은 직무 인원
+     에게 균등 분배한 가정치입니다. 화면 아래 각주로 그대로 밝혀 둡니다. */
+  function buildLoad() {
+    var people = makers(), byId = {}, rows = [];
+    people.forEach(function (u) {
+      var r = {
+        user: u, cap: D.capacityOf(u),
+        conf: [], pend: [], tix: [], reqs: []
+      };
+      for (var i = 0; i < WEEKS; i++) { r.conf.push(0); r.pend.push(0); r.tix.push([]); r.reqs.push([]); }
+      byId[u.id] = r; rows.push(r);
+    });
+
+    db.where('assignments', function (a) { return a.status !== '취소' && a.startDate && a.endDate; })
+      .forEach(function (a) {
+        var row = byId[a.resourceId];
+        if (!row) return;
+        weeks.forEach(function (w, i) {
+          var h = share(a.hours, a.startDate, a.endDate, w.from, w.to);
+          if (h <= 0) return;
+          row.conf[i] += h;
+          var t = db.get('tickets', a.ticketId);
+          row.tix[i].push((t ? t.key + ' ' + t.title : '티켓 없음') + ' · ' + Math.round(h) + 'h');
+        });
+      });
+
+    var orphan = 0;
+    db.where('resourceRequests', function (r) { return r.status === '대기' && r.startDate && r.endDate; })
+      .forEach(function (r) {
+        var t = db.get('tickets', r.ticketId);
+        var targets = (t && t.assigneeId && byId[t.assigneeId]) ? [t.assigneeId]
+          : people.filter(function (u) { return u.craft === r.roleNeeded; }).map(function (u) { return u.id; });
+        if (!targets.length) { orphan += r.hours || 0; return; }
+        weeks.forEach(function (w, i) {
+          var h = share(r.hours, r.startDate, r.endDate, w.from, w.to) / targets.length;
+          if (h <= 0) return;
+          targets.forEach(function (id) {
+            byId[id].pend[i] += h;
+            byId[id].reqs[i].push('대기 ' + (t ? t.key : r.id) + ' · ' + Math.round(h) + 'h');
+          });
+        });
+      });
+
+    rows.forEach(function (r) {
+      r.conf4 = r.conf[0] + r.conf[1] + r.conf[2] + r.conf[3];
+      r.pend4 = r.pend[0] + r.pend[1] + r.pend[2] + r.pend[3];
+      r.cap4 = r.cap * 4;
+      r.rate4 = r.cap4 > 0 ? (r.conf4 / r.cap4) * 100 : 0;
+      r.rate4d = r.cap4 > 0 ? ((r.conf4 + r.pend4) / r.cap4) * 100 : 0;
+      r.jobs = db.count('assignments', function (a) {
+        return a.resourceId === r.user.id && a.status !== '취소' && a.status !== '완료';
+      });
+    });
+    return { rows: rows, orphanHours: orphan };
+  }
+
+  /* ── 상태 ── URL 파라미터가 초기값을 정합니다 ────────────────────────── */
+  var VIEWS = [
+    { key: 'all', label: '신청 전체' },
+    { key: 'pending', label: '승인 대기' },
+    { key: 'unassigned', label: '미배정 의뢰' },
+    { key: 'overload', label: '과부하 인원' },
+    { key: 'breach', label: 'SLA 초과' }
+  ];
+  var initFilter = U.param('filter', '');
+  if (!VIEWS.some(function (v) { return v.key === initFilter; })) initFilter = 'all';
+  var initTab = (U.param('tab', '') === 'requests' || U.param('filter', '')) ? 'requests' : 'heat';
+
+  var state = {
+    tab: initTab,
+    view: initFilter,
+    q: U.param('q', '') || '',
+    role: U.param('role', '') || '',
+    unit: 'hours',
+    demand: 'confirmed',
+    page: 1,
+    sort: { key: 'age', dir: 'desc' },
+    focusUser: null
+  };
+
+  /* ── 머리말과 액션 ───────────────────────────────────────────────────── */
+  $('#headActs').innerHTML =
+    '<a class="btn btn--sm" href="tickets.html">제작 의뢰</a>' +
+    '<a class="btn btn--sm" href="timesheet.html">타임시트</a>' +
+    (canCreate ? '<button class="btn btn--primary btn--sm" type="button" id="newReq">새 공수 신청</button>' : '');
+
+  /* ── 분석 의견 — 이 화면의 카드와 같은 정의를 쓰는 것만 고릅니다 ─────── */
+  var orgScope = M.scope({ userIds: null });
+  var WANT = ['req-pending', 'unassigned', 'sla-breach'];
+  var opinions = C.insights.run(orgScope).filter(function (x) { return WANT.indexOf(x.id) > -1; }).slice(0, 2);
+  if (opinions.length) {
+    $('#opinionList').innerHTML = opinions.map(function (x) {
+      return ui.insight({ kind: x.kind, label: x.label, say: x.say, why: x.why, actions: x.actions });
+    }).join('');
+  } else {
+    $('#opinionSec').parentNode.removeChild($('#opinionSec'));
+  }
+
+  /* ── 필터바 ──────────────────────────────────────────────────────────── */
+  $('#views').innerHTML = VIEWS.map(function (v) {
+    return '<button class="seg__item" type="button" data-view="' + v.key + '" aria-pressed="' +
+      (state.view === v.key) + '">' + esc(v.label) + '</button>';
+  }).join('');
+  $('#fRole').innerHTML = '<option value="">직무 전체</option>' + D.RESOURCE_ROLES.map(function (r) {
+    return '<option value="' + esc(r) + '"' + (state.role === r ? ' selected' : '') + '>' + esc(r) + '</option>';
+  }).join('');
+  $('#q').value = state.q;
+
+  /* ── 탭 ─────────────────────────────────────────────────────────────── */
+  function paintTab() {
+    U.qsa('.tab', $('#tabs')).forEach(function (t) { t.setAttribute('aria-selected', String(t.dataset.tab === state.tab)); });
+    U.qsa('[data-pane]').forEach(function (p) { p.hidden = p.dataset.pane !== state.tab; });
+  }
+  ui.tabs($('#tabs'), function (key) { state.tab = key; render(); });
+  function goQueue(view) {
+    state.view = view; state.page = 1; state.tab = 'requests';
+    U.qsa('[data-view]', $('#views')).forEach(function (b) { b.setAttribute('aria-pressed', String(b.dataset.view === view)); });
+    paintTab();
+    render();
+    $('#filterbar').scrollIntoView({ block: 'start' });
+  }
+
+  /* ══ 렌더 ═══════════════════════════════════════════════════════════ */
+  var load = null, pageRows = [], lastCols = null;
+
+  function render() {
+    load = buildLoad();
+    paintTab();
+    renderAlerts();
+    renderHeat();
+    renderQueue();
+    U.revealAll();
+  }
+
+  /* ── 경보 카드 4장 ───────────────────────────────────────────────────── */
+  function alertData() {
+    var open = openTickets();
+    var unassigned = open.filter(function (t) { return !t.assigneeId; });
+    var pending = db.where('resourceRequests', function (r) { return r.status === '대기'; });
+    var over = load.rows.filter(function (r) { return r.rate4 > 100; });
+    var breach = open.filter(function (t) { return D.slaState(t) === 'breach'; });
+    return { open: open, unassigned: unassigned, pending: pending, over: over, breach: breach };
+  }
+
+  function renderAlerts() {
+    var a = alertData();
+    var oldest = U.sortBy(a.pending, 'createdAt')[0];
+    var worst = U.sortBy(a.over, 'rate4', 'desc')[0];
+    var oldTicket = U.sortBy(a.unassigned, 'createdAt')[0];
+    var risk = a.open.filter(function (t) { return D.slaState(t) === 'risk'; });
+
+    var cards = [
+      { view: 'unassigned', label: '미배정 의뢰', value: a.unassigned.length, unit: '건',
+        foot: a.unassigned.length
+          ? '가장 오래 기다린 건 ' + U.days(oldTicket.createdAt, C.today) + '일 · 배정 전 대기도 납기 시계에 포함됩니다'
+          : '열린 의뢰에 모두 담당자가 있습니다' },
+      { view: 'pending', label: '공수 승인 대기', value: a.pending.length, unit: '건',
+        foot: a.pending.length
+          ? '합계 ' + U.num(Math.round(U.sum(a.pending, 'hours'))) + '시간 · 최장 대기 ' + U.days(oldest.createdAt, C.today) + '일'
+          : '대기 중인 공수 신청이 없습니다' },
+      { view: 'overload', label: '과부하 인원', value: a.over.length, unit: '명',
+        foot: a.over.length
+          ? '최고 ' + esc(worst.user.name) + ' ' + Math.round(worst.rate4) + '% (' + Math.round(worst.conf4) + 'h / ' + Math.round(worst.cap4) + 'h)'
+          : '향후 4주 가동률 100%를 넘는 인력이 없습니다' },
+      { view: 'breach', label: 'SLA 초과', value: a.breach.length, unit: '건',
+        foot: a.breach.length
+          ? '납기 임박 ' + risk.length + '건이 뒤따르고 있습니다'
+          : '납기를 넘긴 열린 의뢰가 없습니다' }
+    ];
+
+    $('#alerts').innerHTML = cards.map(function (c) {
+      var on = state.tab === 'requests' && state.view === c.view;
+      return '<button class="stat stat--btn reveal" type="button" data-goview="' + c.view + '"' +
+        (c.value ? '' : ' disabled') + ' aria-pressed="' + on + '">' +
+        '<span class="stat__label">' + esc(c.label) + '</span>' +
+        '<span class="stat__value" style="display:block">' + U.num(c.value) + '<small>' + c.unit + '</small></span>' +
+        '<span class="stat__foot" style="display:block">' + c.foot + '</span></button>';
+    }).join('');
+
+    $('#cntHeat').textContent = load.rows.length + '명';
+    $('#cntQueue').textContent = a.pending.length + '건 대기';
+
+    var capTotal = U.sum(load.rows, 'cap4');
+    var demand = U.sum(load.rows, 'conf4');
+    var pend = U.sum(load.rows, 'pend4');
+    $('#subline').innerHTML = '제작 인력 <strong>' + load.rows.length + '명</strong> · 향후 4주 캐파 ' +
+      U.num(Math.round(capTotal)) + '시간 · 확정 배정 ' + U.num(Math.round(demand)) + '시간' +
+      (capTotal > 0 ? ' (' + U.pct((demand / capTotal) * 100) + ')' : '') +
+      ' · 대기 신청 ' + U.num(Math.round(pend)) + '시간';
+  }
+
+  /* ── 히트맵 ──────────────────────────────────────────────────────────── */
+  function renderHeat() {
+    var host = $('#heatHost');
+    $('#heatRange').textContent = U.fmtDate(weeks[0].from) + ' ~ ' + U.fmtDate(weeks[WEEKS - 1].to);
+
+    if (!load.rows.length) {
+      host.innerHTML = ui.empty('제작 인력이 등록되지 않았습니다', '설정에서 사용자 직무를 지정하면 이 히트맵에 나타납니다.');
+      $('#capChart').innerHTML = ui.empty('그릴 캐파가 없습니다', '제작 인력이 등록되면 주별 수요와 캐파를 비교합니다.');
+      $('#capNote').textContent = '';
+      return;
+    }
+
+    var thisWeek = U.iso(mondayOf(C.today));
+    var head = '<div class="heat__head" style="text-align:left">인력 · 직무 · 캐파</div>' +
+      weeks.map(function (w) {
+        return '<div class="heat__head' + (w.from === thisWeek ? ' heat__head--now' : '') + '">' +
+          esc(w.label) + (w.from === thisWeek ? '<br>이번 주' : '') + '</div>';
+      }).join('');
+
+    var body = load.rows.map(function (r) {
+      var rate = state.demand === 'pending' ? r.rate4d : r.rate4;
+      var kind = rate > 100 ? 'neg' : rate >= 60 ? 'pos' : 'warn';
+      var skills = (r.user.skills || []).slice(0, 3).map(function (s) {
+        return '<span class="chip chip--plain" title="' + esc(s.name + ' · 레벨 ' + s.level) + '">' + esc(s.name) + '</span>';
+      }).join('');
+      var headCell =
+        '<div class="heat__rowhead">' +
+          '<div class="heat__name" title="' + esc(r.user.name + ' · ' + (r.user.craft || r.user.title || '직무 미지정')) + '">' + esc(r.user.name) + '</div>' +
+          '<div class="heat__meta">' + esc(r.user.craft || '직무 미지정') + ' · 주 ' + r.cap + 'h · 진행 ' + r.jobs + '건</div>' +
+          '<div class="heat__util">' + ui.meter(Math.min(rate, 100), 100, kind) +
+            '<span class="heat__meta">4주 ' + Math.round(rate) + '%</span></div>' +
+          '<div class="heat__skills">' + (skills || '<span class="heat__meta">등록된 스킬 없음</span>') + '</div>' +
+        '</div>';
+      return '<div class="heat__row is-contents" style="display:contents">' + headCell +
+        weeks.map(function (w, i) { return cellHTML(r, i); }).join('') + '</div>';
+    }).join('');
+
+    host.innerHTML =
+      '<div class="heatwrap"><div class="heat heat--cap" id="heatGrid" role="group" aria-label="주별 가동률 히트맵">' +
+      head + body + '</div></div>' +
+      '<p class="t-micro mt-xs">셀은 그 주에 겹치는 배정 시간을 기간에 비례해 나눈 값입니다. ' +
+      (state.demand === 'pending'
+        ? '대기 신청은 아직 인력이 정해지지 않아, 연결 티켓의 담당자에게 또는 같은 직무 인원에게 균등 분배한 <strong>가정치</strong>로 얹었습니다.'
+        : '승인 전 대기 신청은 빠져 있습니다. 수요 기준을 바꾸면 함께 볼 수 있습니다.') +
+      (load.orphanHours > 0 ? ' 직무가 맞는 인력이 없어 배분하지 못한 대기 수요가 ' + U.num(Math.round(load.orphanHours)) + '시간 있습니다.' : '') +
+      ' 셀을 누르면 그 주의 배정 내역이 열립니다.</p>';
+
+    renderCapChart();
+  }
+
+  function cellHTML(r, i) {
+    var w = weeks[i];
+    var conf = r.conf[i], pend = state.demand === 'pending' ? r.pend[i] : 0;
+    var total = conf + pend;
+    var rate = r.cap > 0 ? total / r.cap : 0;
+    var lv = level(rate);
+    var txt = total < 0.5 ? '·' : (state.unit === 'pct' ? Math.round(rate * 100) + '%' : U.num(Math.round(total)));
+    var lines = r.tix[i].concat(state.demand === 'pending' ? r.reqs[i] : []);
+    var title = U.fmtDate(w.from, 'md') + '~' + U.fmtDate(w.to, 'md') + ' · ' + r.user.name + '\n' +
+      '확정 ' + Math.round(conf) + 'h' + (state.demand === 'pending' ? ' + 대기 ' + Math.round(pend) + 'h' : '') +
+      ' / 캐파 ' + r.cap + 'h (' + Math.round(rate * 100) + '%)\n' +
+      (lines.length ? lines.slice(0, 8).join('\n') : '이 주에 배정된 의뢰가 없습니다');
+    return '<button class="heat__cell" type="button"' + (lv ? ' data-load="' + lv + '"' : '') +
+      ' data-u="' + esc(r.user.id) + '" data-w="' + i + '"' +
+      ' title="' + esc(title) + '"' +
+      ' aria-label="' + esc(r.user.name + ' · ' + U.fmtDate(w.from, 'md') + ' 주 · ' + Math.round(total) + '시간 · 가동률 ' + Math.round(rate * 100) + '%') + '">' +
+      esc(txt) + '</button>';
+  }
+
+  function renderCapChart() {
+    var data = weeks.map(function (w, i) {
+      var conf = U.sum(load.rows, function (r) { return r.conf[i]; });
+      var pend = U.sum(load.rows, function (r) { return r.pend[i]; });
+      var v = state.demand === 'pending' ? conf + pend : conf;
+      var cap = U.sum(load.rows, 'cap');
+      return { label: w.label, value: Math.round(v), kind: cap > 0 && v > cap ? 'neg' : null };
+    });
+    var capWeek = U.sum(load.rows, 'cap');
+    $('#capChart').innerHTML =
+      ch.bars(data, { h: 190, target: capWeek, fmt: function (v) { return U.num(Math.round(v)) + 'h'; }, label: '주별 수요와 주간 캐파' }) +
+      '<p class="t-micro mt-xs">점선은 전체 인력의 주간 캐파 합계 ' + U.num(capWeek) + '시간입니다. ' +
+      '막대가 점선을 넘는 주는 인원을 더 붙이거나 납기를 미뤄야 합니다.</p>';
+    var overWeeks = data.filter(function (d) { return d.value > capWeek; }).length;
+    $('#capNote').textContent = overWeeks ? '초과 주 ' + overWeeks + '주' : '초과 주 없음';
+  }
+
+  /* ── 주별 상세 드로어 ────────────────────────────────────────────────── */
+  function weekDrawer(userId, wi) {
+    var row = null;
+    load.rows.forEach(function (r) { if (r.user.id === userId) row = r; });
+    if (!row) return;
+    var w = weeks[wi];
+    var asg = db.where('assignments', function (a) {
+      return a.resourceId === userId && a.status !== '취소' && a.startDate && a.endDate &&
+        overlapDays(a.startDate, a.endDate, w.from, w.to) > 0;
+    });
+    var conf = row.conf[wi], pend = row.pend[wi];
+    var total = conf + pend;
+    var rate = row.cap > 0 ? (total / row.cap) * 100 : 0;
+
+    var body = el('div', { class: 'panel__body stack gap-md' });
+    body.appendChild(el('div', { class: 'kv', html:
+      '<div class="kv__row"><span class="kv__k">기간</span><span class="kv__v">' + U.fmtDate(w.from) + ' ~ ' + U.fmtDate(w.to) + '</span></div>' +
+      '<div class="kv__row"><span class="kv__k">주간 캐파</span><span class="kv__v">' + row.cap + '시간</span></div>' +
+      '<div class="kv__row"><span class="kv__k">확정 배정</span><span class="kv__v">' + Math.round(conf) + '시간</span></div>' +
+      '<div class="kv__row"><span class="kv__k">대기 신청</span><span class="kv__v">' + Math.round(pend) + '시간 <span class="t-faint">(직무 균등 분배 가정)</span></span></div>' +
+      '<div class="kv__row"><span class="kv__k">가동률</span><span class="kv__v ' + (rate > 100 ? 't-neg' : '') + '">' + Math.round(rate) + '%</span></div>'
+    }));
+
+    if (asg.length) {
+      body.appendChild(ui.table([
+        { key: 'ticket', label: '의뢰', sortable: false, cell: function (a) {
+            var t = db.get('tickets', a.ticketId);
+            if (!t) return '<span class="t-faint">삭제된 티켓</span>';
+            return '<a class="link--quiet" href="ticket.html?id=' + encodeURIComponent(t.id) + '"><span class="tkt-key">' + esc(t.key) + '</span> ' + esc(t.title) + '</a>';
+          } },
+        { key: 'hours', label: '이 주 배분', align: 'right', sortable: false, cell: function (a) {
+            return U.num(Math.round(share(a.hours, a.startDate, a.endDate, w.from, w.to))) + 'h<br><span class="t-faint t-mono" style="font-size:10px">전체 ' + a.hours + 'h</span>';
+          } },
+        { key: 'period', label: '배정 기간', align: 'right', sortable: false, cell: function (a) {
+            return U.fmtDate(a.startDate, 'md') + '~' + U.fmtDate(a.endDate, 'md');
+          } },
+        { key: 'status', label: '상태', sortable: false, cell: function (a) { return ui.chip(a.status, a.status === '완료' ? 'pos' : 'accent'); } }
+      ], asg, { compact: true }));
+    } else {
+      body.appendChild(el('div', { html: ui.empty('이 주에 배정된 의뢰가 없습니다', '여유가 있는 주입니다. 대기 중인 공수 신청을 이 인력에게 돌릴 수 있습니다.') }));
+    }
+
+    ui.drawer({
+      kicker: row.user.craft || '제작인력',
+      title: row.user.name + ' · ' + U.fmtDate(w.from, 'md') + ' 주',
+      body: body
+    });
+  }
+
+  /* ══ 작업 큐 ═══════════════════════════════════════════════════════ */
+  function statusChip(s) {
+    var kind = s === '대기' ? 'warn' : s === '승인' ? 'accent' : s === '배정완료' ? 'pos' : s === '반려' ? 'neg' : 'idle';
+    return ui.chip(s, kind);
+  }
+  function prioCell(p) {
+    var lbl = (D.PRIORITIES.filter(function (x) { return x.key === p; })[0] || {}).label || p;
+    return '<span class="prio prio--' + esc(String(p).toLowerCase()) + '" title="' + esc(lbl) + '"><i></i><i></i><i></i>' + esc(p) + '</span>';
+  }
+  function ticketLink(t) {
+    if (!t) return '<span class="t-faint">연결 티켓 없음</span>';
+    return '<a class="link--quiet" href="ticket.html?id=' + encodeURIComponent(t.id) + '">' +
+      '<span class="tkt-key">' + esc(t.key) + '</span> <span class="t-clamp-2">' + esc(t.title) + '</span></a>';
+  }
+
+  function reqRows() {
+    return db.all('resourceRequests').map(function (r) {
+      var t = db.get('tickets', r.ticketId);
+      return {
+        id: r.id, req: r, ticket: t,
+        who: db.userName(r.requesterId),
+        age: U.days(r.createdAt, C.today)
+      };
+    });
+  }
+
+  function matchesText(hay) {
+    if (!state.q) return true;
+    var t = state.q.trim().toLowerCase();
+    return !t || hay.toLowerCase().indexOf(t) > -1;
+  }
+
+  function currentRows() {
+    if (state.view === 'all' || state.view === 'pending') {
+      return reqRows().filter(function (r) {
+        if (state.view === 'pending' && r.req.status !== '대기') return false;
+        if (state.role && r.req.roleNeeded !== state.role) return false;
+        return matchesText((r.ticket ? r.ticket.key + ' ' + r.ticket.title + ' ' : '') + r.req.roleNeeded + ' ' + r.who + ' ' + r.req.status);
+      });
+    }
+    if (state.view === 'unassigned' || state.view === 'breach') {
+      return openTickets().filter(function (t) {
+        if (state.view === 'unassigned' && t.assigneeId) return false;
+        if (state.view === 'breach' && D.slaState(t) !== 'breach') return false;
+        if (state.role && D.ticketType(t.type).role !== state.role) return false;
+        var acc = db.get('accounts', t.accountId);
+        return matchesText(t.key + ' ' + t.title + ' ' + t.type + ' ' + (acc ? acc.name : '') + ' ' + db.userName(t.requesterId));
+      }).map(function (t) { return { id: t.id, ticket: t }; });
+    }
+    return load.rows.filter(function (r) {
+      if (r.rate4 <= 100) return false;
+      if (state.role && r.user.craft !== state.role) return false;
+      return matchesText(r.user.name + ' ' + (r.user.craft || ''));
+    }).map(function (r) { return { id: r.user.id, row: r }; });
+  }
+
+  var SORTS = {
+    all: {
+      no: function (r) { return r.id; },
+      ticket: function (r) { return r.ticket ? r.ticket.key : ''; },
+      role: function (r) { return r.req.roleNeeded; },
+      hours: function (r) { return r.req.hours || 0; },
+      period: function (r) { return r.req.startDate || ''; },
+      who: function (r) { return r.who; },
+      status: function (r) { return D.REQUEST_STATUS.indexOf(r.req.status); },
+      age: function (r) { return r.age; }
+    },
+    tickets: {
+      ticket: function (r) { return r.ticket.key; },
+      type: function (r) { return r.ticket.type; },
+      prio: function (r) { return r.ticket.priority; },
+      account: function (r) { return (db.get('accounts', r.ticket.accountId) || {}).name || ''; },
+      due: function (r) { return r.ticket.dueDate || ''; },
+      est: function (r) { return r.ticket.estimateHours || 0; },
+      status: function (r) { return r.ticket.status; }
+    },
+    people: {
+      name: function (r) { return r.row.user.name; },
+      craft: function (r) { return r.row.user.craft || ''; },
+      cap: function (r) { return r.row.cap; },
+      booked: function (r) { return r.row.conf4; },
+      rate: function (r) { return r.row.rate4; },
+      jobs: function (r) { return r.row.jobs; }
+    }
+  };
+  function sortSet() {
+    return state.view === 'all' || state.view === 'pending' ? SORTS.all
+      : state.view === 'overload' ? SORTS.people : SORTS.tickets;
+  }
+
+  function renderQueue() {
+    var rows = currentRows();
+    var set = sortSet();
+    var getter = set[state.sort.key];
+    if (!getter) { state.sort = { key: Object.keys(set)[0], dir: 'asc' }; getter = set[state.sort.key]; }
+    rows = U.sortBy(rows, getter, state.sort.dir);
+
+    var pages = Math.max(1, Math.ceil(rows.length / PAGE_SIZE));
+    state.page = U.clamp(state.page, 1, pages);
+    var from = (state.page - 1) * PAGE_SIZE;
+    pageRows = rows.slice(from, from + PAGE_SIZE);
+
+    var cols = state.view === 'overload' ? peopleCols()
+      : (state.view === 'unassigned' || state.view === 'breach') ? ticketCols() : requestCols();
+    lastCols = cols;
+
+    var host = $('#tableHost');
+    host.innerHTML = '';
+    host.appendChild(ui.table(cols, pageRows, {
+      sort: state.sort,
+      onSort: function (key) {
+        if (!sortSet()[key]) return;
+        state.sort = state.sort.key === key
+          ? { key: key, dir: state.sort.dir === 'asc' ? 'desc' : 'asc' }
+          : { key: key, dir: 'asc' };
+        state.page = 1;
+        renderQueue();
+      },
+      empty: emptyFor()
+    }));
+
+    renderPager(rows, from, pages);
+    $('#count').textContent = rows.length + '건 / ' + VIEWS.filter(function (v) { return v.key === state.view; })[0].label;
+    $('#queueNote').innerHTML = noteFor();
+  }
+
+  function emptyFor() {
+    if (state.view === 'pending') return { title: '대기 중인 공수 신청이 없습니다.', body: '새 신청이 들어오면 이 큐에 쌓이고, 카드의 숫자도 함께 올라갑니다.' };
+    if (state.view === 'unassigned') return { title: '미배정 의뢰가 없습니다', body: '열린 제작 의뢰에 모두 담당자가 지정되어 있습니다.' };
+    if (state.view === 'overload') return { title: '과부하 인원이 없습니다', body: '향후 4주 확정 배정 기준으로 캐파를 넘는 인력이 없습니다.' };
+    if (state.view === 'breach') return { title: '납기를 넘긴 의뢰가 없습니다', body: '열린 의뢰가 모두 약속한 납기 안에 있습니다.' };
+    return { title: '조건에 맞는 공수 신청이 없습니다', body: '검색어를 줄이거나 직무 필터를 전체로 바꿔 보세요.' };
+  }
+  function noteFor() {
+    if (state.view === 'overload') return '가동률은 향후 4주 확정 배정 ÷ (주간 캐파 × 4)입니다. 대기 신청은 포함하지 않았습니다.';
+    if (state.view === 'unassigned') return '배정 전 대기 시간도 납기 시계에 포함됩니다. 행에서 바로 공수 신청을 올릴 수 있습니다.';
+    if (state.view === 'breach') return '납기는 광고주와 합의한 <strong>마감일 18시</strong> 기준입니다. 우선순위에 따라 SLA 여유 시간이 달라집니다.';
+    return '경과 시간은 신청 제출 후 지난 일수입니다. 승인·반려는 리소스매니저와 관리자만 할 수 있습니다.';
+  }
+
+  function requestCols() {
+    var cols = [
+      { key: 'no', label: '신청번호', width: '9%', cell: function (r) {
+          return '<span class="t-mono">' + esc(String(r.id).toUpperCase()) + '</span>';
+        } },
+      { key: 'ticket', label: '티켓', width: '24%', cell: function (r) { return ticketLink(r.ticket); } },
+      { key: 'role', label: '요청 직무', cell: function (r) { return ui.chip(r.req.roleNeeded, 'plain'); } },
+      { key: 'hours', label: '요청 공수', align: 'right', cell: function (r) { return U.num(r.req.hours) + '<span class="t-faint">h</span>'; } },
+      { key: 'period', label: '기간', align: 'right', cell: function (r) {
+          return '<span class="t-nowrap">' + U.fmtDate(r.req.startDate, 'md') + '~' + U.fmtDate(r.req.endDate, 'md') + '</span>' +
+            '<br><span class="t-faint t-mono" style="font-size:10px">' + span(r.req.startDate, r.req.endDate) + '일</span>';
+        } },
+      { key: 'who', label: '신청자', cell: function (r) { return ui.personCell(db.get('users', r.req.requesterId)); } },
+      { key: 'status', label: '상태', cell: function (r) {
+          return statusChip(r.req.status) + (r.req.status === '반려' && r.req.note
+            ? '<br><span class="t-faint" style="font-size:10px" title="' + esc(r.req.note) + '">사유 있음</span>' : '');
+        } },
+      { key: 'age', label: '경과', align: 'right', cell: function (r) {
+          var late = r.req.status === '대기' && r.age > 3;
+          return '<span class="' + (late ? 't-warn' : '') + '">' + r.age + '일</span>';
+        } }
+    ];
+    if (canDecide || canCreate) {
+      cols.push({ key: 'act', label: '', sortable: false, tight: true, cell: function (r) {
+        var b = [];
+        if (canDecide && r.req.status === '대기') {
+          b.push('<button class="btn btn--sm" type="button" data-ok="' + esc(r.id) + '">승인</button>');
+          b.push('<button class="btn btn--sm btn--danger" type="button" data-no="' + esc(r.id) + '">반려</button>');
+        }
+        if (r.req.status === '대기' || r.req.status === '승인') {
+          b.push('<button class="btn btn--sm btn--primary" type="button" data-cand="' + esc(r.id) + '">후보 보기</button>');
+        }
+        if (!b.length) {
+          b.push('<button class="btn btn--sm btn--ghost" type="button" data-cand="' + esc(r.id) + '">후보 보기</button>');
+        }
+        return '<span class="row gap-xs t-nowrap">' + b.join('') + '</span>';
+      } });
+    }
+    return cols;
+  }
+
+  function ticketCols() {
+    var cols = [
+      { key: 'ticket', label: '의뢰', width: '28%', cell: function (r) { return ticketLink(r.ticket); } },
+      { key: 'type', label: '유형', cell: function (r) { return ui.chip(r.ticket.type, 'plain'); } },
+      { key: 'prio', label: '우선순위', cell: function (r) { return prioCell(r.ticket.priority); } },
+      { key: 'account', label: '광고주', cell: function (r) {
+          var a = db.get('accounts', r.ticket.accountId);
+          return a ? '<a class="link--quiet" href="account.html?id=' + encodeURIComponent(a.id) + '">' + esc(a.name) + '</a>' : '<span class="t-faint">—</span>';
+        } },
+      { key: 'est', label: '예상 공수', align: 'right', cell: function (r) { return U.num(r.ticket.estimateHours) + '<span class="t-faint">h</span>'; } },
+      { key: 'due', label: '납기', align: 'right', cell: function (r) {
+          var st = D.slaState(r.ticket), rem = D.slaRemaining(r.ticket);
+          var cls = st === 'breach' ? 't-neg' : st === 'risk' ? 't-warn' : '';
+          return '<span class="' + cls + '">' + U.fmtDate(r.ticket.dueDate, 'md') + '</span>' +
+            '<br><span class="t-faint t-mono" style="font-size:10px">' +
+            (rem === null ? '판정 종료' : rem < 0 ? Math.abs(rem) + '시간 초과' : '잔여 ' + rem + '시간') + '</span>';
+        } },
+      { key: 'status', label: '상태', cell: function (r) {
+          return ui.chip(r.ticket.status, r.ticket.status === '보류' ? 'idle' : 'accent') +
+            (r.ticket.assigneeId ? '<br><span class="t-faint" style="font-size:10px">' + esc(db.userName(r.ticket.assigneeId)) + '</span>'
+              : '<br><span class="t-warn" style="font-size:10px">담당자 미지정</span>');
+        } }
+    ];
+    if (canCreate) {
+      cols.push({ key: 'act', label: '', sortable: false, tight: true, cell: function (r) {
+        var has = db.first('resourceRequests', function (x) { return x.ticketId === r.ticket.id && (x.status === '대기' || x.status === '승인'); });
+        return has
+          ? '<button class="btn btn--sm btn--ghost" type="button" data-cand="' + esc(has.id) + '">후보 보기</button>'
+          : '<button class="btn btn--sm btn--primary" type="button" data-newfor="' + esc(r.ticket.id) + '">공수 신청</button>';
+      } });
+    }
+    return cols;
+  }
+
+  function peopleCols() {
+    return [
+      { key: 'name', label: '인력', cell: function (r) { return ui.personCell(r.row.user); } },
+      { key: 'craft', label: '직무', cell: function (r) { return ui.chip(r.row.user.craft || '미지정', 'plain'); } },
+      { key: 'cap', label: '주간 캐파', align: 'right', cell: function (r) { return r.row.cap + '<span class="t-faint">h</span>'; } },
+      { key: 'booked', label: '4주 배정', align: 'right', cell: function (r) {
+          return U.num(Math.round(r.row.conf4)) + '<span class="t-faint">h / ' + U.num(Math.round(r.row.cap4)) + 'h</span>';
+        } },
+      { key: 'rate', label: '4주 가동률', cell: function (r) {
+          return '<span class="mrate"><span class="mrate__n">' + Math.round(r.row.rate4) + '%</span>' +
+            ui.meter(Math.min(r.row.rate4, 100), 100, 'neg') + '</span>';
+        } },
+      { key: 'jobs', label: '진행 배정', align: 'right', cell: function (r) { return r.row.jobs + '건'; } },
+      { key: 'act', label: '', sortable: false, tight: true, cell: function (r) {
+          return '<button class="btn btn--sm btn--ghost t-nowrap" type="button" data-heat="' + esc(r.row.user.id) + '">히트맵에서 보기</button>';
+        } }
+    ];
+  }
+
+  function renderPager(rows, from, pages) {
+    var to = Math.min(rows.length, from + PAGE_SIZE);
+    var nums = '';
+    var lo = Math.max(1, state.page - 2), hi = Math.min(pages, lo + 4);
+    lo = Math.max(1, hi - 4);
+    if (lo > 1) nums += '<button class="pager__btn" type="button" data-page="1">1</button><span class="pager__btn t-faint">…</span>';
+    for (var i = lo; i <= hi; i++) {
+      nums += '<button class="pager__btn" type="button" data-page="' + i + '"' +
+        (i === state.page ? ' aria-current="page"' : '') + '>' + i + '</button>';
+    }
+    if (hi < pages) nums += '<span class="pager__btn t-faint">…</span><button class="pager__btn" type="button" data-page="' + pages + '">' + pages + '</button>';
+
+    $('#pagerHost').innerHTML =
+      '<span class="t-mono">' + (rows.length ? (from + 1) + '–' + to : 0) + ' / ' + rows.length + '건</span>' +
+      '<span class="pager">' +
+        '<button class="btn btn--sm btn--ghost" type="button" data-page="' + (state.page - 1) + '"' +
+          (state.page <= 1 ? ' disabled' : '') + '>이전</button>' + nums +
+        '<button class="btn btn--sm btn--ghost" type="button" data-page="' + (state.page + 1) + '"' +
+          (state.page >= pages ? ' disabled' : '') + '>다음</button>' +
+      '</span>';
+  }
+
+  /* ══ 승인 · 반려 ═══════════════════════════════════════════════════ */
+  function approvalOf(reqId) {
+    return db.first('approvals', function (a) {
+      return a.objectType === 'resourceRequests' && a.objectId === reqId && a.status === '대기';
+    });
+  }
+
+  function decide(req, next, note) {
+    var prev = { status: req.status, note: req.note, decidedAt: req.decidedAt, approverId: req.approverId };
+    var ap = approvalOf(req.id);
+    var apPrev = ap ? { status: ap.status, decidedAt: ap.decidedAt, comment: ap.comment } : null;
+    var now = new Date().toISOString();
+
+    db.update('resourceRequests', req.id, {
+      status: next, note: next === '반려' ? note : (req.note || ''), decidedAt: now, approverId: me.id
+    });
+    if (ap) db.update('approvals', ap.id, { status: next, decidedAt: now, comment: note || '' });
+
+    var t = db.get('tickets', req.ticketId);
+    db.notify(req.requesterId, 'approval',
+      (t ? t.key + ' ' : '') + '공수 신청이 ' + next + '되었습니다.' + (next === '반려' ? ' 사유: ' + note : ''),
+      'resources.html?tab=requests');
+
+    render();
+    ui.toast((t ? t.key + ' ' : '') + '공수 신청을 ' + next + ' 처리했습니다.', {
+      undo: function () {
+        db.update('resourceRequests', req.id, prev);
+        if (ap && apPrev) db.update('approvals', ap.id, apPrev);
+        render();
+      }
+    });
+  }
+
+  function rejectModal(req) {
+    var why = el('textarea', { class: 'textarea', 'data-autofocus': '', rows: '3',
+      placeholder: '예: 해당 주 캐파가 이미 초과입니다. 시작일을 1주 뒤로 옮겨 재신청 바랍니다.' });
+    var field = el('label', { class: 'field' }, [
+      el('span', { class: 'field__label', html: '반려 사유 <span class="req">*</span>' }), why,
+      el('span', { class: 'field__error', text: '반려 사유는 신청자에게 그대로 전달됩니다. 비워 둘 수 없습니다.' })
+    ]);
+    var t = db.get('tickets', req.ticketId);
+    ui.modal({
+      title: '공수 신청 반려',
+      body: el('div', { class: 'stack gap-sm' }, [
+        el('p', { class: 't-small', text: (t ? t.key + ' · ' : '') + req.roleNeeded + ' ' + req.hours + '시간 · ' +
+          U.fmtDate(req.startDate) + ' ~ ' + U.fmtDate(req.endDate) + ' 신청을 반려합니다.' }),
+        field,
+        el('p', { class: 't-micro', text: '반려된 신청은 신청자가 내용을 고쳐 다시 올릴 수 있습니다.' })
+      ]),
+      actions: [
+        { label: '취소' },
+        { label: '반려', kind: 'danger', onClick: function () {
+            var v = why.value.trim();
+            if (!v) { field.classList.add('is-invalid'); why.focus(); return false; }
+            decide(req, '반려', v);
+          } }
+      ]
+    });
+  }
+
+  /* ══ 후보 추천 드로어 ══════════════════════════════════════════════ */
+  function candidateDrawer(req) {
+    var opt = { cross: false, busy: false, mustSkill: false };
+    var host = el('div');
+    var body = el('div', { class: 'panel__body stack gap-md' });
+    var t = db.get('tickets', req.ticketId);
+
+    body.appendChild(el('div', { class: 'kv', html:
+      '<div class="kv__row"><span class="kv__k">티켓</span><span class="kv__v">' + ticketLink(t) + '</span></div>' +
+      '<div class="kv__row"><span class="kv__k">요청 직무</span><span class="kv__v">' + esc(req.roleNeeded) + '</span></div>' +
+      '<div class="kv__row"><span class="kv__k">요청 공수</span><span class="kv__v">' + U.num(req.hours) + '시간</span></div>' +
+      '<div class="kv__row"><span class="kv__k">기간</span><span class="kv__v">' + U.fmtDate(req.startDate) + ' ~ ' + U.fmtDate(req.endDate) +
+        ' <span class="t-faint">(' + span(req.startDate, req.endDate) + '일)</span></span></div>' +
+      '<div class="kv__row"><span class="kv__k">필요 스킬</span><span class="kv__v">' +
+        ((req.skillsNeeded || []).length ? (req.skillsNeeded).map(function (s) { return ui.chip(s, 'plain'); }).join(' ') : '<span class="t-faint">지정 없음</span>') + '</span></div>' +
+      '<div class="kv__row"><span class="kv__k">신청 사유</span><span class="kv__v">' + esc(req.reason || '—') + '</span></div>'
+    }));
+
+    var filters = el('div', { class: 'row gap-md', style: 'flex-wrap:wrap' });
+    [['cross', '직무가 다른 인력도 보기'], ['busy', '가용 여력 0인 인력도 보기'], ['mustSkill', '필요 스킬을 모두 가진 인력만']].forEach(function (f) {
+      var box = el('input', { type: 'checkbox' });
+      box.addEventListener('change', function () { opt[f[0]] = box.checked; paint(); });
+      filters.appendChild(el('label', { class: 'check t-nowrap' }, [box, el('span', { text: f[1] })]));
+    });
+    body.appendChild(filters);
+    body.appendChild(host);
+
+    ui.drawer({ kicker: '후보 추천 · ' + String(req.id).toUpperCase(), title: req.roleNeeded + ' ' + req.hours + '시간', body: body });
+    paint();
+
+    function candidates() {
+      var need = req.skillsNeeded || [];
+      return db.where('users', function (u) { return u.role === '제작인력' && u.active !== false; })
+        .map(function (u) {
+          var ms = D.matchScore(u, req);
+          var have = (u.skills || []).map(function (s) { return s.name; });
+          var hit = need.filter(function (n) { return have.indexOf(n) > -1; });
+          var jobs = db.count('assignments', function (a) {
+            return a.resourceId === u.id && a.status !== '취소' && a.status !== '완료';
+          });
+          return { id: u.id, user: u, ms: ms, hit: hit, need: need, jobs: jobs };
+        })
+        .filter(function (c) {
+          if (!opt.cross && c.user.craft !== req.roleNeeded) return false;
+          if (!opt.busy && c.ms.utilization >= 100) return false;
+          if (opt.mustSkill && c.need.length && c.hit.length < c.need.length) return false;
+          return true;
+        })
+        .sort(function (a, b) { return b.ms.score - a.ms.score || a.jobs - b.jobs; });
+    }
+
+    function paint() {
+      var list = candidates();
+      host.innerHTML = '';
+      if (!list.length) {
+        host.innerHTML = ui.empty('조건에 맞는 후보가 없습니다',
+          '직무가 같고 여력이 남은 인력이 지금은 없습니다. 위 조건을 풀어 보거나 기간을 미뤄 다시 신청하세요.');
+        return;
+      }
+      list.forEach(function (c, i) { c.rank = i + 1; });
+      host.appendChild(ui.table([
+        { key: 'rank', label: '#', sortable: false, tight: true, cell: function (c) {
+            return '<span class="t-mono' + (c.rank === 1 ? ' t-accent' : '') + '">' + c.rank + '</span>';
+          } },
+        { key: 'name', label: '이름', sortable: false, cell: function (c) {
+            return ui.personCell(c.user) + '<br><span class="t-faint t-mono" style="font-size:10px">' +
+              esc(c.user.craft || '직무 미지정') + ' · 주 ' + D.capacityOf(c.user) + 'h</span>';
+          } },
+        { key: 'score', label: '매치율', sortable: false, cell: function (c) {
+            var kind = c.ms.score >= 75 ? 'pos' : c.ms.score >= 50 ? null : 'warn';
+            return '<span class="mrate"><span class="mrate__n">' + c.ms.score + '</span>' + ui.meter(c.ms.score, 100, kind) + '</span>';
+          } },
+        { key: 'util', label: '가용률', align: 'right', sortable: false, cell: function (c) {
+            var free = Math.max(0, 100 - c.ms.utilization);
+            return '<span class="' + (free < 15 ? 't-warn' : '') + '">' + free + '%</span>' +
+              '<br><span class="t-faint t-mono" style="font-size:10px">가동 ' + c.ms.utilization + '%</span>';
+          } },
+        { key: 'skill', label: '스킬 매칭', sortable: false, cell: function (c) {
+            if (!c.need.length) return '<span class="t-faint">요구 스킬 미지정</span>';
+            return '<span class="t-num">' + c.hit.length + '/' + c.need.length + '</span> ' +
+              (c.hit.length ? c.hit.map(function (s) { return ui.chip(s, 'plain'); }).join(' ') : '<span class="t-faint">일치 없음</span>');
+          } },
+        { key: 'jobs', label: '진행', align: 'right', sortable: false, cell: function (c) {
+            return '<span class="' + (c.jobs >= CONCURRENT_CAP ? 't-warn' : '') + '">' + c.jobs + '건</span>';
+          } },
+        { key: 'why', label: '점수 근거', sortable: false, cell: function (c) {
+            return '<details class="why"><summary>펼쳐 보기</summary><div class="why__grid">' +
+              c.ms.parts.map(function (p) {
+                return '<div class="why__row"><span class="why__k">' + esc(p.label) + '</span>' +
+                  ui.meter(p.got, p.max, p.got >= p.max * 0.8 ? 'pos' : p.got > 0 ? null : 'neg') +
+                  '<span class="why__v">' + p.got + '/' + p.max + '</span>' +
+                  '<span class="why__note">' + esc(p.note) + '</span></div>';
+              }).join('') +
+              '<div class="why__row"><span class="why__k">합계</span><span class="why__note" style="grid-column:2/-1">' +
+              esc(c.user.name + '의 매치율은 ' + c.ms.score + '점입니다. ' +
+                (c.user.craft === req.roleNeeded ? '요청 직무와 같고, ' : '요청 직무와 달라 직무 점수가 0이고, ') +
+                (c.need.length ? '필요 스킬 ' + c.need.length + '개 중 ' + c.hit.length + '개를 갖췄으며, ' : '요구 스킬이 없어 기본 점수를 받았고, ') +
+                '요청 기간 가동률이 ' + c.ms.utilization + '%라 여력 점수가 ' + c.ms.parts[2].got + '점입니다.') +
+              '</span></div></div></details>';
+          } },
+        { key: 'act', label: '', sortable: false, tight: true, cell: function (c) {
+            if (!canAssign) return '<span class="t-faint t-mono" style="font-size:10px">배정 권한 없음</span>';
+            return '<button class="btn btn--sm btn--primary t-nowrap" type="button" data-assign="' + esc(c.id) + '">배정 확정</button>';
+          } }
+      ], list, { compact: true }));
+
+      U.qsa('[data-assign]', host).forEach(function (b) {
+        b.addEventListener('click', function () {
+          var c = list.filter(function (x) { return x.id === b.dataset.assign; })[0];
+          if (c) previewModal(req, c.user);
+        });
+      });
+    }
+  }
+
+  /* ══ 배정 미리보기 ═════════════════════════════════════════════════ */
+  function bizDays(from, to) {
+    var n = 0, d = U.date(from), end = U.date(to);
+    while (U.days(U.iso(d), U.iso(end)) >= 0) {
+      var k = d.getDay();
+      if (k !== 0 && k !== 6) n++;
+      d = U.addDays(d, 1);
+    }
+    return n;
+  }
+  /** 요청 기간을 주 단위로 잘라, 영업일 기준으로 공수를 균등 배분합니다. */
+  function plan(req, user) {
+    var total = bizDays(req.startDate, req.endDate);
+    var mode = total > 0 ? 'biz' : 'cal';
+    var unitCount = total > 0 ? total : span(req.startDate, req.endDate);
+    var perUnit = (req.hours || 0) / unitCount;
+
+    var out = [], w = mondayOf(req.startDate), endIso = req.endDate;
+    var guard = 0;
+    while (U.days(U.iso(w), endIso) >= 0 && guard++ < 60) {
+      var wFrom = U.iso(w), wTo = U.iso(U.addDays(w, 6));
+      var s = wFrom > req.startDate ? wFrom : req.startDate;
+      var e = wTo < req.endDate ? wTo : req.endDate;
+      var units = mode === 'biz' ? bizDays(s, e) : span(s, e);
+      var have = 0;
+      db.where('assignments', function (a) {
+        return a.resourceId === user.id && a.status !== '취소' && a.startDate && a.endDate;
+      }).forEach(function (a) { have += share(a.hours, a.startDate, a.endDate, wFrom, wTo); });
+      out.push({
+        label: U.fmtDate(wFrom, 'md'), from: wFrom, to: wTo,
+        add: perUnit * units, have: have, cap: D.capacityOf(user)
+      });
+      w = U.addDays(w, 7);
+    }
+    return { weeks: out, perUnit: perUnit, mode: mode, units: unitCount };
+  }
+
+  function previewModal(req, user) {
+    var p = plan(req, user);
+    var over = p.weeks.filter(function (w) { return w.have + w.add > w.cap + 0.01; });
+    var maxV = Math.max.apply(null, p.weeks.map(function (w) { return w.have + w.add; }).concat([p.weeks[0] ? p.weeks[0].cap : 1]));
+
+    var bars = p.weeks.map(function (w) {
+      var tot = w.have + w.add;
+      var isOver = tot > w.cap + 0.01;
+      var haveW = (w.have / maxV) * 100, addW = (w.add / maxV) * 100, capX = (w.cap / maxV) * 100;
+      return '<div class="wkbar"><span class="wkbar__k">' + esc(w.label) + ' 주</span>' +
+        '<span class="wkbar__track">' +
+          '<span class="wkbar__seg wkbar__seg--have" style="width:' + haveW.toFixed(1) + '%"></span>' +
+          '<span class="wkbar__seg ' + (isOver ? 'wkbar__seg--over' : 'wkbar__seg--add') + '" style="left:' + haveW.toFixed(1) + '%;width:' + addW.toFixed(1) + '%"></span>' +
+          '<span class="wkbar__cap" style="left:' + capX.toFixed(1) + '%"></span>' +
+        '</span>' +
+        '<span class="wkbar__v ' + (isOver ? 't-neg' : '') + '">기존 ' + Math.round(w.have) + ' + 신규 ' + Math.round(w.add) +
+        ' = ' + Math.round(tot) + ' / ' + w.cap + 'h</span></div>';
+    }).join('');
+
+    var why = el('textarea', { class: 'textarea', rows: '2', placeholder: '예: 광고주 촬영 일정이 고정되어 이번 주에 몰아 넣어야 합니다.' });
+    var whyField = el('label', { class: 'field' }, [
+      el('span', { class: 'field__label', html: '초과 배정 사유 <span class="req">*</span>' }), why,
+      el('span', { class: 'field__error', text: '캐파를 넘겨 확정하려면 사유를 남겨야 합니다. 감사 로그에 기록됩니다.' })
+    ]);
+
+    var body = el('div', { class: 'stack gap-sm' }, [
+      el('p', { class: 't-small', html: esc(user.name) + '에게 <strong>' + U.num(req.hours) + '시간</strong>을 ' +
+        U.fmtDate(req.startDate) + ' ~ ' + U.fmtDate(req.endDate) + ' 기간에 배정합니다. ' +
+        (p.mode === 'biz' ? '영업일 ' + p.units + '일에 하루 ' + (Math.round(p.perUnit * 10) / 10) + '시간씩 균등 배분한 결과입니다.'
+                          : '기간에 영업일이 없어 달력일 ' + p.units + '일 기준으로 나눴습니다.') }),
+      el('div', { html: '<div class="wkbar" style="border-bottom:none;padding-bottom:0">' +
+        '<span class="wkbar__k">주</span><span class="t-micro">회색 = 기존 배정, 파랑 = 이번 배정, 세로선 = 주간 캐파</span><span></span></div>' + bars }),
+      over.length
+        ? el('div', { html: ui.insight({ kind: 'risk', label: '캐파 초과', say: '초과하는 주가 <strong>' + over.length + '주</strong> 있습니다.',
+            why: over.map(function (w) { return w.label + ' 주 ' + Math.round(w.have + w.add) + 'h / ' + w.cap + 'h'; }).join(' · ') }) })
+        : el('p', { class: 't-micro', text: '모든 주가 캐파 안에 들어옵니다.' }),
+      over.length ? whyField : null
+    ]);
+
+    ui.modal({
+      title: '배정 미리보기', size: 'wide', body: body,
+      actions: [
+        { label: '취소' },
+        { label: over.length ? '초과 상태로 강행 배정' : '배정 확정', kind: over.length ? 'danger' : 'primary',
+          onClick: function () {
+            if (over.length && !why.value.trim()) { whyField.classList.add('is-invalid'); why.focus(); return false; }
+            commitAssign(req, user, over.length ? why.value.trim() : '');
+          } }
+      ]
+    });
+  }
+
+  function commitAssign(req, user, forceReason) {
+    var t = db.get('tickets', req.ticketId);
+    var now = new Date().toISOString();
+
+    var asg = db.insert('assignments', {
+      requestId: req.id, ticketId: req.ticketId, resourceId: user.id,
+      hours: req.hours, startDate: req.startDate, endDate: req.endDate,
+      status: U.days(req.startDate, C.today) >= 0 ? '진행중' : '예정'
+    });
+
+    var tPrev = t ? { assigneeId: t.assigneeId, status: t.status } : null;
+    if (t) {
+      var patch = { assigneeId: user.id };
+      if ((D.TICKET_FLOW[t.status] || []).indexOf('배정됨') > -1) patch.status = '배정됨';
+      db.update('tickets', t.id, patch);
+    }
+
+    var rPrev = { status: req.status, decidedAt: req.decidedAt, approverId: req.approverId };
+    db.update('resourceRequests', req.id, { status: '배정완료', decidedAt: now, approverId: me.id });
+
+    var ap = approvalOf(req.id);
+    var apPrev = ap ? { status: ap.status, decidedAt: ap.decidedAt, comment: ap.comment } : null;
+    if (ap) db.update('approvals', ap.id, { status: '승인', decidedAt: now, comment: '배정 확정과 함께 승인' });
+
+    if (forceReason) db.audit('강행 배정', 'assignments', asg.id, '캐파 초과 확정 · ' + forceReason);
+
+    db.notify(user.id, 'assign',
+      (t ? t.key + ' ' + t.title : '제작 의뢰') + ' 배정 · ' + U.fmtDate(req.startDate, 'md') + '~' + U.fmtDate(req.endDate, 'md') + ' ' + req.hours + '시간',
+      t ? 'ticket.html?id=' + encodeURIComponent(t.id) : 'resources.html');
+    db.notify(req.requesterId, 'assign',
+      (t ? t.key + ' ' : '') + '공수 신청이 ' + user.name + '에게 배정되었습니다.',
+      'resources.html?tab=requests');
+
+    var back = document.querySelector('.drawer');
+    if (back && back.parentNode && back.parentNode.parentNode) back.parentNode.parentNode.removeChild(back.parentNode);
+
+    render();
+    ui.toast(user.name + '에게 ' + req.hours + '시간을 배정했습니다.' + (forceReason ? ' 캐파 초과로 강행 기록이 남았습니다.' : ''), {
+      undo: function () {
+        db.remove('assignments', asg.id);
+        if (t && tPrev) db.update('tickets', t.id, tPrev);
+        db.update('resourceRequests', req.id, rPrev);
+        if (ap && apPrev) db.update('approvals', ap.id, apPrev);
+        render();
+      }
+    });
+  }
+
+  /* ══ 새 공수 신청 ══════════════════════════════════════════════════ */
+  function skillsForRole(role) {
+    var names = [];
+    db.where('users', function (u) { return u.role === '제작인력' && u.craft === role; })
+      .forEach(function (u) { (u.skills || []).forEach(function (s) { names.push(s.name); }); });
+    return U.uniq(names).sort();
+  }
+
+  function newRequestModal(ticketId) {
+    var open = U.sortBy(openTickets(), 'dueDate');
+    if (!open.length) {
+      ui.toast('열려 있는 제작 의뢰가 없어 공수를 신청할 수 없습니다.', { kind: 'neg' });
+      return;
+    }
+
+    var tSel = el('select', { class: 'select', 'data-autofocus': '', 'aria-label': '연결 티켓' });
+    open.forEach(function (t) {
+      var acc = db.get('accounts', t.accountId);
+      tSel.appendChild(el('option', { value: t.id, text: t.key + ' · ' + t.title + (acc ? ' · ' + acc.name : '') }));
+    });
+    if (ticketId && open.some(function (t) { return t.id === ticketId; })) tSel.value = ticketId;
+
+    var role = el('select', { class: 'select', 'aria-label': '요청 직무' });
+    D.RESOURCE_ROLES.forEach(function (r) { role.appendChild(el('option', { value: r, text: r })); });
+
+    var hours = el('input', { class: 'input input--num', type: 'number', min: '1', max: '400', step: '1', value: '8', 'aria-label': '요청 공수(시간)' });
+    var hoursField = el('label', { class: 'field grow' }, [
+      el('span', { class: 'field__label', html: '요청 공수 (시간) <span class="req">*</span>' }), hours,
+      el('span', { class: 'field__error', text: '1시간 이상 400시간 이하로 적어 주세요.' })
+    ]);
+
+    var start = el('input', { class: 'input', type: 'date', 'aria-label': '시작 희망일' });
+    var end = el('input', { class: 'input', type: 'date', 'aria-label': '종료 희망일' });
+    var dateField = el('label', { class: 'field' }, [
+      el('span', { class: 'field__label', html: '기간 <span class="req">*</span>' }),
+      el('div', { class: 'row gap-sm' }, [start, end]),
+      el('span', { class: 'field__error', id: 'dateErr', text: '시작일은 오늘 이후, 종료일은 시작일 이후이며 티켓 납기를 넘길 수 없습니다.' })
+    ]);
+    var dueHint = el('p', { class: 't-micro' });
+
+    var skillHost = el('div', { class: 'skillpick' });
+    var reason = el('textarea', { class: 'textarea', rows: '2', placeholder: '예: 집행 개시일 전에 소재를 완성해야 합니다.' });
+    var reasonField = el('label', { class: 'field' }, [
+      el('span', { class: 'field__label', html: '신청 사유 <span class="req">*</span>' }), reason,
+      el('span', { class: 'field__error', text: '승인자가 판단할 근거가 필요합니다. 한 줄이면 충분합니다.' })
+    ]);
+
+    function syncTicket() {
+      var t = db.get('tickets', tSel.value);
+      if (!t) return;
+      role.value = D.ticketType(t.type).role;
+      hours.value = String(Math.max(1, t.estimateHours || 8));
+      var s = U.days(C.today, t.dueDate) > 7 ? U.addDays(C.today, 1) : C.today;
+      start.value = U.iso(s);
+      var e = U.date(t.dueDate);
+      if (U.days(U.iso(s), t.dueDate) < 1) e = U.addDays(s, 1);
+      end.value = U.iso(e);
+      dueHint.textContent = t.key + ' 납기는 ' + U.fmtDate(t.dueDate) + '입니다. 종료일은 이 날을 넘길 수 없습니다. 예상 공수 ' + (t.estimateHours || 0) + '시간.';
+      syncSkills();
+    }
+    function syncSkills() {
+      var list = skillsForRole(role.value);
+      skillHost.innerHTML = '';
+      if (!list.length) {
+        skillHost.appendChild(el('span', { class: 't-faint t-small', text: '이 직무로 등록된 스킬이 아직 없습니다.' }));
+        return;
+      }
+      list.forEach(function (name) {
+        skillHost.appendChild(el('label', { class: 'check t-nowrap' }, [
+          el('input', { type: 'checkbox', value: name }), el('span', { text: name })
+        ]));
+      });
+    }
+    tSel.addEventListener('change', syncTicket);
+    role.addEventListener('change', syncSkills);
+    syncTicket();
+
+    ui.modal({
+      title: '새 공수 신청', size: 'wide',
+      body: el('div', { class: 'stack gap-sm' }, [
+        el('label', { class: 'field' }, [el('span', { class: 'field__label', html: '연결 티켓 <span class="req">*</span>' }), tSel]),
+        dueHint,
+        el('div', { class: 'row gap-sm' }, [
+          el('label', { class: 'field grow' }, [el('span', { class: 'field__label', html: '요청 직무 <span class="req">*</span>' }), role]),
+          hoursField
+        ]),
+        dateField,
+        el('label', { class: 'field' }, [el('span', { class: 'field__label', text: '필요 스킬' }), skillHost,
+          el('span', { class: 'field__help', text: '고른 스킬은 후보 추천의 매치율에 그대로 반영됩니다.' })]),
+        reasonField
+      ]),
+      actions: [
+        { label: '취소' },
+        { label: '신청', kind: 'primary', onClick: function () {
+            var t = db.get('tickets', tSel.value);
+            var h = Number(hours.value);
+            hoursField.classList.remove('is-invalid');
+            dateField.classList.remove('is-invalid');
+            reasonField.classList.remove('is-invalid');
+            if (!t) return false;
+            if (!h || h <= 0 || h > 400) { hoursField.classList.add('is-invalid'); hours.focus(); return false; }
+            if (!start.value || !end.value || U.days(C.today, start.value) < 0 ||
+                U.days(start.value, end.value) < 1 || U.days(end.value, t.dueDate) < 0) {
+              dateField.classList.add('is-invalid'); start.focus(); return false;
+            }
+            if (!reason.value.trim()) { reasonField.classList.add('is-invalid'); reason.focus(); return false; }
+            saveRequest(t, role.value, h, start.value, end.value,
+              U.qsa('input[type="checkbox"]', skillHost).filter(function (b) { return b.checked; }).map(function (b) { return b.value; }),
+              reason.value.trim());
+          } }
+      ]
+    });
+  }
+
+  function saveRequest(t, roleNeeded, hours, s, e, skills, reason) {
+    var mgr = db.first('users', function (u) { return u.role === '리소스매니저' && u.active !== false; }) ||
+              db.first('users', function (u) { return u.role === '관리자'; });
+    var now = new Date().toISOString();
+    var rec = db.insert('resourceRequests', {
+      ticketId: t.id, requesterId: me.id, roleNeeded: roleNeeded,
+      hours: hours, startDate: s, endDate: e,
+      status: '대기', approverId: mgr ? mgr.id : null,
+      createdAt: now, decidedAt: null, note: '', reason: reason, skillsNeeded: skills
+    });
+    var ap = db.insert('approvals', {
+      objectType: 'resourceRequests', objectId: rec.id, oppId: t.oppId || null,
+      kind: '공수 승인', step: '1차 (리소스매니저)',
+      requesterId: me.id, approverId: mgr ? mgr.id : null,
+      status: '대기', submittedAt: now, decidedAt: null, comment: '',
+      detail: roleNeeded + ' ' + hours + '시간 · ' + s + ' ~ ' + e
+    });
+    if (mgr) db.notify(mgr.id, 'approval', t.key + ' 공수 신청 ' + hours + '시간이 승인을 기다립니다.', 'resources.html?tab=requests');
+
+    goQueue('pending');
+    ui.toast(t.key + ' 공수 신청을 올렸습니다. 승인 대기 큐에서 확인할 수 있습니다.', {
+      undo: function () {
+        db.remove('approvals', ap.id);
+        db.remove('resourceRequests', rec.id);
+        render();
+      }
+    });
+  }
+
+  /* ══ 이벤트 배선 ═══════════════════════════════════════════════════ */
+  U.live($('#alerts'), 'click', '[data-goview]', function (e, t) {
+    if (t.disabled) return;
+    goQueue(t.dataset.goview);
+  });
+
+  U.live($('#segUnit'), 'click', '[data-unit]', function (e, t) {
+    state.unit = t.dataset.unit;
+    U.qsa('[data-unit]', $('#segUnit')).forEach(function (b) { b.setAttribute('aria-pressed', String(b === t)); });
+    renderHeat();
+  });
+  U.live($('#segDemand'), 'click', '[data-demand]', function (e, t) {
+    state.demand = t.dataset.demand;
+    U.qsa('[data-demand]', $('#segDemand')).forEach(function (b) { b.setAttribute('aria-pressed', String(b === t)); });
+    renderHeat();
+  });
+
+  U.live($('#heatHost'), 'click', '.heat__cell', function (e, t) {
+    weekDrawer(t.dataset.u, Number(t.dataset.w));
+  });
+
+  U.live($('#views'), 'click', '[data-view]', function (e, t) {
+    state.view = t.dataset.view; state.page = 1;
+    U.qsa('[data-view]', $('#views')).forEach(function (b) { b.setAttribute('aria-pressed', String(b === t)); });
+    renderAlerts(); renderQueue();
+  });
+  U.on($('#q'), 'input', U.debounce(function () { state.q = $('#q').value; state.page = 1; renderQueue(); }, 180));
+  /* 한글 입력 중에는 키 처리를 건너뜁니다. */
+  U.on($('#q'), 'keydown', function (e) {
+    if (e.isComposing || e.keyCode === 229) return;
+    if (e.key === 'Escape' && this.value) { e.stopPropagation(); this.value = ''; state.q = ''; state.page = 1; renderQueue(); }
+  });
+  U.on($('#fRole'), 'change', function () { state.role = this.value; state.page = 1; renderQueue(); });
+  U.on($('#reset'), 'click', function () {
+    state.q = ''; state.role = ''; state.view = 'all'; state.page = 1;
+    $('#q').value = ''; $('#fRole').value = '';
+    U.qsa('[data-view]', $('#views')).forEach(function (b) { b.setAttribute('aria-pressed', String(b.dataset.view === 'all')); });
+    renderAlerts(); renderQueue();
+  });
+  U.on($('#csv'), 'click', function () {
+    ui.tableToCSV($('#tableHost').querySelector('table'), 'closer-공수-' + state.view + '.csv');
+  });
+
+  U.live($('#pagerHost'), 'click', '[data-page]', function (e, t) {
+    var p = Number(t.dataset.page);
+    if (!p || p === state.page) return;
+    state.page = p;
+    renderQueue();
+    $('#tableHost').scrollIntoView({ block: 'start' });
+  });
+
+  U.live($('#tableHost'), 'click', '[data-ok]', function (e, t) {
+    var r = db.get('resourceRequests', t.dataset.ok);
+    if (r && r.status === '대기') decide(r, '승인', '');
+  });
+  U.live($('#tableHost'), 'click', '[data-no]', function (e, t) {
+    var r = db.get('resourceRequests', t.dataset.no);
+    if (r && r.status === '대기') rejectModal(r);
+  });
+  U.live($('#tableHost'), 'click', '[data-cand]', function (e, t) {
+    var r = db.get('resourceRequests', t.dataset.cand);
+    if (r) candidateDrawer(r);
+  });
+  U.live($('#tableHost'), 'click', '[data-newfor]', function (e, t) {
+    newRequestModal(t.dataset.newfor);
+  });
+  U.live($('#tableHost'), 'click', '[data-heat]', function (e, t) {
+    state.focusUser = t.dataset.heat;
+    state.tab = 'heat';
+    paintTab();
+    render();
+    var cell = $('#heatHost').querySelector('[data-u="' + state.focusUser + '"]');
+    if (cell) {
+      var row = cell.previousElementSibling;
+      if (row && row.classList.contains('heat__rowhead')) row.parentNode.classList.add('is-focus');
+      cell.scrollIntoView({ block: 'center' });
+      cell.focus();
+    }
+  });
+
+  if (canCreate) U.on($('#newReq'), 'click', function () { newRequestModal(null); });
+
+  render();
+})();
+</script>
+</body>
+</html>
