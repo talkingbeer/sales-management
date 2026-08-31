@@ -59,7 +59,7 @@
   /* ── Rail ────────────────────────────────────────────────────────── */
   function renderRail(active) {
     var rail = el('nav', { class: 'app-rail', id: 'appRail', 'aria-label': '주 메뉴' });
-    rail.appendChild(el('a', { class: 'app-rail__brand', href: '../index.html', 'aria-label': 'CLOSER 홈' }, [
+    rail.appendChild(el('a', { class: 'app-rail__brand', href: 'dashboard.html', 'aria-label': 'CLOSER 홈' }, [
       el('span', { class: 'brand-mark', 'aria-hidden': 'true' }),
       el('span', { class: 'brand-word', html: 'CLOS<em>E</em>R' })
     ]));

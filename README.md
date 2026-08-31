@@ -37,14 +37,15 @@ localStorage가 막혀 **변경 사항이 새로고침에 사라집니다.** 서
 그 외 Salesforce에서 가져온 것 — 리드 전환, 견적·CPQ·할인 승인, 계약·갱신, 캠페인 성과,
 매출 예측(Pipeline/Best Case/Commit 롤업), 리포트 빌더, 승인 프로세스, 활동 타임라인·캘린더,
 전역 검색 ⌘K 팔레트, 권한 매트릭스, 감사 로그, 휴지통, CSV 내보내기, 키보드 단축키.
-전체 대응표는 `index.html` 의 “Salesforce에서 가져온 것” 섹션에 있습니다.
+전체 대응표는 `landing.html` 의 “Salesforce에서 가져온 것” 섹션에 있습니다.
 
 ---
 
 ## 구조
 
 ```
-index.html              랜딩 — 제품 설명 + 라이브 컴포넌트 (Workbench 매크로구조)
+index.html              첫 화면 — app/dashboard.html 로 즉시 이동 (meta refresh)
+landing.html            제품 소개 — 설명 + 라이브 컴포넌트 (Workbench 매크로구조)
 실행.cmd·start.cmd·start.sh  런처 (Windows / macOS·Linux)
 serve.js                의존성 없는 로컬 정적 서버
 tokens.css              디자인 토큰 (색·타이포·간격·모션) — 유일한 색상 원본

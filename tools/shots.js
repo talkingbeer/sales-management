@@ -52,7 +52,7 @@ const wIdx = args.indexOf('--width');
 const WIDTH = wIdx > -1 ? Number(args[wIdx + 1]) : 1440;
 const pages = args.filter(a => a.endsWith('.html'));
 const TARGETS = pages.length ? pages : [
-  'index.html', 'app/dashboard.html', 'app/pipeline.html', 'app/opportunities.html',
+  'landing.html', 'app/dashboard.html', 'app/pipeline.html', 'app/opportunities.html',
   'app/accounts.html', 'app/insights.html', 'app/tickets.html', 'app/resources.html',
   'app/performance.html', 'app/design.html'
 ];

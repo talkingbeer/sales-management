@@ -16,7 +16,7 @@ const argv = process.argv.slice(2);
 
 function listPages() {
   if (argv.length) return argv;
-  const out = ['index.html'];
+  const out = ['index.html', 'landing.html'];
   fs.readdirSync(path.join(ROOT, 'app'))
     .filter(f => f.endsWith('.html')).sort()
     .forEach(f => out.push(path.join('app', f)));
